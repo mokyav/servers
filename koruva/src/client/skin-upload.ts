@@ -4,24 +4,29 @@ const BASE_LAYER = [
   [0, 0, 32, 16], [0, 16, 56, 16], [16, 48, 32, 16],
 ] as const;
 
-/** Read an exact 64x64 PNG skin. Base-layer transparent pixels become opaque black;
- * transparency in the second-layer UV regions is preserved for hats/jackets/etc. */
+/** Read a modern 64x64 or classic 64x32 Minecraft PNG skin and normalize it to 64x64.
+ * Classic skins have no second layer or left-limb textures, so their right limbs are
+ * copied into the modern left-limb UV slots. Base-layer transparent pixels become black. */
 export async function readMinecraftSkin(file: File): Promise<string> {
   if (file.size > 2_000_000) throw new Error("PNGファイルは2MB以下にしてください");
   const signature = new Uint8Array(await file.slice(0, 8).arrayBuffer());
   if (signature.length !== 8 || !PNG_SIGNATURE.every((v, i) => signature[i] === v)) {
-    throw new Error("64×64のPNG画像を選んでください");
+    throw new Error("64×64または旧形式64×32のPNG画像を選んでください");
   }
   let bitmap: ImageBitmap;
   try { bitmap = await createImageBitmap(file); }
   catch { throw new Error("PNG画像を読み込めませんでした"); }
   try {
-    if (bitmap.width !== 64 || bitmap.height !== 64) throw new Error("スキン画像は64×64ピクセルにしてください");
+    const legacy = bitmap.width === 64 && bitmap.height === 32;
+    if (!legacy && (bitmap.width !== 64 || bitmap.height !== 64)) {
+      throw new Error("スキン画像は64×64または旧形式64×32ピクセルにしてください");
+    }
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = 64;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) throw new Error("画像を処理できませんでした");
     ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, 64, 64);
     ctx.drawImage(bitmap, 0, 0);
     const image = ctx.getImageData(0, 0, 64, 64);
     for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) {
@@ -33,6 +38,22 @@ export async function readMinecraftSkin(file: File): Promise<string> {
         image.data[i] = image.data[i + 1] = image.data[i + 2] = 0;
         image.data[i + 3] = 255;
       }
+    }
+    if (legacy) {
+      // The classic layout has only the right arm/leg; duplicate their 16x16 UV squares.
+      const copySquare = (sx: number, sy: number, dx: number, dy: number) => {
+        const pixels = new Uint8ClampedArray(16 * 16 * 4);
+        for (let row = 0; row < 16; row++) {
+          const from = ((sy + row) * 64 + sx) * 4;
+          pixels.set(image.data.slice(from, from + 16 * 4), row * 16 * 4);
+        }
+        for (let row = 0; row < 16; row++) {
+          const to = ((dy + row) * 64 + dx) * 4;
+          image.data.set(pixels.slice(row * 16 * 4, (row + 1) * 16 * 4), to);
+        }
+      };
+      copySquare(40, 16, 32, 48); // right arm -> modern left arm UV
+      copySquare(0, 16, 16, 48);  // right leg -> modern left leg UV
     }
     ctx.putImageData(image, 0, 0);
     return canvas.toDataURL("image/png");

@@ -32,7 +32,8 @@ function minecraftPart(imageData: string, baseFaces: SkinFace[], outerFaces: Ski
     if (!outer) { ctx.fillStyle = "#000"; ctx.fillRect(0, 0, cv.width, cv.height); }
     const texture = new THREE.CanvasTexture(cv);
     texture.magFilter = THREE.NearestFilter; texture.minFilter = THREE.NearestFilter; texture.generateMipmaps = false;
-    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: outer, alphaTest: outer ? 0.01 : 0, depthWrite: !outer });
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: outer, alphaTest: outer ? 0.01 : 0, depthWrite: !outer, toneMapped: false });
     return { cv, texture, material, rect: r };
   });
   const base = make(baseFaces, false), outer = make(outerFaces, true);
@@ -88,6 +89,7 @@ function makeMinecraftSkinMaterials(image: string) {
   };
   const head = part(headBase, headOuter), body = part(bodyBase, bodyOuter);
   const armR = part(limbFaces(true,true), outerLimbFaces(true,true));
+  // In this model +X is the player's anatomical right; keep skin R/L UVs paired explicitly.
   const armL = part(limbFaces(false,true), outerLimbFaces(false,true));
   const legR = part(limbFaces(true,false), outerLimbFaces(true,false));
   const legL = part(limbFaces(false,false), outerLimbFaces(false,false));

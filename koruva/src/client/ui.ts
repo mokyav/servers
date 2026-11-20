@@ -11,36 +11,39 @@ const skinPreviewImages = new Map<string, HTMLImageElement>();
 export function drawSkinPreview(cv: HTMLCanvasElement, s: Skin) {
   const ctx = cv.getContext("2d")!;
   ctx.imageSmoothingEnabled = false;
-  ctx.clearRect(0, 0, cv.width, cv.height);
-  if (s.image) {
-    cv.dataset.skinImage = s.image;
-    let image = skinPreviewImages.get(s.image);
-    if (!image) {
-      image = new Image();
-      skinPreviewImages.set(s.image, image);
-      image.onload = () => { if (cv.dataset.skinImage === s.image) drawSkinPreview(cv, s); };
-      image.src = s.image;
-    }
-    if (image.complete && image.naturalWidth === 64) {
-      const d = (sx: number, sy: number, sw: number, sh: number, dx: number, dy: number, dw: number, dh: number) =>
-        ctx.drawImage(image!, sx, sy, sw, sh, dx, dy, dw, dh);
-      // 正面UVの肌・胴体・左右腕・脚。上に第二レイヤーを重ねる。
-      d(8, 8, 8, 8, 24, 0, 16, 16); d(20, 20, 8, 12, 20, 36, 16, 24);
-      d(44, 20, 4, 12, 12, 36, 8, 24); d(36, 52, 4, 12, 44, 36, 8, 24);
-      d(4, 20, 4, 12, 20, 60, 8, 24); d(20, 52, 4, 12, 28, 60, 8, 24);
-      d(40, 8, 8, 8, 24, 0, 16, 16); d(20, 36, 8, 12, 20, 36, 16, 24);
-      d(44, 36, 4, 12, 12, 36, 8, 24); d(52, 52, 4, 12, 44, 36, 8, 24);
-      d(4, 36, 4, 12, 20, 60, 8, 24); d(4, 52, 4, 12, 28, 60, 8, 24);
-      return;
-    }
-  } else cv.dataset.skinImage = "";
   const k = cv.width / 16;
-  const r = (x: number, y: number, w: number, h: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(x * k, y * k, w * k, h * k); };
-  r(4, 0, 8, 8, s.skin); r(4, 0, 8, 3, s.hair); r(3, 3, 1, 3, s.hair); r(12, 3, 1, 3, s.hair);
-  r(5, 5, 2, 2, "#fff"); r(9, 5, 2, 2, "#fff"); r(6, 5, 1, 2, "#2a3550"); r(9, 5, 1, 2, "#2a3550");
-  r(3, 8, 10, 10, s.shirt);
-  r(0, 8, 3, 10, s.shirt); r(13, 8, 3, 10, s.shirt); r(0, 15, 3, 3, s.skin); r(13, 15, 3, 3, s.skin);
-  r(4, 18, 4, 10, s.pants); r(8, 18, 4, 10, s.pants); r(4, 26, 4, 2, "#2b2b30"); r(8, 26, 4, 2, "#2b2b30");
+  const rect = (x: number, y: number, w: number, h: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(x * k, y * k, w * k, h * k); };
+  const placeholder = () => {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    rect(4, 0, 8, 8, s.skin); rect(4, 0, 8, 3, s.hair); rect(3, 3, 1, 3, s.hair); rect(12, 3, 1, 3, s.hair);
+    rect(5, 5, 2, 2, "#fff"); rect(9, 5, 2, 2, "#fff"); rect(6, 5, 1, 2, "#2a3550"); rect(9, 5, 1, 2, "#2a3550");
+    rect(3, 8, 10, 10, s.shirt); rect(0, 8, 3, 10, s.shirt); rect(13, 8, 3, 10, s.shirt);
+    rect(0, 15, 3, 3, s.skin); rect(13, 15, 3, 3, s.skin);
+    rect(4, 18, 4, 10, s.pants); rect(8, 18, 4, 10, s.pants); rect(4, 26, 4, 2, "#2b2b30"); rect(8, 26, 4, 2, "#2b2b30");
+  };
+  if (!s.image) { delete cv.dataset.skinImage; placeholder(); return; }
+  cv.dataset.skinImage = s.image;
+  const image = new Image();
+  image.onload = () => {
+    if (cv.dataset.skinImage !== s.image) return;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const crop = (sx: number, sy: number, sw: number, sh: number, dx: number, dy: number, dw = sw, dh = sh) => {
+      ctx.drawImage(image, sx, sy, sw, sh, dx * k, dy * k, dw * k, dh * k);
+    };
+    const part = (base: [number, number], overlay: [number, number], sw: number, sh: number, dx: number, dy: number, dw = sw, dh = sh) => {
+      crop(base[0], base[1], sw, sh, dx, dy, dw, dh);
+      crop(overlay[0], overlay[1], sw, sh, dx, dy, dw, dh);
+    };
+    part([8, 8], [40, 8], 8, 8, 4, 0);
+    part([20, 20], [20, 36], 8, 12, 4, 8, 8, 10);
+    // Front view: player's right limb is on the viewer's left.
+    part([44, 20], [44, 36], 4, 12, 0, 8, 3, 10);
+    part([36, 52], [52, 52], 4, 12, 13, 8, 3, 10);
+    part([4, 20], [4, 36], 4, 12, 4, 18, 4, 10);
+    part([20, 52], [4, 52], 4, 12, 8, 18, 4, 10);
+  };
+  image.onerror = () => { if (cv.dataset.skinImage === s.image) placeholder(); };
+  image.src = s.image;
 }
 
 const PALETTE = {

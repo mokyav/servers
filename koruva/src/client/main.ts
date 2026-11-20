@@ -181,13 +181,13 @@ class Game {
     const skinStatus = $("skinstatus");
     const syncSkin = () => {
       this.profile.skin = { skin: cols.skin.value, hair: cols.hair.value, shirt: cols.shirt.value, pants: cols.pants.value };
-      skinStatus.textContent = "アップロードすると自分やルームの全員に表示されます";
+      skinStatus.textContent = "PNGスキン（64×64 / 旧64×32）を選ぶと自分やルームの全員に表示されます";
       drawSkinPreview(preview, this.profile.skin);
     };
     const applySkin = (s: Skin) => {
       for (const k of Object.keys(cols) as (keyof typeof cols)[]) cols[k].value = s[k];
       this.profile.skin = { ...s };
-      skinStatus.textContent = s.image ? "64×64スキンを適用中（半透明は不可）" : "アップロードすると自分やルームの全員に表示されます";
+      skinStatus.textContent = s.image ? "Minecraftスキン適用中（64×64 / 旧64×32）" : "PNGスキン（64×64 / 旧64×32）を選ぶと自分やルームの全員に表示されます";
       drawSkinPreview(preview, this.profile.skin);
     };
     const NAME_BAD = /[^A-Za-z0-9_]/g;
@@ -210,7 +210,7 @@ class Game {
       try {
         const image = await readMinecraftSkin(file);
         this.profile.skin = { ...this.profile.skin, image };
-        skinStatus.textContent = "64×64スキンを適用中（半透明は不可）";
+        skinStatus.textContent = "Minecraftスキン適用中（64×64 / 旧64×32）";
         drawSkinPreview(preview, this.profile.skin);
         saveProfile(this.profile);
       } catch (e) {

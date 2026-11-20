@@ -12,6 +12,7 @@ import {
 import { BLOCK_COUNT, B } from "../../shared/blocks";
 import { addEffect, addExhaustion, applyDamage, applyFood, canAdventureEdit, clearEffect, createVitals, EFFECT_DEFS, normalizeVitals, tickVitals, type DamageCause, type Difficulty, type PlayerVitals } from "../../shared/vitals";
 import { FOOD_DEFS } from "../../shared/food";
+import { generateChunk } from "../client/worldgen";
 import type { Env } from "./env";
 
 interface Meta {
@@ -265,7 +266,7 @@ export class Room extends DurableObject<Env> {
         const { x, y, z, b } = msg;
         if (!isValidSet(x, y, z, b)) return;
         const gm = this.meta!.mode ?? "creative";
-        if (gm === "spectator" || (gm === "adventure" && !canAdventureEdit(b))) { this.send(ws, { t: "reject", x, y, z }); return; }
+        if (gm === "spectator" || (gm === "adventure" && !canAdventureEdit(b, b === 0 ? this.blockAt(x, y, z) : 0))) { this.send(ws, { t: "reject", x, y, z }); return; }
         const dx = x + 0.5 - me.p[0], dy = y + 0.5 - (me.p[1] + 1.6), dz = z + 0.5 - me.p[2];
         if (dx * dx + dy * dy + dz * dz > SERVER_REACH * SERVER_REACH) {
           this.send(ws, { t: "reject", x, y, z });
@@ -461,6 +462,10 @@ export class Room extends DurableObject<Env> {
       const a=(args[0]??"").toLowerCase(); const modes: GameMode[]=["survival","creative","adventure","spectator"];
       const mode=modes.find(x=>x===a || (a.length>=1 && x.startsWith(a)));
       if(!mode){this.sys(ws,"使い方: /gamemode survival | creative | adventure | spectator");return;}
+      if (mode === this.meta!.mode) {
+        this.sys(ws, "既にそのゲームモードです");
+        return;
+      }
       this.meta!.mode=mode; await this.ctx.storage.put("meta",this.meta);
       if(mode==="creative"||mode==="spectator") this.clearDrops();
       for(const s of this.ctx.getWebSockets()){const p=this.player(s);if(!p.joined)continue;p.vitals.gameMode=mode;await this.persistVitals(p);this.sendStats(p);}
@@ -490,7 +495,7 @@ export class Room extends DurableObject<Env> {
     const sub=(args[0]??"").toLowerCase(); const who=args[1];
     if(sub==="give") {
       const id=(args[2]??"").toLowerCase(); const seconds=Number(args[3]); const strength=Number(args[4]);
-      if(!(id in EFFECT_DEFS)||!Number.isFinite(seconds)||seconds<=0||seconds>86400||!Number.isInteger(strength)||strength<0||strength>255){
+      if(!Object.prototype.hasOwnProperty.call(EFFECT_DEFS, id)||!Number.isFinite(seconds)||seconds<=0||seconds>86400||!Number.isInteger(strength)||strength<0||strength>255){
         this.sys(ws,"使い方: /effect give <player|@a|@s> <effectId> <seconds> <0..255>");return;
       }
       const targets=this.commandTargets(who,ws,me); if(!targets.length){this.sys(ws,"対象プレイヤーが見つかりません");return;}
@@ -499,7 +504,7 @@ export class Room extends DurableObject<Env> {
     }
     if(sub==="clear") {
       const targets=this.commandTargets(who,ws,me); if(!targets.length){this.sys(ws,"対象プレイヤーが見つかりません");return;}
-      const id=(args[2]??"").toLowerCase(); if(id && !(id in EFFECT_DEFS)){this.sys(ws,"登録されていないeffectIdです");return;}
+      const id=(args[2]??"").toLowerCase(); if(id && !Object.prototype.hasOwnProperty.call(EFFECT_DEFS, id)){this.sys(ws,"登録されていないeffectIdです");return;}
       for(const t of targets){clearEffect(t.st.vitals,id||undefined);await this.persistVitals(t.st);this.sendStats(t.st);}
       this.sys(ws,id?`${id} を解除しました`:`${targets.length} 人の効果をすべて解除しました`);return;
     }
@@ -555,6 +560,15 @@ export class Room extends DurableObject<Env> {
     if (b.tokens < 1) return false;
     b.tokens -= 1;
     return true;
+  }
+
+  private blockAt(x: number, y: number, z: number): number {
+    const cx = chunkCoord(x), cz = chunkCoord(z), key = `${cx},${cz}`;
+    const index = localIndex(x, y, z);
+    const edits = this.chunks.get(key);
+    if (edits && edits[index] !== NO_EDIT) return edits[index];
+    const seed = this.meta?.seed ?? 1;
+    return generateChunk(seed, cx, cz)[index] ?? 0;
   }
 
   private async applyEdit(x: number, y: number, z: number, b: number): Promise<boolean> {

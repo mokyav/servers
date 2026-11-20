@@ -49,6 +49,35 @@ const HARDNESS: Record<number, number> = {
 /** 壊したときに手に入るブロック(無ければ同じブロック) */
 const DROPS: Record<number, number> = { [B.GRASS]: B.DIRT, [B.STONE]: B.COBBLE };
 
+class StatusParticles {
+  readonly group = new THREE.Group();
+  private geometry = new THREE.BoxGeometry(0.055, 0.055, 0.055);
+  private particles: { mesh: THREE.Mesh<THREE.BoxGeometry, THREE.MeshBasicMaterial>; velocity: THREE.Vector3; age: number; life: number }[] = [];
+  private accumulator = 0;
+  update(dt: number, body: Body, effects: PlayerVitals["activeEffects"]) {
+    const live = effects.filter(e => e.durationTicks > 0 && Object.prototype.hasOwnProperty.call(EFFECT_DEFS, e.effectId));
+    if (live.length) {
+      this.accumulator += dt;
+      while (this.accumulator >= 0.28) {
+        this.accumulator -= 0.28;
+        const effect = live[Math.floor(Math.random() * live.length)];
+        const def = EFFECT_DEFS[effect.effectId];
+        const material = new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: 0.9, depthWrite: false });
+        const mesh = new THREE.Mesh(this.geometry, material);
+        mesh.position.set(body.x + (Math.random() - 0.5) * 0.8, body.y + 0.2 + Math.random() * 1.45, body.z + (Math.random() - 0.5) * 0.8);
+        this.group.add(mesh);
+        this.particles.push({ mesh, velocity: new THREE.Vector3((Math.random() - 0.5) * 0.18, 0.16 + Math.random() * 0.24, (Math.random() - 0.5) * 0.18), age: 0, life: 0.75 + Math.random() * 0.8 });
+      }
+    } else this.accumulator = 0;
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const particle = this.particles[i]; particle.age += dt;
+      particle.mesh.position.addScaledVector(particle.velocity, dt); particle.velocity.y += 0.05 * dt;
+      particle.mesh.material.opacity = Math.max(0, 0.9 * (1 - particle.age / particle.life));
+      if (particle.age >= particle.life) { this.group.remove(particle.mesh); particle.mesh.material.dispose(); this.particles.splice(i, 1); }
+    }
+  }
+}
+
 class Game {
   // three
   canvas = $<HTMLCanvasElement>("gl");
@@ -64,6 +93,7 @@ class Game {
   highlight: THREE.LineSegments;
   atlas = createAtlasCanvas();
   drops = new DropEntities(this.atlas);
+  effectParticles = new StatusParticles();
 
   // state
   state: State = "title";
@@ -133,6 +163,7 @@ class Game {
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.scene.add(this.view.group, this.sky.group, this.remotes.group, this.drops.group);
+    this.scene.add(this.effectParticles.group);
     this.camera.rotation.order = "YXZ";
     this.scene.add(this.camera);
     this.highlight = new THREE.LineSegments(
@@ -846,6 +877,7 @@ class Game {
     renderHunger(v.foodLevel,v.activeEffects.some(e=>e.effectId==="hunger")); renderEffects("effects-hud",v.activeEffects);
     if (!$("inventory").hidden) { renderEffects("inventory-effects",v.activeEffects); this.renderFoodInventory(); }
     const vision=$("visionfx"); vision.className=["blindness","darkness","nausea"].filter(id=>this.effectAmp(id as EffectId)>=0).join(" ");
+    this.canvas.classList.toggle("nightvision", this.effectAmp("night_vision") >= 0 || this.effectAmp("conduit_power") >= 0);
     if(event==="death"||(!wasDead&&v.dead)){this.body.vx=this.body.vy=this.body.vz=0;toast("死亡しました",2500);}
     if(event==="respawn"||(wasDead&&!v.dead)){this.body.x=this.spawn[0];this.body.y=this.spawn[1]+2;this.body.z=this.spawn[2];this.body.vx=this.body.vy=this.body.vz=0;toast("リスポーンしました",1800);}
   }
@@ -1052,6 +1084,7 @@ class Game {
     this.drops.setLight(0.3 + 0.7 * sky.daylight);
     this.updateOwnModel(dt, sky.daylight);
     this.updateInfo();
+    this.effectParticles.update(dt, this.body, this.vitals.activeEffects);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -1096,7 +1129,11 @@ class Game {
       b.vy *= 1 - Math.min(1, dt * 2.5);
       if (headWater === false && jump && b.vy > 0) b.vy = Math.max(b.vy, 4.5);
     } else {
-      b.vy = Math.max(-50, b.vy - 28 * dt);
+      const levitation = this.effectAmp("levitation");
+      const slowFall = this.effectAmp("slow_falling");
+      if (levitation >= 0) b.vy += ((0.9 + 0.25 * levitation) - b.vy) * Math.min(1, dt * 4);
+      else if (slowFall >= 0) b.vy = Math.max(-2, b.vy - 2 * dt);
+      else b.vy = Math.max(-50, b.vy - 28 * dt);
       if (jump && b.onGround) { b.vy = 8.6 + Math.max(0,this.effectAmp("jump_boost")+1)*1.2; if(this.mode==="room"&&this.survival)this.net.send({t:"jump"}); }
     }
     if(this.gameMode==="spectator"){b.x+=b.vx*dt;b.y+=b.vy*dt;b.z+=b.vz*dt;b.onGround=false;}else moveBody(this.world, b, dt);

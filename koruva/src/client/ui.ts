@@ -120,18 +120,58 @@ export class Hotbar {
 
 /** ピクセルテクスチャによるHP/満腹度表示。 */
 export function renderHearts(hp: number, maxHp = 20, effects: EffectId[] = [], absorption = 0) {
-  const el=$("hearts"); el.textContent=""; const toxic=effects.includes("poison"), wither=effects.includes("wither"), frozen=effects.includes("darkness");
-  for(let i=0;i<10;i++){
-    const value=hp-i*2; const kind=value>=2?"full":value>=1?"half":"empty";
-    const span=document.createElement("span"); span.className="heart"+(hp<=4?" shake":"");
-    const img=document.createElement("img"); img.alt=kind==="full"?"体力":kind==="half"?"半分の体力":"空の体力";
-    const base=toxic?"poison":wither?"wither":frozen?"freezing":"normal";
-    img.src=`/assets/hud/heart-${base}-${kind}.png`; img.draggable=false;
-    if(kind==="empty"&&absorption>i*2){img.src="/assets/hud/heart-absorption.png";img.alt="衝撃吸収";}
-    span.appendChild(img);el.appendChild(span);
+  const el = $("hearts");
+  if (!el) return;
+  el.textContent = "";
+
+  const safeHp = Math.max(0, Number.isFinite(hp) ? hp : 0);
+  const safeMaxHp = Math.max(1, Number.isFinite(maxHp) ? maxHp : 20);
+  const extraHp = Math.max(0, Number.isFinite(absorption) ? absorption : 0);
+
+  const healthSlots = Math.min(20, Math.max(10, Math.ceil(safeMaxHp / 2)));
+  const count = Math.min(20, healthSlots + Math.ceil(extraHp / 2));
+
+  const poison = effects.includes("poison") || effects.includes("fatal_poison");
+  const wither = effects.includes("wither");
+  const base = poison ? "poison" : wither ? "wither" : "normal";
+
+  for (let i = 0; i < count; i++) {
+    let value: number;
+    let isAbsorption = false;
+
+    if (i < healthSlots) {
+      value = safeHp - i * 2;
+    } else {
+      value = extraHp - (i - healthSlots) * 2;
+      isAbsorption = value > 0;
+    }
+
+    const kind = value >= 2 ? "full" : value >= 1 ? "half" : "empty";
+    const img = document.createElement("img");
+
+    img.src = isAbsorption && kind !== "empty"
+      ? "/assets/hud/heart-absorption.png"
+      : `/assets/hud/heart-${base}-${kind}.png`;
+
+    img.alt = isAbsorption
+      ? `追加体力 ${kind}`
+      : kind === "full" ? "体力" : kind === "half" ? "半分の体力" : "体力なし";
+
+    img.draggable = false;
+    img.className =
+      "heart-slot" +
+      (safeHp <= 4 && i < healthSlots && kind !== "empty" ? " shake" : "") +
+      (isAbsorption && kind === "half" ? " absorption-half" : "");
+
+    el.appendChild(img);
   }
-  el.setAttribute("aria-label",`体力 ${hp}/${maxHp}`);
+
+  el.setAttribute(
+    "aria-label",
+    `体力 ${safeHp}/${safeMaxHp}${extraHp ? `、追加体力 ${extraHp}` : ""}`
+  );
 }
+
 export function renderHunger(value: number, hungerEffect = false) {
   const el=$("hunger"); el.textContent=""; const safe=Math.max(0,Math.min(20,value));
   for(let i=0;i<10;i++){
@@ -146,7 +186,7 @@ export function renderEffects(containerId: string, effects: EffectLayer[]) {
   const el=$(containerId); if(!el)return; el.textContent="";
   const live=effects.filter(e=>e.durationTicks>0);
   if(!live.length){if(containerId==="inventory-effects"){const empty=document.createElement("span");empty.className="effect-empty";empty.textContent="効果なし";el.appendChild(empty);}return;}
-  for(const e of live){const def=EFFECT_DEFS[e.effectId];const row=document.createElement("div");row.className="effect-item"+(e.durationTicks<200?" expiring":"");
+  for(const e of live){const def=EFFECT_DEFS[e.effectId];const row=document.createElement("div");row.className="effect-item"+(e.durationTicks<200?" expiring":"");row.style.setProperty("--effect-color",def.color);if(e.durationTicks<200)row.style.setProperty("--effect-blink",`${Math.max(0.12,Math.min(0.65,e.durationTicks/200))}s`);
     const seconds=Math.ceil(e.durationTicks/20);const mm=Math.floor(seconds/60);const ss=String(seconds%60).padStart(2,"0");
     const level=e.amplifier===0?"I":e.amplifier===1?"II":e.amplifier===2?"III":String(e.amplifier+1);
     const img=document.createElement("img");img.src=`/assets/effects/${def.icon}`;img.alt=def.name;img.draggable=false;
@@ -155,12 +195,47 @@ export function renderEffects(containerId: string, effects: EffectLayer[]) {
   }
 }
 
+function completeChatCommand(input: HTMLInputElement): boolean {
+  const caret = input.selectionStart ?? input.value.length;
+  const before = input.value.slice(0, caret);
+  if (!before.startsWith("/")) return false;
+  const token = /\S*$/.exec(before)?.[0] ?? "";
+  const tokenStart = caret - token.length;
+  const words = before.trimStart().split(/\s+/);
+  const index = /\s$/.test(before) ? words.length : words.length - 1;
+  const command = (words[0] ?? "").replace(/^\/+/, "").toLowerCase();
+  const sub = (words[1] ?? "").toLowerCase();
+  const listText = document.getElementById("playerlist")?.textContent ?? "";
+  const names = Array.from(new Set(listText.match(/[A-Za-z0-9_]{1,16}/g) ?? []))
+    .filter(n => !/^(players?|host)$/i.test(n));
+  let choices: string[] = [];
+  if (index === 0) choices = ["effect", "gamemode", "difficulty", "givefood"];
+  else if (command === "effect" && index === 1) choices = ["give", "clear"];
+  else if (command === "effect" && index === 2 && (sub === "give" || sub === "clear")) choices = ["@a", "@s", ...names];
+  else if (command === "effect" && index === 3 && (sub === "give" || sub === "clear")) choices = Object.keys(EFFECT_DEFS);
+  else if (command === "gamemode" && index === 1) choices = ["survival", "creative", "adventure", "spectator"];
+  else if (command === "difficulty" && index === 1) choices = ["peaceful", "easy", "normal", "hard"];
+  const matches = choices.filter(c => c.toLowerCase().startsWith(token.toLowerCase()));
+  if (!matches.length) return false;
+  const selected = matches[0];
+  const addSpace = index < 3 || (command === "effect" && sub === "give" && index === 3);
+  input.setRangeText(selected + (addSpace ? " " : ""), tokenStart, caret, "end");
+  return true;
+}
+
 export class Chat {
   private log = $("chatlog");
   private lines: HTMLElement[] = [];
   private history: ChatLine[] = [];
   private scope = "solo";
   private open = false;
+  constructor() {
+    const input = $("chatinput") as HTMLInputElement;
+    input?.addEventListener("keydown", event => {
+      if (event.key === "Tab" && completeChatCommand(input)) event.preventDefault();
+    });
+  }
+
 
   /** 保存先(ルームコード / "solo")を切り替えて履歴を読み込む */
   setScope(scope: string) {

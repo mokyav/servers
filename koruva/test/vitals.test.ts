@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { addEffect, addExhaustion, applyDamage, applyFood, canAdventureEdit, canSprint, createVitals, tickVitals } from "../shared/vitals";
+import { addEffect, addExhaustion, applyDamage, applyFood, canAdventureEdit, canSprint, createVitals, tickVitals , normalizeVitals} from "../shared/vitals";
 const v=createVitals("survival");assert.equal(v.health,20);assert.equal(v.foodLevel,20);assert.equal(v.foodSaturationLevel,5);
 addExhaustion(v,4);tickVitals(v);assert.equal(v.foodSaturationLevel,4);assert.equal(v.foodLevel,20);
 v.foodSaturationLevel=0;addExhaustion(v,4);tickVitals(v);assert.equal(v.foodLevel,19);
@@ -18,4 +18,15 @@ const easy=createVitals("survival");easy.foodLevel=0;easy.foodSaturationLevel=0;
 const normal=createVitals("survival");normal.foodLevel=0;normal.foodSaturationLevel=0;normal.health=1;for(let i=0;i<80;i++)tickVitals(normal,"normal");assert.equal(normal.health,1);
 const hard=createVitals("survival");hard.foodLevel=0;hard.foodSaturationLevel=0;hard.health=1;for(let i=0;i<80;i++)tickVitals(hard,"hard");assert.equal(hard.dead,true);
 const respawn=createVitals("survival");applyDamage(respawn,20,"generic");assert.equal(respawn.dead,true);for(let i=0;i<60;i++)tickVitals(respawn);assert.equal(respawn.health,20);assert.equal(respawn.foodLevel,20);assert.equal(respawn.foodSaturationLevel,5);
+
+const stacked=createVitals("survival");addEffect(stacked,"speed",240,0);addEffect(stacked,"speed",80,2);
+const restored=normalizeVitals(JSON.parse(JSON.stringify(stacked)),"survival");
+assert.equal(restored.activeEffects.find(e=>e.effectId==="speed")?.hiddenEffect?.amplifier,0);
+restored.eatingFoodId="bread";restored.eatingTicksRemaining=12;
+const restoredMeal=normalizeVitals(JSON.parse(JSON.stringify(restored)),"survival");
+assert.equal(restoredMeal.eatingFoodId,"bread");assert.equal(restoredMeal.eatingTicksRemaining,12);
+const breathing=createVitals("survival");addEffect(breathing,"water_breathing",100,0);assert.equal(applyDamage(breathing,5,"drowning"),0);
+const falling=createVitals("survival");addEffect(falling,"slow_falling",100,0);assert.equal(applyDamage(falling,5,"fall"),0);
+assert.equal(addEffect(createVitals("survival"),"toString" as any,20,0),false);
+
 console.log("vitals tests passed");

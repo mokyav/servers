@@ -161,3 +161,12 @@ label .hint { font-size: 11px; color: var(--muted); }
 #visionfx.nausea{animation:nausea-wobble 2.8s ease-in-out infinite alternate}
 @keyframes nausea-wobble{from{transform:translateX(-3px) scale(1.01)}to{transform:translateX(3px) scale(1.01)}}
 @media(max-width:600px){#hearts img,#hunger .food-icon{width:15px;height:15px}#effects-hud{max-width:48vw}.effect-item{font-size:10px}#inv-status{max-height:25vh}}
+
+
+/* Health boost/absorption and effect readability */
+#hearts { flex-wrap: wrap; }
+#hearts .heart-slot { image-rendering: pixelated; }
+#hearts .absorption-half { clip-path: inset(0 50% 0 0); }
+.effect-item { border-left: 2px solid var(--effect-color, #a8a8a8); }
+.effect-item.expiring { animation-duration: var(--effect-blink, .65s); }
+#gl.nightvision { filter: brightness(1.55) saturate(1.08); }

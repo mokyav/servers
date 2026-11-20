@@ -72,10 +72,31 @@ export function normalizeVitals(raw: unknown, mode: VitalsGameMode): PlayerVital
   base.dead = !!x.dead; base.respawnTicks = Math.floor(n(x.respawnTicks, 0, 1200, 0));
   base.naturalRegenTimer = Math.floor(n(x.naturalRegenTimer, 0, 1e9, 0));
   base.starvationTimer = Math.floor(n(x.starvationTimer, 0, 1e9, 0));
-  const ids = new Set(Object.keys(EFFECT_DEFS));
-  base.activeEffects = Array.isArray(x.activeEffects) ? x.activeEffects.slice(0, 64).filter((e): e is EffectLayer => !!e && ids.has(e.effectId))
-    .map(e => ({ effectId:e.effectId, amplifier:Math.floor(n(e.amplifier,0,255,0)), durationTicks:Math.floor(n(e.durationTicks,1,20*86400,1)), ageTicks:Math.floor(n(e.ageTicks,0,1e9,0)) })) : [];
+  const normalizeLayer = (raw: unknown, depth = 0): EffectLayer | undefined => {
+    if (!raw || typeof raw !== "object" || depth > 8) return undefined;
+    const e = raw as Partial<EffectLayer>;
+    if (typeof e.effectId !== "string" || !Object.prototype.hasOwnProperty.call(EFFECT_DEFS, e.effectId)) return undefined;
+    const layer: EffectLayer = {
+      effectId: e.effectId as EffectId,
+      amplifier: Math.floor(n(e.amplifier, 0, 255, 0)),
+      durationTicks: Math.floor(n(e.durationTicks, 1, 20 * 86400, 1)),
+      ageTicks: Math.floor(n(e.ageTicks, 0, 1e9, 0)),
+    };
+    const hidden = normalizeLayer(e.hiddenEffect, depth + 1);
+    if (hidden && hidden.effectId === layer.effectId) layer.hiddenEffect = hidden;
+    return layer;
+  };
+  base.activeEffects = [];
+  for (const raw of Array.isArray(x.activeEffects) ? x.activeEffects.slice(0, 64) : []) {
+    const layer = normalizeLayer(raw);
+    if (layer) base.activeEffects.push(layer);
+  }
   const counts: Record<string,number> = {}; for (const id of Object.keys(FOOD_DEFS)) counts[id]=Math.floor(n(x.foodCounts?.[id],0,999,base.foodCounts[id]??0)); base.foodCounts=counts;
+  if (typeof x.eatingFoodId === "string" && Object.prototype.hasOwnProperty.call(FOOD_DEFS, x.eatingFoodId)) {
+    const food = FOOD_DEFS[x.eatingFoodId];
+    const remaining = Math.floor(n(x.eatingTicksRemaining, 0, food.eatTicks, 0));
+    if (remaining > 0) { base.eatingFoodId = food.id; base.eatingTicksRemaining = remaining; }
+  }
   base.gameMode=mode; recalcMaxHealth(base); return base;
 }
 
@@ -113,7 +134,7 @@ function mergeLayer(current: EffectLayer, incoming: EffectLayer): EffectLayer {
   return current;
 }
 export function addEffect(v: PlayerVitals, id: string, durationTicks: number, amplifier: number): boolean {
-  if(!(id in EFFECT_DEFS) || !Number.isFinite(durationTicks) || durationTicks<=0 || !Number.isInteger(amplifier) || amplifier<0 || amplifier>255) return false;
+  if(!Object.prototype.hasOwnProperty.call(EFFECT_DEFS, id) || !Number.isFinite(durationTicks) || durationTicks<=0 || !Number.isInteger(amplifier) || amplifier<0 || amplifier>255) return false;
   const effectId=id as EffectId; const duration=Math.min(20*86400,Math.max(1,Math.floor(durationTicks)));
   const incoming:EffectLayer={effectId,durationTicks:duration,amplifier,ageTicks:0};
   if(effectId==="instant_health"){ v.health=Math.min(v.maxHealth,v.health+4*(amplifier+1)); return true; }
@@ -131,6 +152,8 @@ export function clearEffect(v: PlayerVitals, id?: string): void {
 }
 export function applyDamage(v: PlayerVitals, raw: number, cause: DamageCause): number {
   if(!isSurvival(v)||v.dead||!Number.isFinite(raw)||raw<=0) return 0;
+  if (cause === "fall" && v.activeEffects.some(e => e.effectId === "slow_falling")) return 0;
+  if (cause === "drowning" && v.activeEffects.some(e => e.effectId === "water_breathing" || e.effectId === "conduit_power")) return 0;
   if((cause==="fire"||cause==="lava")&&v.activeEffects.some(e=>e.effectId==="fire_resistance")) return 0;
   const res=v.activeEffects.find(e=>e.effectId==="resistance"); const factor=res?Math.max(0,1-.2*(res.amplifier+1)):1;
   let damage=Math.max(0,raw*factor); const absorbed=Math.min(v.absorptionAmount,damage); v.absorptionAmount-=absorbed; damage-=absorbed;

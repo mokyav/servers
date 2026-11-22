@@ -21,7 +21,7 @@ test("block targeting ray starts at the rendered camera and follows its world di
 
 test("urgent chunk remeshing shares the per-frame mesh budget", () => {
   const chunkView = read("../src/client/chunkview.ts");
-  const urgentStart = chunkView.indexOf("// 2) 編集・新規隣接チャンク由来の再メッシュ。");
+  const urgentStart = chunkView.indexOf("// 2) 表示中の既存チャンクだけを緊急再メッシュ。");
   const normalStart = chunkView.indexOf("// 3) 未メッシュ/ダーティを近い順に処理", urgentStart);
   assert.ok(urgentStart >= 0 && normalStart > urgentStart);
   const urgent = chunkView.slice(urgentStart, normalStart);

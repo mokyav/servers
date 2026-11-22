@@ -211,13 +211,21 @@ function minecraftFallback(token: string): { top: string; side: string; bottom: 
 }
 
 if (BLOCKS.length !== MINECRAFT_BLOCK_RUNTIME_ID_START) throw new Error(`Minecraft runtime ID base mismatch: ${BLOCKS.length}`);
+
+const statesByToken = new Map<string, Array<[string, any]>>();
+for (const [idText, meta] of Object.entries(MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID)) {
+  const group = statesByToken.get(meta.token) ?? [];
+  group.push([idText, meta]);
+  statesByToken.set(meta.token, group);
+}
+
 for (const identifier of MINECRAFT_BLOCK_IDS) {
   const runtimeId = MINECRAFT_BLOCK_TO_RUNTIME_ID[identifier];
   if (runtimeId === undefined || runtimeId === 0) continue;
   const token = identifier.slice("minecraft:".length);
   const visual = minecraftFallback(token);
   const name = `Minecraft: ${token.replaceAll("_", " ")}`;
-  const states = Object.entries(MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID).filter(([, meta]) => meta.token === token);
+  const states = statesByToken.get(token) ?? [];
   if (!states.length) {
     BLOCKS[runtimeId] = def(runtimeId, identifier, name, visual.top, visual.side, visual.bottom, { solid: visual.solid, render: visual.render, cullSame: visual.cullSame, emissive: visual.emissive, shape: visual.shape, itemId: visual.placeable ? runtimeId : 0, placeable: visual.placeable });
   } else for (const [idText, meta] of states) {

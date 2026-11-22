@@ -53,3 +53,35 @@ export class PersistentChunkEdits {
     return task;
   }
 }
+
+
+/**
+ * Iterate persisted chunk overrides without allocating one giant flattened array.
+ * Keys use the existing "chunkX,chunkZ" format and cells use
+ * ((y * chunkSize + z) * chunkSize + x).
+ */
+export function* iterateChunkEdits(chunks, chunkSize = 16, noEdit = NO_EDIT_U16) {
+  if (!(chunks instanceof Map)) throw new TypeError("chunks must be a Map");
+  if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0 ||
+      !Number.isInteger(noEdit) || noEdit < 1 || noEdit > NO_EDIT_U16) {
+    throw new TypeError("invalid chunk edit iterator options");
+  }
+  const plane = chunkSize * chunkSize;
+  for (const [key, cells] of chunks) {
+    if (!(cells instanceof Uint8Array) && !(cells instanceof Uint16Array)) continue;
+    const split = String(key).indexOf(",");
+    if (split <= 0) continue;
+    const cx = Number(String(key).slice(0, split));
+    const cz = Number(String(key).slice(split + 1));
+    if (!Number.isSafeInteger(cx) || !Number.isSafeInteger(cz) || cells.length % plane !== 0) continue;
+    const ox = cx * chunkSize, oz = cz * chunkSize;
+    for (let index = 0; index < cells.length; index++) {
+      const blockId = cells[index];
+      if (blockId === noEdit) continue;
+      const x = index % chunkSize;
+      const z = Math.floor(index / chunkSize) % chunkSize;
+      const y = Math.floor(index / plane);
+      yield [ox + x, y, oz + z, blockId];
+    }
+  }
+}

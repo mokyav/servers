@@ -68,3 +68,28 @@ test("translucent block meshes use blending without writing depth", () => {
   assert.match(main, /texture\.colorSpace = THREE\.SRGBColorSpace/);
   assert.match(remote, /t\.colorSpace = THREE\.SRGBColorSpace/);
 });
+
+
+test("model-less runtime blocks fall back instead of silently omitting their geometry", () => {
+  const mesher = read("../src/client/mesher.ts");
+  assert.match(mesher, /let emittedFace = false/);
+  assert.match(mesher, /emittedFace = true/);
+  assert.match(mesher, /return emittedFace/);
+  assert.match(mesher, /const def = BLOCKS\[id\] \?\? BLOCKS\[3\]/);
+});
+
+test("chunk frustum bounds come from actual mesh vertices", () => {
+  const chunkView = read("../src/client/chunkview.ts");
+  assert.match(chunkView, /g\.computeBoundingBox\(\)/);
+  assert.match(chunkView, /g\.computeBoundingSphere\(\)/);
+  assert.doesNotMatch(chunkView, /g\.boundingSphere = new THREE\.Sphere/);
+});
+
+test("fog end distance extends beyond the outer chunk ring", () => {
+  const main = read("../src/client/main.ts");
+  assert.match(main, /const far = Math\.max\(64, \(this\.settings\.rd \+ 3\) \* 16\)/);
+  for (const rd of [2, 6, 12]) {
+    const far = Math.max(64, (rd + 3) * 16);
+    assert.ok(far > rd * 16, `fog end must not stop before render distance ${rd}`);
+  }
+});

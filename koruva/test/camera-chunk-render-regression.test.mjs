@@ -33,6 +33,24 @@ test("urgent chunk remeshing shares the per-frame mesh budget", () => {
 });
 
 
+test("cutout block models render both sides without entering the blended transparency layer", () => {
+  const mesher = read("../src/client/mesher.ts");
+  const chunkView = read("../src/client/chunkview.ts");
+  assert.match(mesher, /def\.render === "cutout" \? cutout/);
+  assert.match(mesher, /cutout: cutout\.finish\(\)/);
+  assert.match(chunkView, /this\.cutoutMat = new THREE\.ShaderMaterial/);
+  assert.match(chunkView, /side: THREE\.DoubleSide/);
+  assert.match(chunkView, /e\.cutout = this\.swap\(e\.cutout, res\.cutout, this\.cutoutMat/);
+});
+
+test("V cycles through first person, rear third person, and front third person", () => {
+  const main = read("../src/client/main.ts");
+  assert.match(main, /thirdPersonFront = false/);
+  assert.match(main, /三人称視点（前）/);
+  assert.match(main, /this\.yaw \+ \(this\.thirdPersonFront \? Math\.PI : 0\)/);
+  assert.match(main, /this\.camera\.position\.set\(cx \+ ox \* dist, cy \+ oy \* dist, cz \+ oz \* dist\)/);
+});
+
 test("initial loading waits for every chunk in the visible streaming ring", () => {
   const main = read("../src/client/main.ts");
   const chunkView = read("../src/client/chunkview.ts");

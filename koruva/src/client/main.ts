@@ -247,7 +247,7 @@ class Game {
 
   constructor() {
     this.chat.setNameProvider(() => [this.profile.name, ...this.remotes.names().map(p => p.name)]);
-    this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.scene.add(this.view.group, this.sky.group, this.remotes.group, this.drops.group, this.mobModels.group, this.projectileEntities.group);
     this.scene.add(this.effectParticles.group);

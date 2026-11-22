@@ -50,6 +50,14 @@ export class World {
     c = { cx, cz, data, dirty: true, maxY: 0 };
     c.maxY = computeMaxY(data);
     this.chunks.set(key, c);
+    // A neighbour that was meshed before this chunk existed omitted its boundary
+    // faces against the unloaded (-1) region. Rebuild those neighbours now.
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const neighbor = this.chunks.get(chunkKey(cx + dx, cz + dz));
+      if (!neighbor) continue;
+      neighbor.dirty = true;
+      this.onChunkDirty?.(neighbor);
+    }
     return c;
   }
 

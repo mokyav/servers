@@ -358,7 +358,6 @@ label .hint { font-size: 11px; color: var(--muted); }
   #title .card button, #pause .card button, #admin .card button { transition: filter .09s ease, transform .06s ease; }
   #experience-fill { transition: width .12s linear; }
 }
-#inventory { background-image: url('/assets/minecraft/textures/gui/container/inventory.png'); }
 #workbench-panel { background-image: url('/assets/minecraft/textures/gui/container/crafting_table.png'); }
 #hotbar { background-image: url('/assets/minecraft/textures/gui/sprites/hud/hotbar.png'); }
 #crosshair { background-image: url('/assets/minecraft/textures/gui/sprites/hud/crosshair.png'); }

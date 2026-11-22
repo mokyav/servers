@@ -388,6 +388,13 @@ function facingVector(facing: number): [number, number] {
 
 /** Pre-decoded occupancy masks generated from the official vanilla block model elements. */
 const MODEL_OCCUPANCY_MASKS: Array<bigint | null> = MINECRAFT_BLOCK_OCCUPANCY.map((mask) => mask ? BigInt(`0x${mask}`) : null);
+const FULL_BLOCK_OCCUPANCY_MASK = (1n << 64n) - 1n;
+
+/** True when a nominal cube has a non-empty, non-full vanilla model collision mask. */
+export function blockHasPartialModelShape(id: number): boolean {
+  const mask = MODEL_OCCUPANCY_MASKS[id];
+  return mask !== null && mask !== undefined && mask !== 0n && mask !== FULL_BLOCK_OCCUPANCY_MASK;
+}
 
 /** Collision/meshing occupancy on the shared 4×4×4 grid. */
 export function blockOccupiesSubcell(id: number, qx: number, qy: number, qz: number): boolean {

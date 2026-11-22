@@ -336,6 +336,7 @@ function aggregateIngredients(recipe) {
 function applyRecipe(counts, recipe, options = {}) {
   const creative = options.creative === true;
   const maxStack = Number.isInteger(options.maxStack) && options.maxStack > 0 ? options.maxStack : 64;
+  const maxCount = Number.isSafeInteger(options.maxCount) && options.maxCount >= 0 ? options.maxCount : maxStack;
   const next = counts.slice();
   const required = Array.isArray(options.consumeGrid)
     ? new Map(options.consumeGrid.filter((id) => Number.isInteger(id) && id > 0).reduce((map, id) => map.set(id, (map.get(id) || 0) + 1), new Map()))
@@ -347,7 +348,7 @@ function applyRecipe(counts, recipe, options = {}) {
     if (id >= next.length || next[id] < count) return { ok: false, reason: "missing_ingredients", counts: counts.slice() };
   }
   if (!creative) for (const [id, count] of required) next[id] -= count;
-  if ((next[outputId] || 0) + outputCount > maxStack) return { ok: false, reason: "stack_limit", counts: counts.slice() };
+  if ((next[outputId] || 0) + outputCount > maxCount) return { ok: false, reason: "stack_limit", counts: counts.slice() };
   next[outputId] = (next[outputId] || 0) + outputCount;
   return { ok: true, counts: next, recipe };
 }

@@ -17,6 +17,7 @@ export interface MeshData {
 
 export interface ChunkMeshes {
   solid: MeshData | null;
+  translucent: MeshData | null;
   liquid: MeshData | null;
 }
 
@@ -186,6 +187,7 @@ function tintForBlock(world: World, id: number, x: number, z: number, texture: s
 
 export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): ChunkMeshes {
   const solid = new Builder();
+  const translucent = new Builder();
   const liquid = new Builder();
   const ox = chunk.cx * CHUNK_SIZE, oz = chunk.cz * CHUNK_SIZE;
   const topY = Math.min(WORLD_HEIGHT - 1, chunk.maxY);
@@ -314,7 +316,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
         if (id === 0) continue;
         const def = BLOCKS[id];
         const x = ox + lx, z = oz + lz;
-        const target = def.render === "liquid" ? liquid : solid;
+        const target = def.render === "liquid" ? liquid : def.render === "translucent" ? translucent : solid;
         if (id >= 92 && emitMinecraftModel(target, def, id, x, y, z)) continue;
         if (def.shape === "cube") {
           for (const f of FACES) {
@@ -359,5 +361,5 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
       }
     }
   }
-  return { solid: solid.finish(), liquid: liquid.finish() };
+  return { solid: solid.finish(), translucent: translucent.finish(), liquid: liquid.finish() };
 }

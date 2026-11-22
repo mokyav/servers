@@ -244,6 +244,10 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
     if (!instances?.length) return false;
     const token = MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID[id]?.token ?? def.key;
     const getFaceDef = (direction: string) => FACES[MODEL_FACE_INDEX[direction]];
+    // Treat the model as handled only after at least one real face was emitted.
+    // A dangling model reference must fall back to the block's safe voxel shape,
+    // rather than silently making the placed block disappear.
+    let emittedFace = false;
     for (const instance of instances) {
       const model = MINECRAFT_BLOCK_MODEL_REGISTRY.models[instance.m];
       if (!model) continue;
@@ -289,6 +293,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
             transformed = rotateBlockPoint(transformed, instance);
             // Keep model-backed vertices in the same chunk-local coordinate space as cube faces.
             target.pos.push(x - ox + transformed[0] / 16, y + transformed[1] / 16, z - oz + transformed[2] / 16);
+            emittedFace = true;
             const [pixelU, pixelV] = faceUvPixels(direction, local, from, to, face);
             let [tu, tv] = lockModelUv(pixelU / 16, pixelV / 16, direction, instance);
             const uvTurn = ((face.rotation % 360) + 360) % 360;
@@ -306,7 +311,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
         }
       }
     }
-    return true;
+    return emittedFace;
   };
 
   for (let y = 0; y <= topY; y++) {
@@ -314,7 +319,10 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
       for (let lx = 0; lx < CHUNK_SIZE; lx++) {
         const id = chunk.data[(y * CHUNK_SIZE + lz) * CHUNK_SIZE + lx];
         if (id === 0) continue;
-        const def = BLOCKS[id];
+        // A corrupt/unknown runtime ID must not abort the entire chunk mesh build.
+        // Render it as a visible stone placeholder so one bad cell cannot hide a full chunk.
+        const def = BLOCKS[id] ?? BLOCKS[3];
+        if (!def) continue;
         const x = ox + lx, z = oz + lz;
         const target = def.render === "liquid" ? liquid : def.render === "translucent" ? translucent : solid;
         if (id >= 92 && emitMinecraftModel(target, def, id, x, y, z)) continue;

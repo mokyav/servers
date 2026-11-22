@@ -209,11 +209,11 @@ export class ChunkView {
     g.setAttribute("uv", new THREE.BufferAttribute(data.uvs, 2));
     g.setAttribute("color", new THREE.BufferAttribute(data.colors, 4));
     g.setIndex(new THREE.BufferAttribute(data.indices, 1));
-    // フラスタムカリング用の境界(チャンク全体を包む)
-    g.boundingSphere = new THREE.Sphere(
-      new THREE.Vector3(CHUNK_SIZE / 2, WORLD_HEIGHT / 2, CHUNK_SIZE / 2),
-      Math.hypot(CHUNK_SIZE / 2, WORLD_HEIGHT / 2, CHUNK_SIZE / 2),
-    );
+    // Compute bounds from the actual emitted vertices. Some vanilla block models
+    // extend beyond the nominal 0..16 block cube, so a fixed chunk-sized sphere
+    // can incorrectly frustum-cull visible geometry at chunk edges.
+    g.computeBoundingBox();
+    g.computeBoundingSphere();
     const m = new THREE.Mesh(g, mat);
     m.position.set(c.cx * CHUNK_SIZE, 0, c.cz * CHUNK_SIZE);
     m.matrixAutoUpdate = false;

@@ -1156,7 +1156,7 @@ class Game {
         else delete this.stackData[key];
         continue;
       }
-      const match = /^(hotbar|main|armor|offhand|craft|craft-table):(\\d+)$/.exec(key);
+      const match = /^(hotbar|main|armor|offhand|craft|craft-table):([0-9]+)$/.exec(key);
       if (!match) continue;
       const slot: InventorySlotRef = { type: match[1] as InventorySlotType, index: Number(match[2]) };
       const limits: Record<InventorySlotType, number> = { hotbar: 9, main: 27, armor: 4, offhand: 1, craft: 4, "craft-table": 9 };

@@ -23,7 +23,6 @@ uniform vec3 uFog;
 uniform float uNear;
 uniform float uFar;
 uniform float uOpacity;
-#include <colorspace_pars_fragment>
 varying vec2 vUv;
 varying vec4 vCol;
 varying float vDist;

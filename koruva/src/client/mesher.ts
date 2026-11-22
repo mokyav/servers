@@ -17,6 +17,8 @@ export interface MeshData {
 
 export interface ChunkMeshes {
   solid: MeshData | null;
+  /** Alpha-tested, double-sided Minecraft cutout models (plants, leaves, etc.). */
+  cutout: MeshData | null;
   translucent: MeshData | null;
   liquid: MeshData | null;
 }
@@ -187,6 +189,7 @@ function tintForBlock(world: World, id: number, x: number, z: number, texture: s
 
 export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): ChunkMeshes {
   const solid = new Builder();
+  const cutout = new Builder();
   const translucent = new Builder();
   const liquid = new Builder();
   const ox = chunk.cx * CHUNK_SIZE, oz = chunk.cz * CHUNK_SIZE;
@@ -324,7 +327,10 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
         const def = BLOCKS[id] ?? BLOCKS[3];
         if (!def) continue;
         const x = ox + lx, z = oz + lz;
-        const target = def.render === "liquid" ? liquid : def.render === "translucent" ? translucent : solid;
+        const target = def.render === "liquid" ? liquid
+          : def.render === "translucent" ? translucent
+            : def.render === "cutout" ? cutout
+              : solid;
         if (id >= 92 && emitMinecraftModel(target, def, id, x, y, z)) continue;
         if (def.shape === "cube") {
           for (const f of FACES) {
@@ -369,5 +375,5 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
       }
     }
   }
-  return { solid: solid.finish(), translucent: translucent.finish(), liquid: liquid.finish() };
+  return { solid: solid.finish(), cutout: cutout.finish(), translucent: translucent.finish(), liquid: liquid.finish() };
 }

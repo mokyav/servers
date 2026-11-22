@@ -29,22 +29,23 @@ test("creative catalogue and player inventory never overlap", () => {
   });
 });
 
-function makeChunk(blocks: Array<[number, number, number]>) {
+function makeChunk(blocks: Array<[number, number, number]>, cx = 0, cz = 0) {
   const data = new Uint16Array(CHUNK_VOLUME);
   let maxY = 0;
   for (const [x, y, z] of blocks) {
     data[(y * CHUNK_SIZE + z) * CHUNK_SIZE + x] = B.STONE;
     maxY = Math.max(maxY, y);
   }
-  const chunk: Chunk = { cx: 0, cz: 0, data, dirty: true, maxY };
+  const chunk: Chunk = { cx, cz, data, dirty: true, maxY };
   const world = {
     seed: 12345,
     dimensionId: "minecraft:overworld",
     get(x: number, y: number, z: number) {
       if (y < 0) return B.BEDROCK;
       if (y >= WORLD_HEIGHT) return B.AIR;
-      if (x < 0 || x >= CHUNK_SIZE || z < 0 || z >= CHUNK_SIZE) return -1;
-      return data[(y * CHUNK_SIZE + z) * CHUNK_SIZE + x] ?? B.AIR;
+      const lx = x - cx * CHUNK_SIZE, lz = z - cz * CHUNK_SIZE;
+      if (lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) return -1;
+      return data[(y * CHUNK_SIZE + lz) * CHUNK_SIZE + lx] ?? B.AIR;
     },
   } as unknown as World;
   return { chunk, world };
@@ -89,4 +90,17 @@ test("unloading a chunk invalidates retained neighbours so their border faces re
   assert.equal(world.getChunk(1, 0), undefined);
   assert.equal(retained.dirty, true);
   assert.deepEqual(notified, [retained]);
+});
+
+
+test("non-origin chunk meshes use chunk-local coordinates for every emitted cube vertex", () => {
+  const { chunk, world } = makeChunk([[0, 2, 8]], 3, -4);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.ok(mesh.solid);
+  const xs = Array.from({ length: mesh.solid.positions.length / 3 }, (_, i) => mesh.solid!.positions[i * 3]);
+  const zs = Array.from({ length: mesh.solid.positions.length / 3 }, (_, i) => mesh.solid!.positions[i * 3 + 2]);
+  assert.equal(Math.min(...xs), 0);
+  assert.equal(Math.max(...xs), 1);
+  assert.equal(Math.min(...zs), 8);
+  assert.equal(Math.max(...zs), 9);
 });

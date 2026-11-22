@@ -56,7 +56,7 @@ export function getBlockDropCount(
   }
 ): number;
 
-export function craftFromCounts(counts: number[], recipeId: string, recipes: CraftRecipe[], options?: { creative?: boolean; maxStack?: number }): CraftResult;
+export function craftFromCounts(counts: number[], recipeId: string, recipes: CraftRecipe[], options?: { creative?: boolean; maxStack?: number; maxCount?: number }): CraftResult;
 
 export function craftGridForRecipe(
   recipe: CraftRecipe | undefined,
@@ -69,7 +69,7 @@ export function craftGridForRecipe(
   }
 ): number[];
 
-export function craftFromGrid(counts: number[], recipeId: string, grid: number[], recipes: CraftRecipe[], options?: { creative?: boolean; maxStack?: number }): CraftResult;
+export function craftFromGrid(counts: number[], recipeId: string, grid: number[], recipes: CraftRecipe[], options?: { creative?: boolean; maxStack?: number; maxCount?: number }): CraftResult;
 
 export function resolveInitialInventory(storedCounts: unknown, claimedCounts: unknown, isHost: boolean): unknown;
 

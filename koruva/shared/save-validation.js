@@ -30,6 +30,10 @@ export function isValidSoloSave(value) {
   if (!finiteVector3(p.pos) || !finite(p.yaw) || !finite(p.pitch) ||
       !integerArray(p.hotbar, 64) || !Number.isInteger(p.sel) || p.sel < 0 || p.sel > 8) return false;
   if (p.counts !== undefined && (!integerArray(p.counts) || p.counts.some((n) => n < 0))) return false;
+  if (p.cursorItem !== undefined && (!Number.isSafeInteger(p.cursorItem) || p.cursorItem < 0 || p.cursorItem >= 100_000)) return false;
+  if (p.cursorCount !== undefined && (!Number.isSafeInteger(p.cursorCount) || p.cursorCount < 0 || p.cursorCount > 64)) return false;
+  if ((p.cursorItem ?? 0) === 0 && (p.cursorCount ?? 0) !== 0) return false;
+  if ((p.cursorItem ?? 0) > 0 && (p.cursorCount ?? 0) <= 0) return false;
   if (p.stackData !== undefined && !validStackData(p.stackData)) return false;
   if (p.health !== undefined && !finite(p.health)) return false;
   if (p.hunger !== undefined && !finite(p.hunger)) return false;

@@ -498,6 +498,16 @@ export class Room extends DurableObject<Env> {
         const dt = Math.max(0.05, Math.min(1, (now - me.lastPosAt) / 1000));
         const distance = Math.hypot(next[0]-me.p[0], next[1]-me.p[1], next[2]-me.p[2]);
         const previousPosition: Vec3 = [...me.p];
+        // A rejected position must not grant fall/critical-hit or movement state.
+        const movementStateBeforeValidation = {
+          verticalVelocity: me.verticalVelocity,
+          fallDistance: me.fallDistance,
+          sneak: me.sneak,
+          sprint: me.sprint,
+          swimming: me.swimming,
+          fallFlying: me.fallFlying,
+          elytraVelocity: me.elytraVelocity,
+        };
         me.sneak = !!msg.sneak;
         me.sprint = !!msg.sprint && !me.sneak;
         me.swimming = !!msg.swimming;
@@ -537,6 +547,7 @@ export class Room extends DurableObject<Env> {
         } else {
           me.elytraVelocity = [0,0,0];
           if (distance > dt * maxSpeed + 1 && me.vitals.gameMode !== "creative" && me.vitals.gameMode !== "spectator") {
+            Object.assign(me, movementStateBeforeValidation);
             this.send(ws,{t:"teleport",p:me.p,r:me.r}); return;
           }
           if (distance <= dt * maxSpeed + 1 && me.vitals.gameMode !== "creative" && me.vitals.gameMode !== "spectator") {

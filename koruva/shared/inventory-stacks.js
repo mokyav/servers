@@ -6,8 +6,8 @@ export const PLAYER_TOTAL_SLOT_COUNT = PLAYER_STORAGE_SLOT_COUNT + 4 + 1 + 4 + 9
 
 export function maxStackSizeForItemKey(key = "") {
   const id = String(key).toLowerCase();
-  if (/(?:_sword|_pickaxe|_axe|_shovel|_hoe|_spear|_helmet|_chestplate|_leggings|_boots|_mace|_horse_armor|_shulker_box|_boat)$/.test(id)
-    || /(?:^|:)(?:bow|crossbow|trident|shield|elytra|fishing_rod|flint_and_steel|shears|carrot_on_a_stick|warped_fungus_on_a_stick|brush|spyglass|compass|clock|recovery_compass|water_bucket|lava_bucket|milk_bucket|powder_snow_bucket|cod_bucket|salmon_bucket|tropical_fish_bucket|pufferfish_bucket|axolotl_bucket|tadpole_bucket|minecart|chest_minecart|furnace_minecart|saddle|totem_of_undying|name_tag|lead|goat_horn|bundle|enchanted_book|written_book|knowledge_book|filled_map|mace)$/.test(id)
+  if (/(?:_sword|_pickaxe|_axe|_shovel|_hoe|_spear|_helmet|_chestplate|_leggings|_boots|_mace|_horse_armor|_shulker_box|_boat|_raft)$/.test(id)
+    || /(?:^|:)(?:bow|crossbow|trident|shield|elytra|fishing_rod|flint_and_steel|shears|carrot_on_a_stick|warped_fungus_on_a_stick|brush|spyglass|compass|clock|recovery_compass|water_bucket|lava_bucket|milk_bucket|powder_snow_bucket|cod_bucket|salmon_bucket|tropical_fish_bucket|pufferfish_bucket|axolotl_bucket|tadpole_bucket|(?:[a-z0-9_]+_)?minecart|saddle|totem_of_undying|name_tag|lead|goat_horn|bundle|enchanted_book|written_book|knowledge_book|filled_map|mace)$/.test(id)
     || /(?:^|:)(?:potion|splash_potion|lingering_potion)$/.test(id)
     || id.startsWith("koruva:potion_")) return 1;
   if (/(?:ender_pearl|snowball|egg|honey_bottle|sign|banner|armor_stand)$/.test(id)) return 16;

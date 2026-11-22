@@ -205,7 +205,8 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
       const px = center[0] + half * (f.n[0] + sa * f.a[0] + sb * f.b[0]);
       const py = center[1] + half * (f.n[1] + sa * f.a[1] + sb * f.b[1]);
       const pz = center[2] + half * (f.n[2] + sa * f.a[2] + sb * f.b[2]);
-      target.pos.push(px, py, pz);
+      // Geometry is chunk-local; ChunkView applies the chunk world offset to the mesh.
+      target.pos.push(px - ox, py, pz - oz);
       let level = 3;
       if (!def.emissive && def.render !== "liquid") {
         const nx = x + f.n[0], ny = y + f.n[1], nz = z + f.n[2];
@@ -284,7 +285,8 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
             let transformed = local;
             if (element.rotation?.angle) transformed = rotateModelPoint(transformed, element.rotation.axis, element.rotation.angle, element.rotation.origin as Vec3, element.rotation.rescale === true);
             transformed = rotateBlockPoint(transformed, instance);
-            target.pos.push(x + transformed[0] / 16, y + transformed[1] / 16, z + transformed[2] / 16);
+            // Keep model-backed vertices in the same chunk-local coordinate space as cube faces.
+            target.pos.push(x - ox + transformed[0] / 16, y + transformed[1] / 16, z - oz + transformed[2] / 16);
             const [pixelU, pixelV] = faceUvPixels(direction, local, from, to, face);
             let [tu, tv] = lockModelUv(pixelU / 16, pixelV / 16, direction, instance);
             const uvTurn = ((face.rotation % 360) + 360) % 360;

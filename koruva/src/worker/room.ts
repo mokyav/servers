@@ -32,10 +32,10 @@ import { NATURAL_MOB_DIMENSIONS, NATURAL_MOB_MAX_PER_DIMENSION, chooseNaturalMob
 import { mobDimensionId, mobsForDimension, normalizeSavedMobs, withMobDimension } from "../../shared/mob-dimensions.js";
 import { dropsForDimension, normalizeSavedDrops } from "../../shared/drop-store.js";
 import { blockToken, canBlockStay, canPlaceBlockAt, isFallingBlock, isReplaceableBlock, neighborCells, pairedBlockPosition, requiresBlockSupport } from "../../shared/block-behavior.js";
-import { PersistentChunkEdits, normalizeChunkRecord } from "../../shared/chunk-edits.js";
+import { PersistentChunkEdits, normalizeChunkRecord, iterateChunkEditBatches } from "../../shared/chunk-edits.js";
 import { evaluateRedstoneWorld, nextRepeaterDelayBlockId } from "../../shared/redstone-world.js";
 import { createRepeaterDelayController } from "../../shared/repeater-delay.js";
-import { biomeAt, dimensionBiomeAt, generateChunk, generateDimensionChunk, LEGACY_WORLDGEN_VERSION, WORLDGEN_VERSION } from "../client/worldgen";
+import { biomeAt, dimensionBiomeAt, generateChunk, generateDimensionChunk, LEGACY_WORLDGEN_VERSION, WORLDGEN_VERSION, normalizeWorldgenVersion } from "../client/worldgen";
 import { DIMENSION_IDS, normalizeDimensionId, mapDimensionCoordinates, resolveDimensionAlias, findSafeSpawn } from "../../shared/dimensions.js";
 import { MINECRAFT_BLOCK_TO_RUNTIME_ID, MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID } from "../../shared/minecraft-block-runtime.js";
 import { findPortalAt } from "../../shared/dimension-portals.js";
@@ -488,7 +488,6 @@ export class Room extends DurableObject<Env> {
       if (me.cid) await this.persistVersionedPlayerSave(me);
       await this.persistPlayerLocation(me);
 
-      const edits = this.allEdits(me.dimensionId);
       const others: PlayerInfo[] = [];
       for (const s of this.ctx.getWebSockets()) {
         if (s === ws) continue;
@@ -498,20 +497,13 @@ export class Room extends DurableObject<Env> {
       this.send(ws, {
         t: "init", id: me.id, code: this.meta.code, seed: this.meta.seed,
         dimensionId: me.dimensionId, p: [...me.p], r: [...me.r],
-        worldgenVersion: this.meta.worldgenVersion ?? LEGACY_WORLDGEN_VERSION,
-        now: Date.now(), t0: this.meta.createdAt, players: others, editCount: edits.length / 4,
+        worldgenVersion: normalizeWorldgenVersion(this.meta.worldgenVersion ?? LEGACY_WORLDGEN_VERSION),
+        now: Date.now(), t0: this.meta.createdAt,
         mode: this.meta.mode ?? "creative", host: me.host, vitals: me.vitals, counts: [...me.counts], armorSlots: [...me.armorSlots], itemEnchantments: me.itemEnchantments, stackData: me.stackData, elytraDamage: me.elytraDamage, mobs: mobsForDimension(this.mobs.values(), me.dimensionId),
         projectiles: this.projectilesForDimension(me.dimensionId),
         drops: (await this.liveDrops(me.dimensionId)).map(({ eid, x, y, z, b, itemId, xp, count }) => ({ eid, x, y, z, ...(b !== undefined ? { b } : {}), ...(itemId !== undefined ? { itemId } : {}), ...(xp !== undefined ? { xp } : {}), ...(count !== undefined ? { count } : {}) })),
       });
-      const step = EDIT_BATCH * 4;
-      if (edits.length === 0) {
-        this.send(ws, { t: "edits", list: [], done: true });
-      } else {
-        for (let i = 0; i < edits.length; i += step) {
-          this.send(ws, { t: "edits", list: edits.slice(i, i + step), done: i + step >= edits.length });
-        }
-      }
+      if (!await this.sendDimensionEdits(ws, me.dimensionId)) return;
       this.broadcastDimension({ t: "join", player: this.info2(me) }, me.dimensionId, ws);
       if (me.dimensionId === DIMENSION_IDS.END) await this.ensureEnderDragon();
       await this.syncEndBossBar(ws, me.dimensionId);
@@ -1598,7 +1590,7 @@ export class Room extends DurableObject<Env> {
           if (!chunk) {
             if (this.mobChunkCache.size >= 24) this.mobChunkCache.delete(this.mobChunkCache.keys().next().value!);
             const seed = this.meta?.seed ?? 1;
-            const version = this.meta?.worldgenVersion === WORLDGEN_VERSION ? WORLDGEN_VERSION : LEGACY_WORLDGEN_VERSION;
+            const version = normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
             chunk = dimensionId === DIMENSION_IDS.OVERWORLD ? generateChunk(seed, cx, cz, version) : generateDimensionChunk(seed, cx, cz, dimensionId);
             this.mobChunkCache.set(cacheKey, chunk);
           }
@@ -2012,7 +2004,7 @@ export class Room extends DurableObject<Env> {
     if (!chunk) {
       if (this.mobChunkCache.size >= 24) this.mobChunkCache.delete(this.mobChunkCache.keys().next().value!);
       const seed = this.meta?.seed ?? 1;
-      const version = this.meta?.worldgenVersion === WORLDGEN_VERSION ? WORLDGEN_VERSION : LEGACY_WORLDGEN_VERSION;
+      const version = normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
       chunk = dimensionId === DIMENSION_IDS.OVERWORLD ? generateChunk(seed, cx, cz, version) : generateDimensionChunk(seed, cx, cz, dimensionId);
       this.mobChunkCache.set(cacheKey, chunk);
     }
@@ -2023,7 +2015,7 @@ export class Room extends DurableObject<Env> {
     if (!this.meta || !isNaturalMobSpawnDue(now, this.lastNaturalMobSpawnAt)) return false;
     this.lastNaturalMobSpawnAt = now;
     const seed = this.meta.seed ?? 1;
-    const worldgenVersion = this.meta.worldgenVersion === WORLDGEN_VERSION ? WORLDGEN_VERSION : LEGACY_WORLDGEN_VERSION;
+    const worldgenVersion = normalizeWorldgenVersion(this.meta.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
     let spawned = false;
     for (const dimensionId of NATURAL_MOB_DIMENSIONS) {
       if (this.mobs.size >= MAX_MOBS) break;
@@ -2340,7 +2332,7 @@ export class Room extends DurableObject<Env> {
       let chunk = generated.get(key);
       if (!chunk) {
         const seed = this.meta?.seed ?? 1;
-        const version = this.meta?.worldgenVersion === WORLDGEN_VERSION ? WORLDGEN_VERSION : LEGACY_WORLDGEN_VERSION;
+        const version = normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
         chunk = id === DIMENSION_IDS.OVERWORLD ? generateChunk(seed, cx, cz, version) : generateDimensionChunk(seed, cx, cz, id);
         generated.set(key, chunk);
       }
@@ -2613,16 +2605,12 @@ export class Room extends DurableObject<Env> {
     }
     this.send(ws, {
       t: "dimension", dimensionId: target, seed: this.meta?.seed ?? 1,
-      worldgenVersion: this.meta?.worldgenVersion ?? WORLDGEN_VERSION, p: me.p, r: me.r, players,
+      worldgenVersion: normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION), p: me.p, r: me.r, players,
       drops: (await this.liveDrops(target)).map(d => ({ eid: d.eid, x: d.x, y: d.y, z: d.z, ...(d.b !== undefined ? { b: d.b } : {}), ...(d.itemId !== undefined ? { itemId: d.itemId } : {}), ...(d.xp !== undefined ? { xp: d.xp } : {}), ...(d.count !== undefined ? { count: d.count } : {}) })),
       mobs: mobsForDimension(this.mobs.values(), target),
       projectiles: this.projectilesForDimension(target),
     });
-    const edits = this.allEdits(target);
-    if (edits.length === 0) this.send(ws, { t: "edits", list: [], done: true });
-    else for (let i = 0; i < edits.length; i += EDIT_BATCH) {
-      this.send(ws, { t: "edits", list: edits.slice(i, i + EDIT_BATCH), done: i + EDIT_BATCH >= edits.length });
-    }
+    if (!await this.sendDimensionEdits(ws, target)) return;
     this.broadcastDimension({ t: "join", player: this.info2(me) }, target, ws);
     if (target === DIMENSION_IDS.END) await this.ensureEnderDragon();
     await this.syncEndBossBar(ws, target);
@@ -2810,8 +2798,38 @@ export class Room extends DurableObject<Env> {
     return { id: p.id, name: p.name, skin: p.skin, p: p.p, r: p.r, host: p.host || undefined, sneak: p.sneak || undefined, fallFlying: p.fallFlying || undefined, armorSlots: [...p.armorSlots] };
   }
 
-  private send(ws: WebSocket, msg: ServerMsg) {
-    try { ws.send(JSON.stringify(msg)); } catch { /* closed */ }
+  private send(ws: WebSocket, msg: ServerMsg): boolean {
+    if (ws.readyState !== WebSocket.OPEN) return false;
+    try {
+      ws.send(JSON.stringify(msg));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Stream dimension overrides in bounded messages instead of flattening every
+   * edited cell into one large array. Empty progress packets are emitted by the
+   * iterator while scanning large, mostly-unmodified regions so the client can
+   * distinguish slow progress from a stalled connection.
+   */
+  private async sendDimensionEdits(ws: WebSocket, dimensionId: string): Promise<boolean> {
+    const batches = iterateChunkEditBatches(
+      this.chunksForDimension(dimensionId),
+      CHUNK_SIZE,
+      NO_EDIT,
+      EDIT_BATCH,
+      16,
+    );
+    for (const list of batches) {
+      if (!this.send(ws, { t: "edits", list, done: false })) return false;
+      // Yield between batches so durable-object events, WebSocket backpressure,
+      // and other players' traffic are not starved by a long synchronous scan.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      if (ws.readyState !== WebSocket.OPEN) return false;
+    }
+    return this.send(ws, { t: "edits", list: [], done: true });
   }
 
   private broadcast(msg: ServerMsg, except?: WebSocket) {
@@ -2851,7 +2869,7 @@ export class Room extends DurableObject<Env> {
     const edits = this.chunksForDimension(id).get(key);
     if (edits && edits[index] !== NO_EDIT) return edits[index];
     const seed = this.meta?.seed ?? 1;
-    const version = this.meta?.worldgenVersion === WORLDGEN_VERSION ? WORLDGEN_VERSION : LEGACY_WORLDGEN_VERSION;
+    const version = normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
     const chunk = id === DIMENSION_IDS.OVERWORLD ? generateChunk(seed, cx, cz, version) : generateDimensionChunk(seed, cx, cz, id);
     return chunk[index] ?? 0;
   }
@@ -2975,15 +2993,5 @@ export class Room extends DurableObject<Env> {
     return writer;
   }
 
-  private allEdits(dimensionId: string = DIMENSION_IDS.OVERWORLD): number[] {
-    const out: number[] = [];
-    for (const [key, arr] of this.chunksForDimension(dimensionId)) {
-      const [cx, cz] = key.split(",").map(Number);
-      for (let i = 0; i < arr.length; i++) {
-        if (arr[i] === NO_EDIT) continue;
-        out.push(cx * CHUNK_SIZE + (i & 15), i >> 8, cz * CHUNK_SIZE + ((i >> 4) & 15), arr[i]);
-      }
-    }
-    return out;
-  }
+
 }

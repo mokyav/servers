@@ -189,6 +189,13 @@ function inventoryCapacityFor(st: Pick<PlayerState, "counts" | "stackData">, ite
   return Math.max(0, Math.min(aggregateFree, slotFree));
 }
 
+function addInventoryItems(st: Pick<PlayerState, "counts" | "stackData">, itemId: number, amount: number, incomingComponents: any = null): number {
+  if (!Number.isSafeInteger(amount) || amount <= 0) return 0;
+  const accepted = Math.min(amount, inventoryCapacityFor(st, itemId, incomingComponents));
+  if (accepted > 0) st.counts[itemId] = Math.max(0, Math.floor(st.counts[itemId] ?? 0)) + accepted;
+  return accepted;
+}
+
 /**
  * 1ルーム = 1 Durable Object。
  * - WebSocket Hibernation API を使用(誰も操作していない間は課金対象外)

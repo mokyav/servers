@@ -27,6 +27,9 @@ const shapeChunk = shaped.ensureChunk(0, 0); shapeChunk.data.fill(0);
 shaped.setBlock(4, 1, 0, B.OAK_SLAB);
 ok(!collides(shaped, 4.5, 1.51, 0.5), "ハーフブロック上面より上は通過できる");
 ok(collides(shaped, 4.5, 1.4, 0.5), "ハーフブロック内部は衝突する");
+const slabFall: Body = { x: 4.5, y: 3, z: 0.5, vx: 0, vy: 0, vz: 0, onGround: false };
+for (let i = 0; i < 80; i++) { slabFall.vy -= 28 * 0.016; moveBody(shaped, slabFall, 0.016); }
+ok(Math.abs(slabFall.y - 1.5) < 0.01 && slabFall.onGround, `ハーフブロック上面の高さで着地 y=${slabFall.y.toFixed(3)}`);
 shaped.setBlock(2, 1, 2, B.OAK_STAIRS); // north-facing: upper half is on the south side
 ok(!collides(shaped, 2.5, 1.5, 2.15), "階段の欠けている上段側は通過できる");
 ok(collides(shaped, 2.5, 1.5, 2.85), "階段の上段側は衝突する");
@@ -71,6 +74,9 @@ ok(!!lanternMask && !modelCollisionCellIsSolid(lanternMask, 4, 2, 8) && modelCol
 ok(!collides(lanternWorld, 4.0, 1.05, 4.5), "ランタンの見た目より外側に当たり判定がはみ出さない");
 ok(collides(lanternWorld, 4.1, 1.05, 4.5), "ランタンの見た目に重なる位置では衝突する");
 ok(!raycast(lanternWorld, 4.28, 1.2, 4.5, -1, 0, 0, 0.2), "ランタンの見た目より外側からは選択できない");
+const movingBesideLantern: Body = { x: 3.5, y: 1.05, z: 4.5, vx: 5, vy: 0, vz: 0, onGround: false };
+moveBody(lanternWorld, movingBesideLantern, 0.2);
+ok(movingBesideLantern.x > 4.0 && movingBesideLantern.x < 4.02, `ランタンの見た目の輪郭で移動が止まる x=${movingBesideLantern.x.toFixed(3)}`);
 
 // Loading a neighbour must invalidate the already-meshed chunk at their shared edge.
 const edgeWorld = new World(37);

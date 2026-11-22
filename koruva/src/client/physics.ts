@@ -97,25 +97,65 @@ function edgeClamp(world: World, b: Body, axis: 0 | 2, d: number): number {
 
 function moveAxis(world: World, b: Body, axis: 0 | 1 | 2, d: number) {
   if (d === 0) return;
-  if (axis === 0) b.x += d; else if (axis === 1) b.y += d; else b.z += d;
+  const start = axis === 0 ? b.x : axis === 1 ? b.y : b.z;
+  const target = start + d;
+  const setAxisPosition = (value: number) => {
+    if (axis === 0) b.x = value;
+    else if (axis === 1) b.y = value;
+    else b.z = value;
+  };
+
+  setAxisPosition(target);
   if (!collides(world, b.x, b.y, b.z)) return;
+
   // 接地中は半ブロックだけ乗り越え、階段・ハーフブロックを歩いて上れるようにする。
   if (axis !== 1 && b.onGround) {
-    const oy = b.y; b.y += 0.5;
+    const originalY = b.y;
+    b.y += 0.5;
     if (!collides(world, b.x, b.y, b.z)) return;
-    b.y = oy;
+    b.y = originalY;
   }
-  if (axis === 0) {
-    b.x = d > 0 ? Math.floor(b.x + HW) - HW - EPS : Math.floor(b.x - HW) + 1 + HW + EPS;
-    b.vx = 0;
-  } else if (axis === 2) {
-    b.z = d > 0 ? Math.floor(b.z + HW) - HW - EPS : Math.floor(b.z - HW) + 1 + HW + EPS;
-    b.vz = 0;
-  } else {
-    if (d > 0) b.y = Math.floor(b.y + PLAYER_H) - PLAYER_H - EPS;
-    else { b.y = Math.floor(b.y) + 1 + EPS; b.onGround = true; }
+
+  // 部分ブロックでもブロック全体の面へ押し戻さず、実際の形状境界を二分探索する。
+  setAxisPosition(start);
+  let safeStart = start;
+  if (collides(world, b.x, b.y, b.z)) {
+    // 通常は直前位置が安全。ワールド読込直後などで埋まっていた場合だけ、移動と逆方向へ抜ける。
+    const direction = Math.sign(d);
+    let foundSafeStart = false;
+    for (let i = 1; i <= 20; i++) {
+      const candidate = start - direction * i * 0.05;
+      setAxisPosition(candidate);
+      if (!collides(world, b.x, b.y, b.z)) {
+        safeStart = candidate;
+        foundSafeStart = true;
+        break;
+      }
+    }
+    if (!foundSafeStart) {
+      setAxisPosition(start);
+      if (axis === 0) b.vx = 0;
+      else if (axis === 1) { b.vy = 0; if (d < 0) b.onGround = true; }
+      else b.vz = 0;
+      return;
+    }
+  }
+
+  let safe = 0;
+  let blocked = target - safeStart;
+  for (let i = 0; i < 12; i++) {
+    const middle = (safe + blocked) / 2;
+    setAxisPosition(safeStart + middle);
+    if (collides(world, b.x, b.y, b.z)) blocked = middle;
+    else safe = middle;
+  }
+  setAxisPosition(safeStart + safe - Math.sign(d) * EPS);
+
+  if (axis === 0) b.vx = 0;
+  else if (axis === 1) {
     b.vy = 0;
-  }
+    if (d < 0) b.onGround = true;
+  } else b.vz = 0;
 }
 
 export function inLiquid(world: World, x: number, y: number, z: number): boolean {

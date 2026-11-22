@@ -38,6 +38,7 @@ void main() {
 
 interface Entry {
   solid: THREE.Mesh | null;
+  translucent: THREE.Mesh | null;
   liquid: THREE.Mesh | null;
 }
 
@@ -53,11 +54,13 @@ export class ChunkView {
     uOpacity: { value: 1 },
   };
   private solidMat: THREE.ShaderMaterial;
+  private translucentMat: THREE.ShaderMaterial;
   private atlasCanvas: HTMLCanvasElement;
   private atlasTexture: THREE.CanvasTexture;
   private liquidMat: THREE.ShaderMaterial;
   private entries = new Map<number, Entry>();
   private urgent = new Set<Chunk>();
+  private statsDirty = true;
   renderDistance = 6;
   stats = { chunks: 0, meshed: 0, triangles: 0 };
 
@@ -73,6 +76,11 @@ export class ChunkView {
     tex.colorSpace = THREE.SRGBColorSpace;
     this.uniforms.map.value = tex;
     this.solidMat = new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: VERT, fragmentShader: FRAG, side: THREE.FrontSide });
+    const translucentU = { ...this.uniforms, uOpacity: { value: 0.42 } };
+    this.translucentMat = new THREE.ShaderMaterial({
+      uniforms: translucentU, vertexShader: VERT, fragmentShader: FRAG,
+      transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    });
     const liquidU = { ...this.uniforms, uOpacity: { value: 0.68 } };
     this.liquidMat = new THREE.ShaderMaterial({
       uniforms: liquidU, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, side: THREE.DoubleSide,
@@ -106,19 +114,34 @@ export class ChunkView {
       }
     }
 
-    // 2) 編集・新規隣接チャンク由来の再メッシュ。
-    // 未ロード境界は一時的に空気として描画し、隣接チャンク到着時に再メッシュする。
+    // 2) 表示中の既存チャンクだけを緊急再メッシュ。
+    // 新規チャンクは後段の距離順キューに任せる。範囲外の更新で描画予算を
+    // 消費すると、画面内の未メッシュチャンクが長時間表示されないため。
+    let meshed = 0;
     for (const c of this.urgent) {
       if (this.world.getChunk(c.cx, c.cz) !== c) {
         this.urgent.delete(c);
         continue;
       }
-      if (this.entries.has(chunkKey(c.cx, c.cz)) || c.dirty) this.mesh(c);
-      this.urgent.delete(c);
+      const dx = c.cx - pcx, dz = c.cz - pcz;
+      const key = chunkKey(c.cx, c.cz);
+      const inVisibleRing = dx * dx + dz * dz <= rd * rd + rd;
+      if (!inVisibleRing || !this.entries.has(key)) {
+        // Dirty state remains on the Chunk; the normal near-to-far pass will
+        // build it when it enters the visible ring.
+        this.urgent.delete(c);
+        continue;
+      }
+      if (meshed >= meshBudget) break;
+      if (c.dirty) {
+        this.mesh(c);
+        meshed++;
+      } else {
+        this.urgent.delete(c);
+      }
     }
 
     // 3) 未メッシュ/ダーティを近い順に処理(4近傍が揃っているもののみ)
-    let meshed = 0;
     for (const [dx, dz] of this.ring(rd)) {
       if (meshed >= meshBudget) break;
       const c = this.world.getChunk(pcx + dx, pcz + dz);
@@ -138,18 +161,24 @@ export class ChunkView {
       }
     }
     this.stats.chunks = this.world.chunks.size;
+    if (this.statsDirty) {
+      this.recount();
+      this.statsDirty = false;
+    }
   }
 
   /** 周囲 radius チャンクのうちメッシュ済みの割合(ロード画面用) */
   readyRatio(px: number, pz: number, radius: number): number {
     const pcx = Math.floor(px / CHUNK_SIZE), pcz = Math.floor(pz / CHUNK_SIZE);
     let total = 0, ready = 0;
-    for (let dz = -radius; dz <= radius; dz++) for (let dx = -radius; dx <= radius; dx++) {
+    // Match the exact ring used by generation and meshing. A square check would
+    // include corner chunks that the ring scheduler intentionally never requests.
+    for (const [dx, dz] of this.ring(radius)) {
       total++;
       const c = this.world.getChunk(pcx + dx, pcz + dz);
       if (c && !c.dirty && this.entries.has(chunkKey(c.cx, c.cz))) ready++;
     }
-    return ready / total;
+    return total > 0 ? ready / total : 1;
   }
 
   private ringCache = new Map<number, [number, number][]>();
@@ -170,10 +199,11 @@ export class ChunkView {
     const res = buildChunkMesh(this.world, c, tileUV);
     c.dirty = false;
     let e = this.entries.get(key);
-    if (!e) this.entries.set(key, (e = { solid: null, liquid: null }));
+    if (!e) this.entries.set(key, (e = { solid: null, translucent: null, liquid: null }));
     e.solid = this.swap(e.solid, res.solid, this.solidMat, c, 0);
+    e.translucent = this.swap(e.translucent, res.translucent, this.translucentMat, c, 1);
     e.liquid = this.swap(e.liquid, res.liquid, this.liquidMat, c, 1);
-    this.recount();
+    this.statsDirty = true;
     this.urgent.delete(c);
   }
 
@@ -188,11 +218,11 @@ export class ChunkView {
     g.setAttribute("uv", new THREE.BufferAttribute(data.uvs, 2));
     g.setAttribute("color", new THREE.BufferAttribute(data.colors, 4));
     g.setIndex(new THREE.BufferAttribute(data.indices, 1));
-    // フラスタムカリング用の境界(チャンク全体を包む)
-    g.boundingSphere = new THREE.Sphere(
-      new THREE.Vector3(CHUNK_SIZE / 2, WORLD_HEIGHT / 2, CHUNK_SIZE / 2),
-      Math.hypot(CHUNK_SIZE / 2, WORLD_HEIGHT / 2, CHUNK_SIZE / 2),
-    );
+    // Compute bounds from the actual emitted vertices. Some vanilla block models
+    // extend beyond the nominal 0..16 block cube, so a fixed chunk-sized sphere
+    // can incorrectly frustum-cull visible geometry at chunk edges.
+    g.computeBoundingBox();
+    g.computeBoundingSphere();
     const m = new THREE.Mesh(g, mat);
     m.position.set(c.cx * CHUNK_SIZE, 0, c.cz * CHUNK_SIZE);
     m.matrixAutoUpdate = false;
@@ -205,19 +235,20 @@ export class ChunkView {
   private dispose(key: number) {
     const e = this.entries.get(key);
     if (!e) return;
-    for (const m of [e.solid, e.liquid]) {
+    for (const m of [e.solid, e.translucent, e.liquid]) {
       if (m) {
         this.group.remove(m);
         m.geometry.dispose();
       }
     }
     this.entries.delete(key);
+    this.statsDirty = true;
   }
 
   private recount() {
     let tris = 0;
     for (const e of this.entries.values()) {
-      for (const m of [e.solid, e.liquid]) if (m) tris += (m.geometry.getIndex()?.count ?? 0) / 3;
+      for (const m of [e.solid, e.translucent, e.liquid]) if (m) tris += (m.geometry.getIndex()?.count ?? 0) / 3;
     }
     this.stats.meshed = this.entries.size;
     this.stats.triangles = tris;
@@ -226,5 +257,8 @@ export class ChunkView {
   clear() {
     for (const key of Array.from(this.entries.keys())) this.dispose(key);
     this.urgent.clear();
+    this.stats.chunks = this.world.chunks.size;
+    this.recount();
+    this.statsDirty = false;
   }
 }

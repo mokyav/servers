@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { inventoryPanelVisibility } from "../src/client/inventory-ui";
 import { hotbarSlotCount } from "../src/client/ui";
 import { World } from "../src/client/world";
-import { B } from "../shared/blocks";
+import { B, BLOCKS, MINECRAFT_BLOCK_TO_ID } from "../shared/blocks";
 import { CHUNK_SIZE, CHUNK_VOLUME, WORLD_HEIGHT } from "../shared/constants";
 import { buildChunkMesh } from "../src/client/mesher";
 import type { Chunk } from "../src/client/world";
@@ -29,22 +29,23 @@ test("creative catalogue and player inventory never overlap", () => {
   });
 });
 
-function makeChunk(blocks: Array<[number, number, number]>) {
+function makeChunk(blocks: Array<[number, number, number, number?]>, cx = 0, cz = 0) {
   const data = new Uint16Array(CHUNK_VOLUME);
   let maxY = 0;
-  for (const [x, y, z] of blocks) {
-    data[(y * CHUNK_SIZE + z) * CHUNK_SIZE + x] = B.STONE;
+  for (const [x, y, z, id = B.STONE] of blocks) {
+    data[(y * CHUNK_SIZE + z) * CHUNK_SIZE + x] = id;
     maxY = Math.max(maxY, y);
   }
-  const chunk: Chunk = { cx: 0, cz: 0, data, dirty: true, maxY };
+  const chunk: Chunk = { cx, cz, data, dirty: true, maxY };
   const world = {
     seed: 12345,
     dimensionId: "minecraft:overworld",
     get(x: number, y: number, z: number) {
       if (y < 0) return B.BEDROCK;
       if (y >= WORLD_HEIGHT) return B.AIR;
-      if (x < 0 || x >= CHUNK_SIZE || z < 0 || z >= CHUNK_SIZE) return -1;
-      return data[(y * CHUNK_SIZE + z) * CHUNK_SIZE + x] ?? B.AIR;
+      const lx = x - cx * CHUNK_SIZE, lz = z - cz * CHUNK_SIZE;
+      if (lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) return -1;
+      return data[(y * CHUNK_SIZE + lz) * CHUNK_SIZE + lx] ?? B.AIR;
     },
   } as unknown as World;
   return { chunk, world };
@@ -89,4 +90,42 @@ test("unloading a chunk invalidates retained neighbours so their border faces re
   assert.equal(world.getChunk(1, 0), undefined);
   assert.equal(retained.dirty, true);
   assert.deepEqual(notified, [retained]);
+});
+
+
+test("non-origin chunk meshes use chunk-local coordinates for every emitted cube vertex", () => {
+  const { chunk, world } = makeChunk([[0, 2, 8]], 3, -4);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.ok(mesh.solid);
+  const xs = Array.from({ length: mesh.solid.positions.length / 3 }, (_, i) => mesh.solid!.positions[i * 3]);
+  const zs = Array.from({ length: mesh.solid.positions.length / 3 }, (_, i) => mesh.solid!.positions[i * 3 + 2]);
+  assert.equal(Math.min(...xs), 0);
+  assert.equal(Math.max(...xs), 1);
+  assert.equal(Math.min(...zs), 8);
+  assert.equal(Math.max(...zs), 9);
+});
+
+
+test("legacy and vanilla glass are routed to the translucent render layer", () => {
+  assert.equal(BLOCKS[B.GLASS].render, "translucent");
+  const vanillaGlass = MINECRAFT_BLOCK_TO_ID["minecraft:glass"];
+  assert.ok(vanillaGlass > 0);
+  assert.equal(BLOCKS[vanillaGlass].render, "translucent");
+
+  const { chunk, world } = makeChunk([[4, 3, 6, B.GLASS]]);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.equal(mesh.solid, null, "glass must not be emitted into the opaque mesh");
+  assert.equal(mesh.translucent?.vertexCount, 24, "isolated glass must emit six translucent faces");
+  assert.equal(mesh.liquid, null);
+});
+
+
+test("an invalid runtime block ID cannot abort or hide the rest of a chunk mesh", () => {
+  const invalidId = BLOCKS.length + 20;
+  assert.ok(invalidId < 65535, "test ID must fit the world's Uint16Array");
+  const { chunk, world } = makeChunk([[2, 4, 3, invalidId]]);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.ok(mesh.solid);
+  assert.equal(mesh.solid.vertexCount, 24, "unknown blocks use a visible placeholder cube");
+  assert.equal(mesh.solid.indices.length, 36);
 });

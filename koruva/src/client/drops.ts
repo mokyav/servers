@@ -63,6 +63,7 @@ export class DropEntities {
   constructor(atlas: HTMLCanvasElement) {
     const tex = new THREE.CanvasTexture(atlas);
     atlas.addEventListener(ATLAS_READY_EVENT, () => { tex.needsUpdate = true; }, { once: true });
+    tex.colorSpace = THREE.SRGBColorSpace;
     tex.magFilter = THREE.NearestFilter;
     tex.minFilter = THREE.NearestFilter;
     tex.generateMipmaps = false;
@@ -105,6 +106,7 @@ export class DropEntities {
       new THREE.TextureLoader().load(
         `/assets/minecraft/textures/${texturePath}.png`,
         (texture) => {
+          texture.colorSpace = THREE.SRGBColorSpace;
           texture.magFilter = THREE.NearestFilter;
           texture.minFilter = THREE.NearestFilter;
           texture.generateMipmaps = false;

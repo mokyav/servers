@@ -19,6 +19,7 @@ function tex(draw: (ctx: CanvasRenderingContext2D) => void): THREE.CanvasTexture
   const ctx = cv.getContext("2d")!;
   draw(ctx);
   const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
   t.magFilter = THREE.NearestFilter;
   t.minFilter = THREE.NearestFilter;
   t.generateMipmaps = false;
@@ -109,6 +110,7 @@ function nameSprite(name: string): THREE.Sprite {
   ctx.textBaseline = "middle";
   ctx.fillText(name, 128, 25, 232);
   const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
   sp.scale.set(1.5, 0.28, 1);
   sp.position.y = 2.25;

@@ -15,7 +15,7 @@ test("room init carries the persisted dimension and player transform", () => {
   assert.match(main, /roomEntryPosition = m\.p && m\.p\.every/);
 
   const localRestore = main.indexOf("if (saved) this.applyPlayerSave(saved, true)");
-  const serverRestore = main.indexOf("if (roomEntryPosition) {", localRestore);
+  const serverRestore = main.indexOf("if (roomEntry.position) {", localRestore);
   assert.ok(localRestore >= 0 && serverRestore > localRestore,
     "server position must be applied after local save/spawn restoration");
   assert.match(main.slice(serverRestore), /this\.body = \{ x, y, z, vx: 0, vy: 0, vz: 0, onGround: false \}/);

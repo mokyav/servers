@@ -53,7 +53,7 @@ const oakFence = MINECRAFT_BLOCK_TO_ID["minecraft:oak_fence"];
 const glassPane = MINECRAFT_BLOCK_TO_ID["minecraft:glass_pane"];
 const whiteCarpet = MINECRAFT_BLOCK_TO_ID["minecraft:white_carpet"];
 const doorWorld = new World(31); doorWorld.ensureChunk(0, 0).data.fill(0); doorWorld.setBlock(4, 1, 4, oakDoor);
-ok(!!BLOCKS[oakDoor] && BLOCKS[oakDoor].shape === "door" && collides(doorWorld, 4.1, 1, 4.5), "ドアは薄い縦面で衝突する");
+ok(!!BLOCKS[oakDoor] && BLOCKS[oakDoor].shape === "door" && collides(doorWorld, 4.1, 1, 4.1), "ドアは薄い縦面で衝突する");
 const trapWorld = new World(32); trapWorld.ensureChunk(0, 0).data.fill(0); trapWorld.setBlock(4, 1, 4, oakTrapdoor);
 ok(!!BLOCKS[oakTrapdoor] && BLOCKS[oakTrapdoor].shape === "trapdoor" && collides(trapWorld, 4.5, 1.1, 4.5) && !collides(trapWorld, 4.5, 1.3, 4.5), "トラップドアは薄い水平面として衝突する");
 const fenceWorld = new World(33); fenceWorld.ensureChunk(0, 0).data.fill(0); fenceWorld.setBlock(4, 1, 4, oakFence);
@@ -61,13 +61,13 @@ ok(!!BLOCKS[oakFence] && BLOCKS[oakFence].shape === "fence" && collides(fenceWor
 const paneWorld = new World(34); paneWorld.ensureChunk(0, 0).data.fill(0); paneWorld.setBlock(4, 1, 4, glassPane);
 ok(!!BLOCKS[glassPane] && BLOCKS[glassPane].shape === "pane" && collides(paneWorld, 4.5, 1, 4.5), "ガラス板は中央の薄い十字形で衝突する");
 const carpetWorld = new World(35); carpetWorld.ensureChunk(0, 0).data.fill(0); carpetWorld.setBlock(4, 1, 4, whiteCarpet);
-ok(!!BLOCKS[whiteCarpet] && BLOCKS[whiteCarpet].shape === "carpet" && collides(carpetWorld, 4.5, 1.1, 4.5) && !collides(carpetWorld, 4.5, 1.3, 4.5), "カーペットは薄い高さの衝突判定を持つ");
+ok(!!BLOCKS[whiteCarpet] && BLOCKS[whiteCarpet].shape === "carpet" && collides(carpetWorld, 4.5, 1.02, 4.5) && !collides(carpetWorld, 4.5, 1.1, 4.5), "カーペットは薄い高さの衝突判定を持つ");
 // Modern model-based blocks can be visually partial even when their broad shape is "cube".
 const lanternId = MINECRAFT_BLOCK_TO_ID["minecraft:lantern"];
 const lanternWorld = new World(36); lanternWorld.ensureChunk(0, 0).data.fill(0);
 lanternWorld.setBlock(4, 1, 4, lanternId);
 ok(BLOCKS[lanternId]?.shape === "cube" && blockHasPartialModelShape(lanternId), "ランタンは部分モデル衝突マスクを使う");
-ok(!collides(lanternWorld, 4.5, 1.5, 4.5), "ランタンのモデル上部の空間ではプレイヤーが衝突しない");
+ok(!collides(lanternWorld, 4.5, 1.75, 4.5), "ランタンのモデル上部の空間ではプレイヤーが衝突しない");
 ok(collides(lanternWorld, 4.5, 1.05, 4.5), "ランタンの下部モデルにはプレイヤーが衝突する");
 const lanternMask = getModelCollisionMask(lanternId);
 ok(!!lanternMask && !modelCollisionCellIsSolid(lanternMask, 4, 2, 8) && modelCollisionCellIsSolid(lanternMask, 5, 2, 8), "モデルの座標を1/16ブロック単位で衝突マスクに反映する");

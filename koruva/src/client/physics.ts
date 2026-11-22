@@ -1,4 +1,5 @@
 import { BLOCKS, blockHasPartialModelShape, blockOccupiesSubcell } from "../../shared/blocks";
+import { getModelCollisionMask, MODEL_COLLISION_RESOLUTION, modelCollisionCellIsSolid } from "./model-collision";
 import type { World } from "./world";
 
 export const PLAYER_W = 0.6;
@@ -21,6 +22,32 @@ export function collides(world: World, x: number, y: number, z: number): boolean
     const id = world.get(bx, by, bz);
     if (id === -1) return true;
     if (id <= 0 || !BLOCKS[id]?.solid) continue;
+
+    const modelMask = getModelCollisionMask(id);
+    if (modelMask) {
+      if (modelMask.empty) continue;
+      if (BLOCKS[id].shape === "cube" && modelMask.full) {
+        if (x + HW > bx && x - HW < bx + 1 && y + PLAYER_H > by && y < by + 1 && z + HW > bz && z - HW < bz + 1) return true;
+        continue;
+      }
+
+      // Model-based blocks use the renderer's exact element transforms at 1/16-block resolution.
+      const resolution = MODEL_COLLISION_RESOLUTION;
+      const qx0 = Math.max(0, Math.floor((x - HW - bx) * resolution));
+      const qx1 = Math.min(resolution - 1, Math.floor((x + HW - bx - EPS) * resolution));
+      const qy0 = Math.max(0, Math.floor((y - by) * resolution));
+      const qy1 = Math.min(resolution - 1, Math.floor((y + PLAYER_H - by - EPS) * resolution));
+      const qz0 = Math.max(0, Math.floor((z - HW - bz) * resolution));
+      const qz1 = Math.min(resolution - 1, Math.floor((z + HW - bz - EPS) * resolution));
+      for (let qy = qy0; qy <= qy1; qy++) for (let qz = qz0; qz <= qz1; qz++) for (let qx = qx0; qx <= qx1; qx++) {
+        if (!modelCollisionCellIsSolid(modelMask, qx, qy, qz)) continue;
+        const cell = 1 / resolution;
+        const sx = bx + qx * cell, sy = by + qy * cell, sz = bz + qz * cell;
+        if (x + HW > sx && x - HW < sx + cell && y + PLAYER_H > sy && y < sy + cell && z + HW > sz && z - HW < sz + cell) return true;
+      }
+      continue;
+    }
+
     if (BLOCKS[id].shape === "cube" && !blockHasPartialModelShape(id)) {
       if (x + HW > bx && x - HW < bx + 1 && y + PLAYER_H > by && y < by + 1 && z + HW > bz && z - HW < bz + 1) return true;
       continue;
@@ -102,9 +129,8 @@ export interface RayHit {
 }
 
 /**
- * Shape-aware raycast. 1/32-block samples are tested against the same 4x4x4
- * occupancy map used by collision and meshing, so slabs/stairs/panes do not
- * get selected through their empty volume. Liquids remain non-targetable.
+ * Shape-aware raycast. Model-backed blocks use the same 1/16-block model-element
+ * mask as collision; legacy shapes use the shared 4x4x4 mask. Liquids are untargetable.
  */
 export function raycast(
   world: World, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number,
@@ -127,10 +153,19 @@ export function raycast(
     const id = world.get(x, y, z);
     if (id === -1) return null;
     if (id <= 0 || !BLOCKS[id] || !BLOCKS[id].solid || BLOCKS[id].render === "liquid") continue;
-    const qx = Math.max(0, Math.min(3, Math.floor((px - x) * 4)));
-    const qy = Math.max(0, Math.min(3, Math.floor((py - y) * 4)));
-    const qz = Math.max(0, Math.min(3, Math.floor((pz - z) * 4)));
-    if (!blockOccupiesSubcell(id, qx, qy, qz)) continue;
+    const modelMask = getModelCollisionMask(id);
+    if (modelMask) {
+      const resolution = MODEL_COLLISION_RESOLUTION;
+      const qx = Math.max(0, Math.min(resolution - 1, Math.floor((px - x) * resolution)));
+      const qy = Math.max(0, Math.min(resolution - 1, Math.floor((py - y) * resolution)));
+      const qz = Math.max(0, Math.min(resolution - 1, Math.floor((pz - z) * resolution)));
+      if (!modelCollisionCellIsSolid(modelMask, qx, qy, qz)) continue;
+    } else {
+      const qx = Math.max(0, Math.min(3, Math.floor((px - x) * 4)));
+      const qy = Math.max(0, Math.min(3, Math.floor((py - y) * 4)));
+      const qz = Math.max(0, Math.min(3, Math.floor((pz - z) * 4)));
+      if (!blockOccupiesSubcell(id, qx, qy, qz)) continue;
+    }
     let nx = 0, ny = 0, nz = 0;
     if (lastEmptyX !== x) nx = -Math.sign(dx);
     else if (lastEmptyY !== y) ny = -Math.sign(dy);

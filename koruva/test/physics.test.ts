@@ -1,5 +1,6 @@
 import { World } from "../src/client/world";
 import { collides, moveBody, raycast, type Body } from "../src/client/physics";
+import { getModelCollisionMask, modelCollisionCellIsSolid } from "../src/client/model-collision";
 import { B, BLOCK_COUNT, BLOCKS, MINECRAFT_BLOCK_TO_ID, MINECRAFT_ITEM_TO_RUNTIME_ID, blockHasPartialModelShape, blockPlacementId } from "../shared/blocks";
 let fail = 0;
 const ok = (c: boolean, m: string) => { if (!c) { fail++; console.log("FAIL", m); } else console.log("ok  ", m); };
@@ -65,6 +66,11 @@ lanternWorld.setBlock(4, 1, 4, lanternId);
 ok(BLOCKS[lanternId]?.shape === "cube" && blockHasPartialModelShape(lanternId), "ランタンは部分モデル衝突マスクを使う");
 ok(!collides(lanternWorld, 4.5, 1.5, 4.5), "ランタンのモデル上部の空間ではプレイヤーが衝突しない");
 ok(collides(lanternWorld, 4.5, 1.05, 4.5), "ランタンの下部モデルにはプレイヤーが衝突する");
+const lanternMask = getModelCollisionMask(lanternId);
+ok(!!lanternMask && !modelCollisionCellIsSolid(lanternMask, 4, 2, 8) && modelCollisionCellIsSolid(lanternMask, 5, 2, 8), "モデルの座標を1/16ブロック単位で衝突マスクに反映する");
+ok(!collides(lanternWorld, 4.0, 1.05, 4.5), "ランタンの見た目より外側に当たり判定がはみ出さない");
+ok(collides(lanternWorld, 4.1, 1.05, 4.5), "ランタンの見た目に重なる位置では衝突する");
+ok(!raycast(lanternWorld, 4.28, 1.2, 4.5, -1, 0, 0, 0.2), "ランタンの見た目より外側からは選択できない");
 
 // Loading a neighbour must invalidate the already-meshed chunk at their shared edge.
 const edgeWorld = new World(37);

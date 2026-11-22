@@ -53,7 +53,19 @@ export default {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("Expected WebSocket", { status: 426 });
       }
-      return roomStub(env, ws[1].toUpperCase()).fetch(request);
+      const code = ws[1].toUpperCase();
+      try {
+        const response = await roomStub(env, code).fetch(request);
+        if (response.status !== 101) {
+          let detail = "";
+          try { detail = (await response.clone().text()).slice(0, 160); } catch { /* no body */ }
+          console.error(`[Koruva WS] room=${code} rejected status=${response.status} body=${detail}`);
+        }
+        return response;
+      } catch (error) {
+        console.error(`[Koruva WS] room=${code} forwarding failed`, error);
+        return new Response("WebSocket room service unavailable", { status: 503 });
+      }
     }
 
     if (path.startsWith("/api/")) return json({ error: "not found" }, 404);

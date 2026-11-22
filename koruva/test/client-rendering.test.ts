@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { inventoryPanelVisibility } from "../src/client/inventory-ui";
 import { hotbarSlotCount } from "../src/client/ui";
 import { World } from "../src/client/world";
-import { B } from "../shared/blocks";
+import { B, BLOCKS, MINECRAFT_BLOCK_TO_ID } from "../shared/blocks";
 import { CHUNK_SIZE, CHUNK_VOLUME, WORLD_HEIGHT } from "../shared/constants";
 import { buildChunkMesh } from "../src/client/mesher";
 import type { Chunk } from "../src/client/world";
@@ -29,11 +29,11 @@ test("creative catalogue and player inventory never overlap", () => {
   });
 });
 
-function makeChunk(blocks: Array<[number, number, number]>, cx = 0, cz = 0) {
+function makeChunk(blocks: Array<[number, number, number, number?]>, cx = 0, cz = 0) {
   const data = new Uint16Array(CHUNK_VOLUME);
   let maxY = 0;
-  for (const [x, y, z] of blocks) {
-    data[(y * CHUNK_SIZE + z) * CHUNK_SIZE + x] = B.STONE;
+  for (const [x, y, z, id = B.STONE] of blocks) {
+    data[(y * CHUNK_SIZE + z) * CHUNK_SIZE + x] = id;
     maxY = Math.max(maxY, y);
   }
   const chunk: Chunk = { cx, cz, data, dirty: true, maxY };
@@ -103,4 +103,18 @@ test("non-origin chunk meshes use chunk-local coordinates for every emitted cube
   assert.equal(Math.max(...xs), 1);
   assert.equal(Math.min(...zs), 8);
   assert.equal(Math.max(...zs), 9);
+});
+
+
+test("legacy and vanilla glass are routed to the translucent render layer", () => {
+  assert.equal(BLOCKS[B.GLASS].render, "translucent");
+  const vanillaGlass = MINECRAFT_BLOCK_TO_ID["minecraft:glass"];
+  assert.ok(vanillaGlass > 0);
+  assert.equal(BLOCKS[vanillaGlass].render, "translucent");
+
+  const { chunk, world } = makeChunk([[4, 3, 6, B.GLASS]]);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.equal(mesh.solid, null, "glass must not be emitted into the opaque mesh");
+  assert.equal(mesh.translucent?.vertexCount, 24, "isolated glass must emit six translucent faces");
+  assert.equal(mesh.liquid, null);
 });

@@ -11,6 +11,7 @@ export function normalizeSavedDrops(raw, options = {}) {
   const seen = new Set();
   const drops = [];
   const isValidInventoryItem = typeof options.isValidInventoryItem === "function" ? options.isValidInventoryItem : isValidItem;
+  const getMaxStackSize = typeof options.getMaxStackSize === "function" ? options.getMaxStackSize : () => 64;
   for (const value of raw) {
     if (!value || typeof value !== "object") continue;
     const { eid, x, y, z, at } = value;
@@ -37,12 +38,24 @@ export function normalizeSavedDrops(raw, options = {}) {
     let validItem = false;
     try { validItem = Boolean((directItem ? isValidInventoryItem : isValidItem)(itemId)); } catch { validItem = false; }
     if (!validItem) continue;
-    seen.add(eid);
-    const drop = directItem
-      ? { eid, x, y, z, itemId, count, at, dimensionId }
-      : { eid, x, y, z, b: itemId, count, at, dimensionId };
-    drops.push(drop);
-    if (drops.length > maxDrops) drops.shift();
+    let itemStackLimit = 64;
+    try {
+      const candidate = Number(getMaxStackSize(itemId));
+      if (Number.isSafeInteger(candidate) && candidate > 0) itemStackLimit = Math.min(64, candidate);
+    } catch { /* use the safe default */ }
+    let remaining = count, part = 0;
+    while (remaining > 0 && drops.length < maxDrops) {
+      let dropId = part === 0 ? eid : `${eid.slice(0, 56)}_${part}`;
+      while (seen.has(dropId)) { part++; dropId = `${eid.slice(0, 56)}_${part}`; }
+      const stackCount = Math.min(itemStackLimit, remaining);
+      seen.add(dropId);
+      const drop = directItem
+        ? { eid: dropId, x, y, z, itemId, count: stackCount, at, dimensionId }
+        : { eid: dropId, x, y, z, b: itemId, count: stackCount, at, dimensionId };
+      drops.push(drop);
+      remaining -= stackCount;
+      part++;
+    }
   }
   return drops;
 }

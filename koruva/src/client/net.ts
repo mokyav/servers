@@ -42,10 +42,14 @@ export class Net {
         if (typeof ev.data !== "string" || ev.data === "pong") return;
         try { this.onMessage(JSON.parse(ev.data) as ServerMsg); } catch (e) { console.error(e); }
       };
-      ws.onerror = () => { if (!opened) reject(new Error("サーバーに接続できませんでした")); };
-      ws.onclose = () => {
-        clearInterval(this.pingTimer);
+      ws.onerror = () => {
+        console.error("[Koruva WS] connection error", { url: ws.url, readyState: ws.readyState });
         if (!opened) reject(new Error("サーバーに接続できませんでした"));
+      };
+      ws.onclose = (event) => {
+        clearInterval(this.pingTimer);
+        console.warn("[Koruva WS] connection closed", { code: event.code, reason: event.reason, wasClean: event.wasClean });
+        if (!opened) reject(new Error(`サーバーに接続できませんでした (close ${event.code})`));
         else if (this.ws === ws) { this.ws = null; this.onClose("サーバーとの接続が切れました"); }
       };
     });

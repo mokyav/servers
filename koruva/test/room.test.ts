@@ -10,8 +10,16 @@ const OrigResponse = Response;
 };
 class FakeSocket {
   inbox: any[] = []; att: any = null; closed = false; peer!: FakeSocket;
+  maxAttachmentBytes = 0; attachmentError: number | null = null;
   send(d: string) { this.inbox.push(JSON.parse(d)); }
-  serializeAttachment(v: any) { this.att = JSON.parse(JSON.stringify(v)); }
+  serializeAttachment(v: any) {
+    const encoded = JSON.stringify(v);
+    const bytes = new TextEncoder().encode(encoded).byteLength;
+    this.maxAttachmentBytes = Math.max(this.maxAttachmentBytes, bytes);
+    if (bytes > 16_384) { this.attachmentError = bytes; throw new Error(`attachment too large: ${bytes}`); }
+    this.attachmentError = null;
+    this.att = JSON.parse(encoded);
+  }
   deserializeAttachment() { return this.att; }
   close() { this.closed = true; }
 }
@@ -63,6 +71,24 @@ ok(await room.create("ABC234", 42) === true, "ルーム作成");
 ok(await room.create("ABC234", 43) === false, "二重作成は不可");
 
 const a = await connect(room, "Alice", [3.5, 50, 1.5]);
+ok(
+  a.attachmentError === null && a.maxAttachmentBytes < 16_384 &&
+  a.att?.countsEncoding === "sparse-v1" && a.att?.counts?.length === 0,
+  "WebSocket attachment は所持数を疎配列化して16KiB未満に収める",
+);
+const aliceBeforeRestore = room.player(a);
+aliceBeforeRestore.counts[B.STONE] = 2;
+room.serializePlayer(a, aliceBeforeRestore);
+room.mem.delete(a);
+const aliceAfterRestore = room.player(a);
+ok(
+  aliceAfterRestore.id === aliceBeforeRestore.id &&
+  aliceAfterRestore.counts.length === BLOCKS.length &&
+  aliceAfterRestore.counts[B.STONE] === 2,
+  "疎配列attachmentから所持数とプレイヤー状態を復元",
+);
+aliceAfterRestore.counts[B.STONE] = 0;
+room.serializePlayer(a, aliceAfterRestore);
 const init = a.inbox.find((m) => m.t === "init");
 ok(init?.seed === 42 && init.code === "ABC234" && init.players.length === 0, "init: seed/code");
 ok(a.inbox.some((m) => m.t === "edits" && m.done === true), "初回 edits done");

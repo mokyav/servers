@@ -58,6 +58,7 @@ export class ChunkView {
   private liquidMat: THREE.ShaderMaterial;
   private entries = new Map<number, Entry>();
   private urgent = new Set<Chunk>();
+  private statsDirty = true;
   renderDistance = 6;
   stats = { chunks: 0, meshed: 0, triangles: 0 };
 
@@ -144,6 +145,10 @@ export class ChunkView {
       }
     }
     this.stats.chunks = this.world.chunks.size;
+    if (this.statsDirty) {
+      this.recount();
+      this.statsDirty = false;
+    }
   }
 
   /** 周囲 radius チャンクのうちメッシュ済みの割合(ロード画面用) */
@@ -181,7 +186,7 @@ export class ChunkView {
     if (!e) this.entries.set(key, (e = { solid: null, liquid: null }));
     e.solid = this.swap(e.solid, res.solid, this.solidMat, c, 0);
     e.liquid = this.swap(e.liquid, res.liquid, this.liquidMat, c, 1);
-    this.recount();
+    this.statsDirty = true;
     this.urgent.delete(c);
   }
 
@@ -220,6 +225,7 @@ export class ChunkView {
       }
     }
     this.entries.delete(key);
+    this.statsDirty = true;
   }
 
   private recount() {
@@ -234,5 +240,8 @@ export class ChunkView {
   clear() {
     for (const key of Array.from(this.entries.keys())) this.dispose(key);
     this.urgent.clear();
+    this.stats.chunks = this.world.chunks.size;
+    this.recount();
+    this.statsDirty = false;
   }
 }

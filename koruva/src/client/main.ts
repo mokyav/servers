@@ -3100,9 +3100,13 @@ class Game {
   updateTarget(now: number) {
     void now;
     if (this.state !== "playing") { this.highlight.visible = false; this.breakOverlay.visible = false; this.target = null; return; }
-    const o = new THREE.Vector3(this.body.x, this.body.y + this.eyeH, this.body.z);
-    const d = new THREE.Vector3(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));
-    this.target = raycast(this.world, o.x, o.y, o.z, d.x, d.y, d.z, REACH);
+    // Aim from the actual rendered camera, not the player body's eye position.
+    // This matters in third person: the camera is offset behind the player, so a
+    // body-origin ray can select a different block than the crosshair is pointing at.
+    this.camera.updateWorldMatrix(true, false);
+    const origin = this.camera.position;
+    const direction = this.camera.getWorldDirection(new THREE.Vector3());
+    this.target = raycast(this.world, origin.x, origin.y, origin.z, direction.x, direction.y, direction.z, REACH);
     if (this.target) { this.highlight.visible = true; this.highlight.position.set(this.target.x + 0.5, this.target.y + 0.5, this.target.z + 0.5); }
     else this.highlight.visible = false;
   }

@@ -1889,14 +1889,45 @@ class Game {
     let gotInit = false;
     let roomEntryPosition: [number, number, number] | null = null;
     let roomEntryRotation: [number, number] | null = null;
+    let doneSettled = false;
+    let progressTimer: number | null = null;
+    let failDone: (error: Error) => void = () => {};
+    let touchProgress: () => void = () => {};
+
     const done = new Promise<{
       position: [number, number, number] | null;
       rotation: [number, number] | null;
     }>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("ルームの読み込みがタイムアウトしました")), 20000);
+      const clearProgressTimer = () => {
+        if (progressTimer !== null) {
+          clearTimeout(progressTimer);
+          progressTimer = null;
+        }
+      };
+      failDone = (error) => {
+        if (doneSettled) return;
+        doneSettled = true;
+        clearProgressTimer();
+        reject(error);
+      };
+      touchProgress = () => {
+        if (doneSettled) return;
+        clearProgressTimer();
+        // This is an inactivity timeout, not a total transfer deadline. Every init
+        // or edit-progress packet extends it, so large existing worlds can finish.
+        progressTimer = window.setTimeout(() => {
+          failDone(new Error("ルームデータの受信が60秒間進んでいません"));
+        }, 60000);
+      };
+
       this.net.onMessage = (m) => {
+        if (doneSettled) {
+          this.onServerMsg(m);
+          return;
+        }
         if (m.t === "init") {
           gotInit = true;
+          touchProgress();
           this.myId = m.id;
           this.gameMode = m.mode;
           this.isHost = m.host;
@@ -1913,53 +1944,93 @@ class Game {
           this.t0 = m.t0;
           this.clockOffset = m.now - Date.now();
           for (const p of m.players) this.remotes.add(p);
-          for (const d of m.drops ?? []) { if (d.xp !== undefined) this.drops.addExperience(d.eid, d.x, d.y, d.z, d.xp); else this.drops.add(d.eid, d.x, d.y, d.z, d.itemId ?? d.b ?? 0, d.count ?? 1); }
-          this.counts = Array.from({ length: BLOCKS.length }, (_, i) => Math.min(maxInventoryCountForItemKey(BLOCKS[i]?.key ?? ""), Math.max(0, Math.floor(m.counts[i] ?? 0))));
-          if (Array.isArray(m.armorSlots)) this.armorSlots = m.armorSlots.slice(0, 4).map((id, index) => this.validInventoryId(id) && armorSlotForItemId(id, BLOCKS) === index ? id : 0);
+          for (const d of m.drops ?? []) {
+            if (d.xp !== undefined) this.drops.addExperience(d.eid, d.x, d.y, d.z, d.xp);
+            else this.drops.add(d.eid, d.x, d.y, d.z, d.itemId ?? d.b ?? 0, d.count ?? 1);
+          }
+          this.counts = Array.from({ length: BLOCKS.length }, (_, i) =>
+            Math.min(maxInventoryCountForItemKey(BLOCKS[i]?.key ?? ""), Math.max(0, Math.floor(m.counts[i] ?? 0))));
+          if (Array.isArray(m.armorSlots)) {
+            this.armorSlots = m.armorSlots.slice(0, 4).map((id, index) =>
+              this.validInventoryId(id) && armorSlotForItemId(id, BLOCKS) === index ? id : 0);
+          }
           this.itemEnchantments = normalizeItemEnchantments(m.itemEnchantments, BLOCKS);
           this.stackData = normalizeStackComponents(m.stackData, {}, BLOCKS);
           this.elytraDamage = Math.max(0, Math.min(432, Math.floor(Number(m.elytraDamage) || 0)));
           this.fallFlying = false;
           this.syncInventorySlots();
-          this.mobModels.clear(); for (const mob of m.mobs) this.mobModels.add(mob);
-          this.projectileEntities.clear(); for (const projectile of m.projectiles ?? []) this.projectileEntities.add(projectile);
+          this.mobModels.clear();
+          for (const mob of m.mobs) this.mobModels.add(mob);
+          this.projectileEntities.clear();
+          for (const projectile of m.projectiles ?? []) this.projectileEntities.add(projectile);
         } else if (m.t === "edits" && gotInit) {
+          touchProgress();
           this.world.importEdits(m.list);
           if (m.done) {
-            clearTimeout(timer);
+            doneSettled = true;
+            if (progressTimer !== null) clearTimeout(progressTimer);
+            progressTimer = null;
             resolve({ position: roomEntryPosition, rotation: roomEntryRotation });
           }
-        } else if (m.t === "error") { this.kickMsg = m.message; clearTimeout(timer); reject(new Error(m.message)); }
-        else if (m.t === "kicked") { this.kickMsg = m.reason; clearTimeout(timer); reject(new Error(m.reason)); }
-        else this.onServerMsg(m);
+        } else if (m.t === "error") {
+          this.kickMsg = m.message;
+          failDone(new Error(m.message));
+        } else if (m.t === "kicked") {
+          this.kickMsg = m.reason;
+          failDone(new Error(m.reason));
+        } else {
+          this.onServerMsg(m);
+        }
       };
     });
+
     this.net.onClose = (reason) => {
-      if (this.state !== "title") { this.backToTitle(this.kickMsg || reason); }
+      if (!doneSettled) failDone(new Error(this.kickMsg || reason));
+      else if (this.state !== "title") this.backToTitle(this.kickMsg || reason);
     };
-    await this.net.connect(code, {
-      t: "hello", name: this.profile.name, skin: this.profile.skin,
-      p: saved?.pos, r: saved ? [saved.yaw, saved.pitch] : undefined,
-      cid: clientId(), hostToken: loadHostToken(code) || undefined, counts: saved?.counts, armorSlots: saved?.armorSlots, stackData: saved?.stackData,
-    });
-    const roomEntry = await done;
-    const serverCounts = [...this.counts];
-    const serverArmorSlots = [...this.armorSlots];
-    if (saved) this.applyPlayerSave(saved, true); else {
-      this.setSpawn(); this.counts = serverCounts; this.armorSlots = serverArmorSlots;
-      this.syncInventorySlots(); this.sendEquipment();
+
+    try {
+      await this.net.connect(code, {
+        t: "hello", name: this.profile.name, skin: this.profile.skin,
+        p: saved?.pos, r: saved ? [saved.yaw, saved.pitch] : undefined,
+        cid: clientId(), hostToken: loadHostToken(code) || undefined,
+        counts: saved?.counts, armorSlots: saved?.armorSlots, stackData: saved?.stackData,
+      });
+      // Start the transfer inactivity timer only after the socket is actually open.
+      touchProgress();
+      const roomEntry = await done;
+      const serverCounts = [...this.counts];
+      const serverArmorSlots = [...this.armorSlots];
+      if (saved) this.applyPlayerSave(saved, true); else {
+        this.setSpawn();
+        this.counts = serverCounts;
+        this.armorSlots = serverArmorSlots;
+        this.syncInventorySlots();
+        this.sendEquipment();
+      }
+      // Server stack records carry the canonical slot layout and per-item components.
+      // Restore them after local save loading so a fresh device or stale local save cannot
+      // erase named, enchanted, damaged, cursor, or crafting-grid stacks.
+      this.restoreSlotContentsFromStackData();
+      this.syncInventorySlots();
+      // The server snapshot is authoritative for the dimension and transform.
+      if (roomEntry.position) {
+        const [x, y, z] = roomEntry.position;
+        this.body = { x, y, z, vx: 0, vy: 0, vz: 0, onGround: false };
+        if (roomEntry.rotation) { this.yaw = roomEntry.rotation[0]; this.pitch = roomEntry.rotation[1]; }
+      }
+      this.sendStackData();
+      this.time = this.roomTime();
+      history.replaceState(null, "", `#${code}`);
+      this.beginLoading("ワールドを生成中…");
+    } catch (error) {
+      if (progressTimer !== null) clearTimeout(progressTimer);
+      progressTimer = null;
+      this.net.close();
+      const message = error instanceof Error ? error.message : String(error);
+      if (this.state !== "title") this.backToTitle(this.kickMsg || message);
+      throw error;
     }
-    // applyPlayerSave/setSpawn may restore stale client coordinates; the room init snapshot
-    // is authoritative and matches the dimension whose edit list was just received.
-    if (roomEntry.position) {
-      const [x, y, z] = roomEntry.position;
-      this.body = { x, y, z, vx: 0, vy: 0, vz: 0, onGround: false };
-      if (roomEntry.rotation) { this.yaw = roomEntry.rotation[0]; this.pitch = roomEntry.rotation[1]; }
-    }
-    this.sendStackData();
-    this.time = this.roomTime();
-    history.replaceState(null, "", `#${code}`);
-    this.beginLoading("ワールドを生成中…");
   }
 
   roomTime(): number {

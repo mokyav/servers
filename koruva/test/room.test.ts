@@ -373,14 +373,24 @@ ok((await none.fetch(wsReq())).status === 404, "存在しないルームは 404"
   const largeStore = new Map<string, any>();
   const largeRoom: any = new Room(makeCtx(largeStore) as any, {} as any);
   await (globalThis as any).__pending;
-  await largeRoom.create("LARGE1", 11);
+  await largeRoom.create("LARGE1", 11, "creative", HOST_TOKEN);
   await largeRoom.fetch(wsReq());
   const largeSocket = largeRoom.ctx.sockets[largeRoom.ctx.sockets.length - 1] as FakeSocket;
   const counts = new Array(BLOCKS.length).fill(0);
-  const hello = JSON.stringify({ t: "hello", name: "LargeHello", skin: {}, counts });
+  counts[B.STONE] = 1;
+  const hello = JSON.stringify({ t: "hello", name: "LargeHello", skin: {}, counts, hostToken: HOST_TOKEN });
   ok(hello.length > 4096 && hello.length < 262144, "大きな hello のサイズは通常メッセージ上限を超える");
   await largeRoom.webSocketMessage(largeSocket, hello);
   ok(largeSocket.inbox.some((m: any) => m.t === "init") && largeSocket.inbox.some((m: any) => m.t === "edits" && m.done), "大きな hello でも入室・初期同期できる");
+
+  const stackPayload = JSON.stringify({
+    t: "stack-data",
+    stackData: { "hotbar:0": { itemId: B.STONE, count: 1, customName: "Long payload accepted" } },
+    padding: "x".repeat(5000),
+  });
+  ok(stackPayload.length > 4096 && stackPayload.length < 32768, "stack-data は通常メッセージより大きい上限を使う");
+  await largeRoom.webSocketMessage(largeSocket, stackPayload);
+  ok(largeRoom.player(largeSocket).stackData["hotbar:0"]?.customName === "Long payload accepted", "大きな stack-data を受理して反映する");
 
   const refusedSocket = await connect(largeRoom, "Invalid Name");
   ok(refusedSocket.closed && !largeRoom.mem.has(refusedSocket), "名前拒否時にソケット状態も即座に解放する");

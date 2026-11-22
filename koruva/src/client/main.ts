@@ -1889,7 +1889,10 @@ class Game {
     let gotInit = false;
     let roomEntryPosition: [number, number, number] | null = null;
     let roomEntryRotation: [number, number] | null = null;
-    const done = new Promise<void>((resolve, reject) => {
+    const done = new Promise<{
+      position: [number, number, number] | null;
+      rotation: [number, number] | null;
+    }>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("ルームの読み込みがタイムアウトしました")), 20000);
       this.net.onMessage = (m) => {
         if (m.t === "init") {
@@ -1922,7 +1925,10 @@ class Game {
           this.projectileEntities.clear(); for (const projectile of m.projectiles ?? []) this.projectileEntities.add(projectile);
         } else if (m.t === "edits" && gotInit) {
           this.world.importEdits(m.list);
-          if (m.done) { clearTimeout(timer); resolve(); }
+          if (m.done) {
+            clearTimeout(timer);
+            resolve({ position: roomEntryPosition, rotation: roomEntryRotation });
+          }
         } else if (m.t === "error") { this.kickMsg = m.message; clearTimeout(timer); reject(new Error(m.message)); }
         else if (m.t === "kicked") { this.kickMsg = m.reason; clearTimeout(timer); reject(new Error(m.reason)); }
         else this.onServerMsg(m);
@@ -1936,7 +1942,7 @@ class Game {
       p: saved?.pos, r: saved ? [saved.yaw, saved.pitch] : undefined,
       cid: clientId(), hostToken: loadHostToken(code) || undefined, counts: saved?.counts, armorSlots: saved?.armorSlots, stackData: saved?.stackData,
     });
-    await done;
+    const roomEntry = await done;
     const serverCounts = [...this.counts];
     const serverArmorSlots = [...this.armorSlots];
     if (saved) this.applyPlayerSave(saved, true); else {
@@ -1945,10 +1951,10 @@ class Game {
     }
     // applyPlayerSave/setSpawn may restore stale client coordinates; the room init snapshot
     // is authoritative and matches the dimension whose edit list was just received.
-    if (roomEntryPosition) {
-      const [x, y, z] = roomEntryPosition;
+    if (roomEntry.position) {
+      const [x, y, z] = roomEntry.position;
       this.body = { x, y, z, vx: 0, vy: 0, vz: 0, onGround: false };
-      if (roomEntryRotation) { this.yaw = roomEntryRotation[0]; this.pitch = roomEntryRotation[1]; }
+      if (roomEntry.rotation) { this.yaw = roomEntry.rotation[0]; this.pitch = roomEntry.rotation[1]; }
     }
     this.sendStackData();
     this.time = this.roomTime();

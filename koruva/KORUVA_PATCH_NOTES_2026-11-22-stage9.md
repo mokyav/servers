@@ -18,6 +18,6 @@
 ## Validation status
 
 - Changes are committed to `fix/koruva-camera-chunk-loading-2026-11-22` and included in PR #9.
-- The previous Cloudflare Workers build check reported `failure`; a newer check started after the latest push and its result is not yet available. The GitHub check summary does not expose the underlying compiler/build log.
+- The previous Cloudflare Workers build check reported `failure`. The latest branch head does not currently have a check run attached, so the cause of the earlier failure and the final build status remain unverified.
 - The Node test suite, TypeScript typecheck, Vite build, deployed Worker, and live browser/WebGL rendering have not been run from this environment.
 - PR #9 remains open and unmerged; `main` has not been changed.

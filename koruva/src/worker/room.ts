@@ -461,7 +461,9 @@ export class Room extends DurableObject<Env> {
         if (o.joined && o.dimensionId === me.dimensionId) others.push(this.info2(o));
       }
       this.send(ws, {
-        t: "init", id: me.id, code: this.meta.code, seed: this.meta.seed, worldgenVersion: this.meta.worldgenVersion ?? LEGACY_WORLDGEN_VERSION,
+        t: "init", id: me.id, code: this.meta.code, seed: this.meta.seed,
+        dimensionId: me.dimensionId, p: [...me.p], r: [...me.r],
+        worldgenVersion: this.meta.worldgenVersion ?? LEGACY_WORLDGEN_VERSION,
         now: Date.now(), t0: this.meta.createdAt, players: others, editCount: edits.length / 4,
         mode: this.meta.mode ?? "creative", host: me.host, vitals: me.vitals, counts: [...me.counts], armorSlots: [...me.armorSlots], itemEnchantments: me.itemEnchantments, stackData: me.stackData, elytraDamage: me.elytraDamage, mobs: mobsForDimension(this.mobs.values(), me.dimensionId),
         projectiles: this.projectilesForDimension(me.dimensionId),

@@ -107,18 +107,24 @@ export class ChunkView {
     }
 
     // 2) 編集・新規隣接チャンク由来の再メッシュ。
-    // 未ロード境界は一時的に空気として描画し、隣接チャンク到着時に再メッシュする。
+    // Urgent work must still respect the per-frame budget; otherwise a burst of
+    // block edits or chunk arrivals can monopolize one frame and stall input/rendering.
+    let meshed = 0;
     for (const c of this.urgent) {
       if (this.world.getChunk(c.cx, c.cz) !== c) {
         this.urgent.delete(c);
         continue;
       }
-      if (this.entries.has(chunkKey(c.cx, c.cz)) || c.dirty) this.mesh(c);
-      this.urgent.delete(c);
+      if (meshed >= meshBudget) break;
+      if (this.entries.has(chunkKey(c.cx, c.cz)) || c.dirty) {
+        this.mesh(c);
+        meshed++;
+      } else {
+        this.urgent.delete(c);
+      }
     }
 
     // 3) 未メッシュ/ダーティを近い順に処理(4近傍が揃っているもののみ)
-    let meshed = 0;
     for (const [dx, dz] of this.ring(rd)) {
       if (meshed >= meshBudget) break;
       const c = this.world.getChunk(pcx + dx, pcz + dz);

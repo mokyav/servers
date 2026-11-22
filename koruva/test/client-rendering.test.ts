@@ -6,7 +6,7 @@ import { World } from "../src/client/world";
 import { B } from "../shared/blocks";
 import { CHUNK_SIZE, CHUNK_VOLUME, WORLD_HEIGHT } from "../shared/constants";
 import { buildChunkMesh } from "../src/client/mesher";
-import type { Chunk, World } from "../src/client/world";
+import type { Chunk } from "../src/client/world";
 
 test("creative catalogue and player inventory never overlap", () => {
   assert.deepEqual(inventoryPanelVisibility("creative"), {

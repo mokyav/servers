@@ -22,6 +22,9 @@ export interface PlayerSave {
   armorAmounts?: number[];
   offhand?: number;
   offhandAmount?: number;
+  /** Item stack currently held by the inventory mouse cursor. */
+  cursorItem?: number;
+  cursorCount?: number;
   /** 2×2 player-inventory crafting grid (not the 3×3 crafting table). */
   craftGrid?: number[];
   craftGridAmounts?: number[];

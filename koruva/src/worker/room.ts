@@ -2204,7 +2204,7 @@ export class Room extends DurableObject<Env> {
   private async handleDeathDrops(ws: WebSocket, st: PlayerState) {
     if (st.deathDropsHandled || st.vitals.gameMode === "creative" || st.vitals.gameMode === "spectator") return;
     st.deathDropsHandled = true;
-    const stacks = buildDeathDropStacks(st.counts, [], BLOCKS.length, MAX_STACK);
+    const stacks = buildDeathDropStacks(st.counts, [], BLOCKS.length, MAX_STACK, itemStackLimit);
     const priorDrops = new Map(this.drops);
     const priorCounts = st.counts, priorArmor = st.armorSlots, priorExperience = st.vitals.experience;
     const priorStackData = st.stackData, priorEnchantments = st.itemEnchantments, priorElytraDamage = st.elytraDamage;

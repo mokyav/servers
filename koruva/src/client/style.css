@@ -1,0 +1,441 @@
+:root {
+  --bg: #0e1420; --panel: rgba(16, 22, 34, .88); --line: rgba(255,255,255,.12);
+  --fg: #eef2f8; --muted: #9aa7bd; --accent: #4ade80; --accent2: #38bdf8; --danger: #f87171;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg: #0e1420; } }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg);
+  font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; user-select: none; }
+canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+[hidden] { display: none !important; }
+
+.screen { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: radial-gradient(1200px 700px at 20% 10%, rgba(74,222,128,.18), transparent 60%),
+              radial-gradient(900px 600px at 90% 90%, rgba(56,189,248,.18), transparent 60%), rgba(8,12,20,.82);
+  overflow: auto; }
+#pause, #loading { background: rgba(8,12,20,.6); backdrop-filter: blur(4px); }
+.card { width: min(440px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 24px;
+  display: flex; flex-direction: column; gap: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+h1 { margin: 0; font-size: 40px; letter-spacing: .02em; text-align: center; }
+h1 span { color: var(--accent); }
+h2 { margin: 0; font-size: 20px; text-align: center; }
+.sub { margin: 0; color: var(--muted); font-size: 13px; text-align: center; }
+.help { margin: 4px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.6; text-align: center; }
+.err { margin: 0; min-height: 1.2em; color: var(--danger); font-size: 13px; text-align: center; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+input[type=text], input:not([type]), .join input { background: rgba(255,255,255,.07); border: 1px solid var(--line); color: var(--fg);
+  border-radius: 8px; padding: 10px 12px; font-size: 15px; outline: none; user-select: text; }
+input:focus { border-color: var(--accent2); }
+button { font: inherit; font-size: 15px; font-weight: 600; border: 0; border-radius: 10px; padding: 11px 16px; cursor: pointer; color: var(--fg);
+  background: rgba(255,255,255,.1); transition: transform .06s, background .15s; }
+button:hover { background: rgba(255,255,255,.18); }
+button:active { transform: translateY(1px); }
+button.primary { background: var(--accent); color: #062b14; }
+button.primary:hover { background: #6ee7a0; }
+button.primary.alt { background: var(--accent2); color: #04283b; }
+button.primary.alt:hover { background: #7dd3fc; }
+button.danger { background: rgba(248,113,113,.18); color: #fecaca; }
+button.ghost { background: rgba(255,255,255,.08); }
+.btns { display: flex; gap: 8px; } .btns > * { flex: 1; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.join { display: flex; gap: 8px; } .join input { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: .25em; text-align: center; font-weight: 700; }
+.skinrow { display: flex; gap: 16px; align-items: center; }
+#skinpreview { width: 64px; height: 112px; image-rendering: pixelated; background: rgba(255,255,255,.05); border-radius: 10px; }
+.colors { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex: 1; }
+.colors input[type=color] { width: 100%; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: none; padding: 2px; cursor: pointer; }
+.colors button { grid-column: 1 / 3; padding: 7px; font-size: 13px; }
+.skin-upload { grid-column: 1 / 3; gap: 5px; }
+.skin-upload input[type=file] { width: 100%; color: var(--fg); font-size: 11px; user-select: text; }
+.skin-upload input[type=file]::file-selector-button { border: 0; border-radius: 6px; padding: 5px 8px; margin-right: 8px; color: var(--fg); background: rgba(255,255,255,.12); cursor: pointer; }
+#skinclear { padding: 6px; font-size: 12px; }
+.slider { flex-direction: row; align-items: center; gap: 10px; } .slider b { color: var(--fg); min-width: 2ch; } .slider input { flex: 1; }
+.bar { height: 8px; background: rgba(255,255,255,.1); border-radius: 99px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+#crosshair { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; mix-blend-mode: difference; }
+#crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff; }
+#crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; } #crosshair::after { top: 8px; left: 0; height: 2px; width: 18px; }
+#bossbar { position: absolute; top: calc(28px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: min(182px, 76vw); text-align: center; color: #fff; text-shadow: 0 1px 3px #000; }
+#bossbar-name { font-size: 12px; font-weight: 700; letter-spacing: .02em; margin-bottom: 3px; }
+#bossbar-track { height: 5px; border: 1px solid #35102f; background: #210a19; box-shadow: 0 1px 3px #000a; overflow: hidden; border-radius: 1px; }
+#bossbar-fill { display: block; height: 100%; width: 100%; background: #c018a8; transition: width .18s linear; }
+#bossbar[hidden] { display: none; }
+#info { position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); left: 8px; background: rgba(0,0,0,.45); padding: 6px 10px; border-radius: 8px;
+  font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre; }
+#roombadge { position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); right: 8px; background: rgba(0,0,0,.5); padding: 6px 10px; border-radius: 8px;
+  display: flex; align-items: center; gap: 10px; font-weight: 700; pointer-events: auto; }
+#roomcode { letter-spacing: .2em; color: var(--accent); }
+#roombadge button { padding: 4px 8px; font-size: 11px; }
+#chatlog { position: absolute; left: 8px; bottom: calc(92px + env(safe-area-inset-bottom, 0px)); width: min(460px, 70vw); display: flex; flex-direction: column; gap: 2px; }
+#chatlog .line { background: rgba(0,0,0,.45); padding: 3px 8px; border-radius: 6px; font-size: 13px; line-height: 1.4; word-break: break-word; transition: opacity .6s; }
+#chatlog .line.sys { color: #fde68a; } #chatlog .line b { color: var(--accent2); }
+#chatlog.open .line { opacity: 1 !important; }
+#chatsuggest { position: absolute; left: 8px; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); width: min(320px, 70vw); max-height: 220px; overflow-y: auto; background: rgba(15,17,22,.94); border: 1px solid rgba(255,255,255,.18); border-radius: 8px; padding: 4px; pointer-events: auto; z-index: 5; font-size: 14px; }
+#chatsuggest[hidden], #chatinput[hidden] + #chatsuggest { display: none; }
+#chatsuggest .opt { padding: 3px 8px; border-radius: 5px; cursor: pointer; color: #cbd5e1; }
+#chatsuggest .opt:hover { background: rgba(255,255,255,.08); }
+#chatsuggest .opt.on { background: var(--accent, #3b82f6); color: #fff; }
+
+#chatinput { position: absolute; left: 8px; bottom: calc(60px + env(safe-area-inset-bottom, 0px)); width: min(460px, 70vw); pointer-events: auto; }
+#playerlist { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.6); padding: 12px 18px; border-radius: 12px; min-width: 200px; }
+#playerlist h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted); } #playerlist div { padding: 2px 0; }
+#toast { position: absolute; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: rgba(0,0,0,.6); padding: 4px 12px;
+  border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .3s; white-space: nowrap; }
+#hotbar { position: absolute; left: 50%; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 4px; padding: 4px;
+  background: rgba(0,0,0,.45); border-radius: 10px; pointer-events: auto; }
+.slot { width: 48px; height: 48px; border-radius: 6px; border: 2px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); position: relative; cursor: pointer; }
+.slot img { width: 100%; height: 100%; image-rendering: pixelated; display: block; pointer-events: none; }
+.slot.sel { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.35); }
+.slot .n { position: absolute; left: 3px; top: 1px; font-size: 10px; color: #fff; text-shadow: 0 1px 2px #000; }
+#underwater { position: absolute; inset: 0; background: rgba(40,90,200,.35); }
+
+.panel { position: fixed; z-index: 15; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(620px, 94vw); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.panel h2 { text-align: left; margin-bottom: 10px; } .panel h2 small { font-size: 11px; font-weight: 400; color: var(--muted); margin-left: 8px; }
+#invgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 6px; max-height: 46vh; overflow: auto; padding-right: 4px; }
+#invgrid .slot { width: 100%; height: auto; aspect-ratio: 1; }
+#invhotbar { display: flex; gap: 4px; justify-content: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.tip { position: fixed; z-index: 30; pointer-events: none; background: #000c; padding: 3px 8px; border-radius: 6px; font-size: 12px; }
+
+/* ---- ゲームモード選択 ---- */
+.modesel { display: flex; flex-direction: column; gap: 6px; align-items: stretch; font-size: 12px; color: var(--muted); }
+.modesel small { text-align: center; font-size: 11.5px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.seg button { padding: 9px 8px; font-size: 14px; background: rgba(255,255,255,.07); border: 2px solid transparent; }
+.seg button.on { border-color: var(--accent2); background: rgba(56,189,248,.18); }
+
+/* ---- サーバー管理 / ポーズメニュー ---- */
+button.admin { background: rgba(250,204,21,.16); color: #fde68a; }
+button.admin:hover { background: rgba(250,204,21,.26); }
+.card h3 { margin: 4px 0 0; font-size: 12px; color: var(--muted); font-weight: 600; }
+.hostbadge { font-size: 11px; font-weight: 600; color: #fde68a; margin-left: 6px; }
+.adminlist { display: flex; flex-direction: column; gap: 6px; max-height: 26vh; overflow: auto; }
+.adminlist .empty { color: var(--muted); font-size: 13px; padding: 4px 2px; }
+.arow { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.06); border-radius: 8px; padding: 6px 8px; }
+.arow .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.arow .tag { font-size: 11px; color: #fde68a; }
+.arow button { padding: 5px 10px; font-size: 12.5px; }
+.arow button.ban { background: rgba(248,113,113,.22); color: #fecaca; }
+
+/* ---- サバイバル HUD ---- */
+#hearts { position: absolute; left: max(8px, calc(50% - 236px)); bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  display: flex; gap: 2px; font-size: 17px; line-height: 1; text-shadow: 0 1px 2px #000; }
+#hearts span { width: 18px; text-align: center; }
+#hearts .full { color: #ef4444; } #hearts .half { color: #f59e0b; } #hearts .empty { color: rgba(255,255,255,.25); }
+#breakbar { position: absolute; left: 50%; top: calc(50% + 22px); width: 64px; height: 6px; transform: translateX(-50%);
+  background: rgba(0,0,0,.55); border-radius: 99px; overflow: hidden; }
+#breakbar i { display: block; height: 100%; width: 0; background: #fff; }
+.slot .c { position: absolute; right: 3px; bottom: 1px; font-size: 12px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000, 0 0 3px #000; }
+.slot.none { opacity: .4; }
+#invgrid .empty { grid-column: 1 / -1; color: var(--muted); font-size: 13px; padding: 12px 4px; text-align: center; }
+
+/* ---- 空腹ゲージ(ハートの反対側) ---- */
+#hunger { position: absolute; right: max(8px, calc(50% - 236px)); bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: row-reverse; gap: 2px; font-size: 15px; line-height: 1; text-shadow: 0 1px 2px #000; }
+#hunger span { width: 18px; text-align: center; }
+#hunger .half { opacity: .6; } #hunger .empty { opacity: .2; filter: grayscale(1); }
+#experience-hud { position: absolute; left: 50%; bottom: calc(45px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 7px; color: #facc15; font-size: 12px; font-weight: 700; text-shadow: 0 1px 2px #000; }
+#experience-bar { width: min(34vw, 190px); height: 6px; border: 1px solid rgba(0,0,0,.9); border-radius: 2px; overflow: hidden; background: rgba(0,0,0,.65); }
+#experience-fill { display: block; width: 0; height: 100%; background: #84cc16; transition: width .12s linear; }
+label .hint { font-size: 11px; color: var(--muted); }
+
+/* ---- チャット履歴: 開いている間は最大30件を表示してスクロールできる ---- */
+#chatlog .line { flex: 0 0 auto; }
+#chatlog.open { max-height: 42vh; overflow-y: auto; justify-content: flex-start; pointer-events: auto; user-select: text; padding-right: 4px; }
+#chatlog.open .line { background: rgba(0,0,0,.6); }
+
+/* Minecraft-style skin upload controls */
+.skin-controls { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
+.skin-controls > label { display: grid; gap: 4px; font-size: 12px; }
+.skin-controls select { width: 100%; color: var(--fg); background: #202a3a; border: 1px solid rgba(255,255,255,.18); border-radius: 6px; padding: 6px; }
+
+/* Minecraft-inspired pixel HUD textures from the supplied asset archives */
+#hearts,#hunger{display:flex;gap:1px;align-items:center;image-rendering:pixelated}
+#hearts .heart{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center}
+#hearts img,#hunger .food-icon{width:18px;height:18px;object-fit:contain;image-rendering:pixelated;user-select:none}
+#hearts .shake{animation:heart-shake .12s steps(2,end) infinite alternate}
+@keyframes heart-shake{from{transform:translate(-1px,0)}to{transform:translate(1px,-1px)}}
+#hunger .hunger-effect{filter:hue-rotate(65deg) saturate(1.2)}
+#effects-hud{position:absolute;right:max(10px,env(safe-area-inset-right));top:max(10px,env(safe-area-inset-top));display:flex;flex-direction:column;align-items:flex-end;gap:4px;pointer-events:none;max-width:min(42vw,310px);}
+.effect-item{display:flex;align-items:center;gap:6px;padding:4px 7px;color:#f4f4f4;background:rgba(0,0,0,.58);font:12px/1.2 system-ui,sans-serif;text-shadow:1px 1px #111;border-radius:3px;white-space:nowrap}
+.effect-item img{width:18px;height:18px;image-rendering:pixelated}
+.effect-item.expiring{animation:effect-blink .65s steps(2,end) infinite}
+@keyframes effect-blink{50%{opacity:.28}}
+#inventory-effects{display:flex;flex-direction:column;gap:6px;min-width:220px}
+.effect-empty{color:#aaa;font-size:13px}
+#inv-status{margin-top:12px;padding:10px;border:1px solid #555;background:#1119;max-height:32vh;overflow:auto}
+#inv-status h3{margin:5px 0 8px;font-size:14px}
+#food-items{display:flex;flex-wrap:wrap;gap:6px}
+.food-button{padding:5px 8px;color:#eee;background:#363636;border:1px solid #777;cursor:pointer}
+.food-button:disabled{opacity:.45;cursor:not-allowed}
+#visionfx{position:fixed;inset:0;pointer-events:none;z-index:3;transition:opacity .2s}
+#visionfx.blindness{background:radial-gradient(ellipse,transparent 8%,rgba(0,0,0,.96) 65%)}
+#visionfx.darkness{background:radial-gradient(ellipse,transparent 20%,rgba(0,0,0,.82) 78%)}
+#visionfx.nausea{animation:nausea-wobble 2.8s ease-in-out infinite alternate}
+@keyframes nausea-wobble{from{transform:translateX(-3px) scale(1.01)}to{transform:translateX(3px) scale(1.01)}}
+@media(max-width:600px){#hearts img,#hunger .food-icon{width:15px;height:15px}#effects-hud{max-width:48vw}.effect-item{font-size:10px}#inv-status{max-height:25vh}}
+
+
+/* Health boost/absorption and effect readability */
+#hearts { flex-wrap: wrap; }
+#hearts .heart-slot { image-rendering: pixelated; }
+#hearts .absorption-half { clip-path: inset(0 50% 0 0); }
+.effect-item { border-left: 2px solid var(--effect-color, #a8a8a8); }
+.effect-item.expiring { animation-duration: var(--effect-blink, .65s); }
+#gl.nightvision { filter: brightness(1.55) saturate(1.08); }
+
+#attack-charge { position: fixed; z-index: 4; left: 50%; bottom: calc(66px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: 112px; color: #fff; font: 10px/1.2 system-ui, sans-serif; text-align: center; text-shadow: 0 1px 2px #000; pointer-events: none; }
+#attack-charge .attack-meter { margin-top: 3px; height: 5px; border: 1px solid rgba(255,255,255,.8); background: rgba(0,0,0,.55); border-radius: 4px; overflow: hidden; }
+#attack-charge i { display: block; width: 100%; height: 100%; background: linear-gradient(90deg,#cf9d36,#ffe28a); transition: width .05s linear; }
+
+/* 第1回: compact server-validated quick-craft panel */
+#crafting-panel { margin: 12px 0; padding: 10px; border: 1px solid rgba(255,255,255,.14); border-radius: 8px; }
+#crafting-panel h3 { margin: 0 0 4px; }
+#crafting-panel p { margin: 4px 0 8px; color: var(--muted); font-size: 12px; }
+#craft-search { width: min(100%, 420px); margin: 4px 0 8px; }
+.craft-empty { color: var(--muted); }
+#craft-recipes { display: flex; flex-wrap: wrap; gap: 6px; max-height: 32vh; overflow: auto; }
+#craft-recipes .craft-recipe { min-height: 34px; }
+#craft-recipes .craft-recipe:disabled { opacity: .45; }
+
+/* ---- Minecraft Java 26.3 style player inventory ---- */
+.inventory-overlay {
+  position: fixed; inset: 0; z-index: 15; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px; padding: 14px;
+  overflow: auto; background: rgba(0,0,0,.58); backdrop-filter: blur(2px);
+}
+#inventory-layout { display: flex; align-items: flex-start; justify-content: center; gap: 14px; max-width: 100%; }
+#survival-inventory { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+#mc-inventory-window {
+  position: relative; flex: 0 0 auto; width: 352px; height: 332px;
+  background: url('/assets/minecraft/textures/gui/container/inventory.png') left top / 512px 512px no-repeat;
+  image-rendering: pixelated; color: #404040; font-family: Arial, sans-serif; text-shadow: 1px 1px #fff;
+  transform-origin: center center;
+}
+#mc-inventory-title { position: absolute; left: 16px; top: 7px; font: 12px/14px Arial,sans-serif; color: #404040; }
+#inventory-player-preview { position: absolute; left: 100px; top: 19px; width: 96px; height: 168px; object-fit: contain; image-rendering: pixelated; }
+#player-armor-slots { position: absolute; left: 12px; top: 12px; display: flex; flex-direction: column; }
+#player-offhand-slot { position: absolute; left: 152px; top: 122px; }
+#player-main-inventory { position: absolute; left: 16px; top: 168px; display: grid; grid-template-columns: repeat(9,36px); grid-template-rows: repeat(3,36px); }
+#player-hotbar-slots { position: absolute; left: 16px; top: 284px; display: grid; grid-template-columns: repeat(9,36px); }
+#crafting-grid-2x2 { position: absolute; left: 194px; top: 34px; display: grid; grid-template-columns: repeat(2,36px); grid-template-rows: repeat(2,36px); }
+.craft-preview-slot { width: 36px; height: 36px; }
+#crafting-preview-result { position: absolute; left: 306px; top: 52px; width: 36px; height: 36px; }
+#crafting-preview-result:disabled { cursor: default; opacity: .45; }
+#crafting-preview-result:not(:disabled) { opacity: 1; }
+#crafting-preview-result img { width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; pointer-events: none; }
+#crafting-preview-result .craft-result-count { position: absolute; right: 1px; bottom: 0; color: #fff; font: 700 12px/12px Arial,sans-serif; text-shadow: 1px 1px #252525,-1px -1px #252525,1px -1px #252525,-1px 1px #252525; pointer-events: none; }
+.mc-slot { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px;
+  padding: 1px; margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; cursor: pointer; }
+.mc-slot:hover { background: rgba(255,255,255,.28); box-shadow: inset 0 0 0 2px rgba(255,255,255,.7); }
+.mc-slot img { width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; pointer-events: none; }
+.mc-slot.selected { background: rgba(255,255,255,.24); outline: 2px solid rgba(255,255,255,.95); outline-offset: -2px; }
+.mc-stack-count { position: absolute; right: 1px; bottom: 0; color: #fff; font: 700 12px/12px Arial,sans-serif; text-shadow: 1px 1px #252525,-1px -1px #252525,1px -1px #252525,-1px 1px #252525; pointer-events: none; }
+.mc-slot-number { position: absolute; left: 2px; top: 1px; color: #fff; font: 10px/10px Arial,sans-serif; text-shadow: 1px 1px #333; opacity: 0; }
+#player-hotbar-slots .mc-slot-number { opacity: .8; }
+.mc-slot.placeholder-helmet { background: url('/assets/minecraft/textures/gui/sprites/container/slot/helmet.png') center / 32px 32px no-repeat; }
+.mc-slot.placeholder-chestplate { background: url('/assets/minecraft/textures/gui/sprites/container/slot/chestplate.png') center / 32px 32px no-repeat; }
+.mc-slot.placeholder-leggings { background: url('/assets/minecraft/textures/gui/sprites/container/slot/leggings.png') center / 32px 32px no-repeat; }
+.mc-slot.placeholder-boots { background: url('/assets/minecraft/textures/gui/sprites/container/slot/boots.png') center / 32px 32px no-repeat; }
+.mc-slot.placeholder-shield { background: url('/assets/minecraft/textures/gui/sprites/container/slot/shield.png') center / 32px 32px no-repeat; }
+#mc-cursor-item { position: fixed; z-index: 100; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; pointer-events: none; filter: drop-shadow(1px 1px 1px #000); }
+#mc-cursor-item img { width: 32px; height: 32px; image-rendering: pixelated; }
+#mc-cursor-item span { position: absolute; right: 0; bottom: -1px; color: white; font: bold 12px Arial; text-shadow: 1px 1px #000; }
+#invhint { color: #d6d6d6; text-shadow: 1px 1px #333; font-size: 11px; text-align: center; }
+#inv-status { width: 220px; max-height: min(332px,70vh); overflow: auto; padding: 12px; color: var(--fg); background: rgba(18,22,29,.92); border: 1px solid rgba(255,255,255,.18); border-radius: 4px; }
+#inv-status h3 { margin: 0 0 6px; color: #fff; font-size: 13px; }
+#inventory-effects { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+#inventory-effects .effect-item { color: #fff; }
+#food-items { display: flex; flex-wrap: wrap; gap: 5px; }
+.inventory-controls { margin: 14px 0 0; color: #aeb7c6; font-size: 11px; line-height: 1.7; }
+#creative-inventory { width: min(720px,94vw); max-height: min(74vh,680px); overflow: hidden; display: flex; flex-direction: column; padding: 14px;
+  color: #404040; background: #c6c6c6; border: 2px solid #373737; box-shadow: inset 2px 2px #fff,inset -2px -2px #555,0 18px 60px #0009; }
+#creative-inventory h2 { text-align: left; margin: 0 0 10px; font-size: 16px; color: #404040; text-shadow: 1px 1px #fff; }
+#creative-inventory h2 small { font-size: 11px; font-weight: 400; margin-left: 8px; }
+#creative-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+#creative-tabs button { padding: 5px 9px; border-radius: 2px; color: #333; background: #9d9d9d; border: 1px solid #777; font-size: 11px; }
+#creative-tabs button.on { background: #ededed; border-color: #444; box-shadow: inset 1px 1px #fff; }
+#creative-search { flex: none; margin: 0 0 7px; border-radius: 0; background: #fff; color: #222; border: 2px solid #555; padding: 7px 9px; font-size: 13px; }
+#invgrid { display: grid; grid-template-columns: repeat(auto-fill,minmax(36px,1fr)); gap: 0; max-height: 48vh; overflow: auto; padding: 4px; background: #8b8b8b; border: 2px solid #373737; box-shadow: inset 2px 2px #555,inset -2px -2px #fff; }
+#invgrid .slot { width: 36px; height: 36px; padding: 2px; border: 0; border-radius: 0; background: transparent; }
+#invgrid .slot:hover { background: rgba(255,255,255,.35); outline: 2px solid #fff; outline-offset: -2px; }
+#invgrid .slot img { width: 32px; height: 32px; image-rendering: pixelated; }
+#invgrid .slot .c { color: #fff; }
+#invhotbar { display: flex; justify-content: center; gap: 0; margin-top: 8px; padding: 3px; background: #8b8b8b; border: 2px solid #373737; }
+#invhotbar .slot { width: 36px; height: 36px; padding: 1px; border: 0; border-radius: 0; background: transparent; }
+#invhotbar .slot img { width: 32px; height: 32px; }
+#invhotbar .slot.sel { outline: 2px solid #fff; outline-offset: -2px; box-shadow: none; }
+#crafting-panel { width: min(900px,94vw); margin: 0; padding: 7px 10px; color: #eee; background: rgba(10,12,18,.88); border: 1px solid #ffffff2b; border-radius: 4px; }
+#crafting-panel summary { cursor: pointer; font-size: 12px; }
+#crafting-panel p { margin: 5px 0; font-size: 11px; color: #b5bdca; }
+#craft-search { width: min(100%,420px); margin: 2px 0 6px; padding: 7px 9px; font-size: 12px; }
+#craft-recipes { max-height: 24vh; }
+#craft-recipes .craft-recipe { min-height: 30px; padding: 6px 8px; font-size: 11px; }
+@media (max-width: 680px) {
+  #inventory-layout { flex-direction: column; align-items: center; gap: 8px; }
+  #inv-status { width: min(352px,92vw); max-height: 22vh; }
+  #mc-inventory-window { transform: scale(.88); margin: -20px -22px; }
+  #creative-inventory { max-height: 60vh; }
+  #invgrid { max-height: 30vh; }
+}
+@media (max-height: 540px) {
+  .inventory-overlay { justify-content: flex-start; }
+  #inventory-layout { transform: scale(.85); transform-origin: top center; margin-bottom: -50px; }
+  #crafting-panel { max-height: 20vh; overflow: auto; }
+}
+
+
+/* Vanilla furnace / blast furnace / smoker panel */
+.furnace-overlay { position: fixed; inset: 0; z-index: 18; display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); overflow: auto; background: rgba(0,0,0,.62); backdrop-filter: blur(3px); }
+.furnace-overlay[hidden] { display: none; }
+.furnace-window { width: min(560px, 96vw); max-height: min(92dvh, 760px); overflow: auto; padding: 18px; color: #f4f2eb; background: linear-gradient(145deg,#3b3026,#211d19); border: 3px solid #9b7653; border-radius: 12px; box-shadow: 0 18px 60px #000a; }
+.furnace-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid #ffffff2b; padding-bottom: 10px; }
+.furnace-header small { color: #d4b994; font-size: 11px; }
+.furnace-header h2 { margin: 2px 0 0; font-size: 24px; }
+.furnace-header button { min-width: 44px; min-height: 44px; border: 1px solid #ffffff55; border-radius: 8px; background: #ffffff12; color: #fff; font-size: 25px; cursor: pointer; }
+#furnace-status { margin: 10px 0; color: #c9e8a8; font-size: 13px; }
+.furnace-slots { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.furnace-slot { display: grid; grid-template-rows: auto minmax(42px,auto) auto; gap: 8px; padding: 10px; background: #171512; border: 1px solid #ffffff2d; border-radius: 8px; }
+.furnace-slot span { color: #d4b994; font-size: 12px; }
+.furnace-slot strong { align-self: center; overflow-wrap: anywhere; font-size: 13px; }
+.furnace-slot button, .furnace-actions button { min-height: 44px; border: 1px solid #c9a979; border-radius: 7px; background: #795b3c; color: #fff; font-weight: 700; cursor: pointer; }
+.furnace-slot button:active, .furnace-actions button:active { transform: translateY(1px); filter: brightness(1.15); }
+.furnace-output { border-color: #e9c66c; }
+.furnace-progress-track { height: 12px; margin-top: 14px; overflow: hidden; border: 1px solid #999; border-radius: 8px; background: #111; }
+#furnace-progress { display: block; width: 0; height: 100%; background: linear-gradient(90deg,#e79a27,#ffd563); transition: width .18s linear; }
+#furnace-progress-label { margin: 5px 0 12px; color: #ddd; font-size: 12px; text-align: right; }
+.furnace-insert { display: grid; grid-template-columns: minmax(0,1fr) 94px; gap: 8px; align-items: center; }
+.furnace-insert label { font-size: 13px; }
+.furnace-insert select, .furnace-insert input { width: 100%; min-height: 44px; padding: 8px; border: 1px solid #95836e; border-radius: 6px; background: #191714; color: #fff; }
+.furnace-actions { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.furnace-hint { margin: 12px 0 0; color: #c9c1b6; font-size: 11px; line-height: 1.5; }
+@media (max-width: 520px) {
+  .furnace-window { width: 100%; padding: 14px; }
+  .furnace-slots { grid-template-columns: 1fr; }
+  .furnace-slot { grid-template-columns: 64px minmax(0,1fr) 88px; grid-template-rows: auto; align-items: center; }
+  .furnace-slot strong { min-height: 22px; }
+  .furnace-insert { grid-template-columns: minmax(0,1fr) 76px; }
+}
+
+/* Stage 5: Java-inspired vanilla menu surfaces and crisp widget sprites. */
+#title.screen {
+  background-image: linear-gradient(rgba(0,0,0,.50), rgba(0,0,0,.68)),
+    url('/assets/minecraft/textures/gui/menu_background.png');
+  background-position: center, left top;
+  background-size: auto, 16px 16px;
+  background-repeat: no-repeat, repeat;
+  image-rendering: pixelated;
+}
+#pause.screen, #admin.screen, #loading.screen {
+  background-image: linear-gradient(rgba(0,0,0,.52), rgba(0,0,0,.70)),
+    url('/assets/minecraft/textures/gui/inworld_menu_background.png');
+  background-position: center, left top;
+  background-size: auto, 16px 16px;
+  background-repeat: no-repeat, repeat;
+  image-rendering: pixelated;
+}
+#title .card button, #pause .card button, #admin .card button {
+  background-image: url('/assets/minecraft/textures/gui/sprites/widget/button.png');
+  background-size: 100% 100%; image-rendering: pixelated;
+}
+#title .card button:hover, #pause .card button:hover, #admin .card button:hover {
+  background-image: url('/assets/minecraft/textures/gui/sprites/widget/button_highlighted.png');
+}
+#title .card button:disabled, #pause .card button:disabled, #admin .card button:disabled {
+  background-image: url('/assets/minecraft/textures/gui/sprites/widget/button_disabled.png');
+}
+#title input[type=text], #title input[type=search], #title input:not([type]), #title select,
+#pause input[type=text], #pause input:not([type]) {
+  background: url('/assets/minecraft/textures/gui/sprites/widget/text_field.png') center / 100% 100% no-repeat;
+  image-rendering: pixelated;
+}
+#title .card, #pause .card, #admin .card, #loading .card {
+  border-radius: 0; image-rendering: pixelated;
+}
+#inventory, #inventory-layout { image-rendering: pixelated; }
+@media (prefers-reduced-motion: no-preference) {
+  #title .card button, #pause .card button, #admin .card button { transition: filter .09s ease, transform .06s ease; }
+  #experience-fill { transition: width .12s linear; }
+}
+#inventory { background-image: url('/assets/minecraft/textures/gui/container/inventory.png'); }
+#workbench-panel { background-image: url('/assets/minecraft/textures/gui/container/crafting_table.png'); }
+#hotbar { background-image: url('/assets/minecraft/textures/gui/sprites/hud/hotbar.png'); }
+#crosshair { background-image: url('/assets/minecraft/textures/gui/sprites/hud/crosshair.png'); }
+
+
+/* 10段階の描画距離プリセット (未実装エフェクトは表示しない) */
+.slider select { flex: 1; min-width: 0; color: var(--fg); background: #202a3a; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
+.auto-optimize { display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 8px 0; }
+.auto-optimize input { accent-color: #75c7ff; }
+#quality-note { display: block; margin: 4px 0 10px; color: var(--muted); line-height: 1.45; }
+
+
+/* Touch-first controls: DOM is mounted only on touch-capable devices. */
+canvas#gl { touch-action: none; }
+#mobile-controls { position: fixed; inset: 0; height: 100vh; height: 100dvh; z-index: 9; pointer-events: none; touch-action: none; }
+#mobile-joystick { position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  width: clamp(112px, 31vw, 152px); aspect-ratio: 1; border-radius: 50%; border: 2px solid rgba(255,255,255,.42);
+  background: rgba(10,18,30,.38); box-shadow: inset 0 0 18px rgba(0,0,0,.28); pointer-events: auto; touch-action: none; }
+#mobile-stick-thumb { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.78); background: rgba(220,238,255,.42); box-shadow: 0 2px 10px #0008; pointer-events: none; }
+#mobile-actions { position: absolute; right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  display: grid; grid-template-columns: repeat(2, minmax(52px, 72px)); gap: 7px; max-width: 48vw; pointer-events: auto; }
+.mobile-action { min-width: 48px; min-height: 48px; padding: 6px 5px; border: 1px solid rgba(255,255,255,.42); border-radius: 14px; color: #fff;
+  background: rgba(13,22,37,.78); box-shadow: 0 2px 8px #0008; font: 650 clamp(10px, 2.8vw, 12px)/1.2 system-ui, sans-serif; text-shadow: 0 1px 2px #000;
+  touch-action: none; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+.mobile-action:active { background: rgba(56,189,248,.78); transform: scale(.96); }
+.mobile-action:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+#mobile-actions .primary { border-color: rgba(255,180,120,.78); }
+#mobile-actions .secondary { border-color: rgba(120,220,170,.78); }
+#mobile-actions .jump { border-color: rgba(120,190,255,.78); }
+@media (max-width: 760px) and (pointer: coarse) {
+  #hotbar { gap: 2px; padding: 3px; bottom: calc(4px + env(safe-area-inset-bottom, 0px)); }
+  #hotbar .slot { width: clamp(28px, 8.6vw, 40px); height: clamp(28px, 8.6vw, 40px); border-width: 1px; }
+  #attack-charge { bottom: calc(52px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 370px) and (pointer: coarse) {
+  #mobile-actions { grid-template-columns: repeat(2, minmax(48px, 58px)); gap: 5px; right: max(8px, env(safe-area-inset-right, 0px)); }
+  .mobile-action { min-height: 46px; padding: 5px 3px; }
+}
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  #mobile-joystick { width: 108px; left: max(10px, env(safe-area-inset-left, 0px)); bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
+  #mobile-actions { grid-template-columns: repeat(3, minmax(48px, 62px)); gap: 5px; bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
+  .mobile-action { min-height: 44px; font-size: 10px; }
+}
+@media (max-height: 380px) and (pointer: coarse) {
+  #mobile-joystick { width: 96px; }
+  #mobile-actions { grid-template-columns: repeat(3, minmax(44px, 56px)); }
+  .mobile-action { min-width: 44px; min-height: 42px; }
+}
+
+/* Mobile control preferences: preserve safe-area padding when mirroring the touch clusters. */
+.mobile-control-settings { display: grid; gap: 10px; margin: 12px 0; text-align: left; }
+.mobile-control-settings label { display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; align-items: center; font-weight: 650; }
+.mobile-control-settings input[type="range"], .mobile-control-settings select { grid-column: 1 / -1; width: 100%; }
+.mobile-control-settings input[type="range"] { accent-color: #38bdf8; }
+.mobile-control-settings output { color: #bae6fd; font-variant-numeric: tabular-nums; }
+.mobile-control-settings small { grid-column: 1 / -1; opacity: .78; font-weight: 400; }
+#mobile-controls.is-left-handed #mobile-joystick { left: auto; right: max(12px, env(safe-area-inset-right, 0px)); }
+#mobile-controls.is-left-handed #mobile-actions { right: auto; left: max(12px, env(safe-area-inset-left, 0px)); }
+
+
+
+/* Vanilla-style 3×3 crafting-table panel, ported from the Stage 6 implementation. */
+#workbench-panel {
+  position: relative; width: 352px; height: 164px; flex: 0 0 164px; padding: 0;
+  color: #404040; background: url('/assets/minecraft/textures/gui/container/crafting_table.png') left top / 512px 512px no-repeat;
+  border: 0; border-radius: 0; box-shadow: 0 12px 28px #0008; image-rendering: pixelated;
+  font-family: Arial, sans-serif; text-shadow: 1px 1px #fff;
+}
+#workbench-panel h3 { position: absolute; left: 16px; top: 5px; margin: 0; color: #404040; font: 12px/14px Arial,sans-serif; }
+.workbench-row { display: block; position: static; }
+#crafting-grid-3x3 { position: absolute; left: 58px; top: 32px; display: grid; grid-template-columns: repeat(3,36px); grid-template-rows: repeat(3,36px); }
+#crafting-table-result { position: absolute; left: 234px; top: 58px; width: 36px; height: 36px; }
+#workbench-panel small { display: none; }
+@media (max-width: 720px) { #workbench-panel { transform: scale(.9); transform-origin: top left; } }
+
+/* Vanilla-like durability strips for damaged tools and armor. */
+.mc-durability-bar, .slot-durability { position:absolute; left:4px; right:4px; bottom:3px; height:3px; background:rgba(0,0,0,.72); pointer-events:none; overflow:hidden; z-index:2; }
+.mc-durability-bar i, .slot-durability i { display:block; height:100%; }
+.slot-durability { left:5px; right:5px; bottom:3px; height:3px; }

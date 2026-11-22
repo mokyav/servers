@@ -1,0 +1,20 @@
+export type FurnaceStation = "furnace" | "blast_furnace" | "smoker";
+export type FurnaceSlot = "input" | "fuel" | "output";
+export interface FurnaceState { inputItemId: number; inputCount: number; fuelItemId: number; fuelCount: number; burnTicks: number; cookTicks: number; outputItemId: number; outputCount: number; }
+export function smeltingRecipe(id: number, station?: FurnaceStation): { outputItemId: number; outputCount: number; cookingTime: number; experience: number; category: "ore" | "food" | "other" } | null;
+export function fuelBurnTicks(id: number): number;
+export function isSmeltableItem(id: number): boolean;
+export function isFuelItem(id: number): boolean;
+export function createFurnaceState(): FurnaceState;
+export function normalizeFurnaceState(raw: unknown): FurnaceState;
+export function insertFurnaceItems(raw: unknown, slot: "input" | "fuel", id: number, count?: number): { ok: boolean; moved: number; state: FurnaceState };
+export function removeFurnaceItems(raw: unknown, slot: FurnaceSlot, count?: number): { ok: boolean; moved: number; itemId: number; state: FurnaceState };
+export function furnaceHasContents(raw: unknown): boolean;
+export function advanceFurnaceState(raw: unknown, ticks?: number, station?: FurnaceStation): { state: FurnaceState; changed: boolean; completed: number };
+export const FURNACE_COOK_TICKS: number;
+export const BLAST_FURNACE_COOK_TICKS: number;
+export const SMOKER_COOK_TICKS: number;
+export const FURNACE_MAX_STACK: number;
+export const SMELTABLE_ITEM_IDS: readonly number[];
+export const FUEL_ITEM_IDS: readonly number[];
+export const SMELTED_OUTPUT_ITEM_IDS: readonly number[];

@@ -1,0 +1,16 @@
+import test from "node:test";import assert from "node:assert/strict";import {createDimensionWorldgen} from "../src/client/worldgen-core.js";import {DIMENSION_IDS,DIMENSIONS,isDimensionId,normalizeDimensionId,mapDimensionCoordinates} from "../shared/dimensions.js";
+const B={AIR:0,GRASS:1,DIRT:2,STONE:3,SAND:4,LOG:5,LEAVES:6,PLANKS:7,GLASS:8,COBBLE:9,BRICK:10,SNOW:11,WATER:12,LAMP:13,BEDROCK:14,GRAVEL:15,ORE:16,RED:17,BLUE:18,YELLOW:19,WHITE:20,OAK_PLANKS:21,SPRUCE_PLANKS:22,BIRCH_PLANKS:23,OAK_SLAB:24,STONE_SLAB:25,COBBLE_SLAB:26,BRICK_SLAB:27,SANDSTONE:28,COAL_ORE:29,IRON_ORE:30,GOLD_ORE:31,OAK_STAIRS:32,STONE_STAIRS:36,COBBLE_STAIRS:40,BRICK_STAIRS:44,SANDSTONE_STAIRS:48,SPRUCE_STAIRS:52,BIRCH_STAIRS:56,NETHERRACK:60,SOUL_SAND:61,BASALT:62,BLACKSTONE:63,END_STONE:64,GLOWSTONE:65,CRIMSON_NYLIUM:66,WARPED_NYLIUM:67,MAGMA_BLOCK:68,LAVA:69};const S=16,H=64,V=S*S*H,gen=createDimensionWorldgen({blocks:B,chunkSize:S,chunkVolume:V,worldHeight:H});const hex=a=>Buffer.from(a).toString("hex");
+test("dimension IDs normalize safely and expose three definitions",()=>{assert.deepEqual(Object.keys(DIMENSIONS).sort(),[DIMENSION_IDS.END,DIMENSION_IDS.NETHER,DIMENSION_IDS.OVERWORLD].sort());assert.equal(normalizeDimensionId("unknown"),DIMENSION_IDS.OVERWORLD);assert.equal(isDimensionId(DIMENSION_IDS.NETHER),true);});
+test("Overworld-Nether coordinate scale is 8:1 and reversible",()=>{const a=mapDimensionCoordinates(DIMENSION_IDS.OVERWORLD,DIMENSION_IDS.NETHER,{x:800,y:70,z:-1600});assert.deepEqual(a,{x:100,y:70,z:-200});assert.deepEqual(mapDimensionCoordinates(DIMENSION_IDS.NETHER,DIMENSION_IDS.OVERWORLD,a),{x:800,y:70,z:-1600});});
+test("Nether chunk is deterministic and has Nether terrain plus lava",()=>{const a=gen.generateChunk(1234,-2,3,DIMENSION_IDS.NETHER),b=gen.generateChunk(1234,-2,3,DIMENSION_IDS.NETHER);assert.equal(hex(a),hex(b));assert.equal(a.length,V);assert.ok(a.includes(B.NETHERRACK));assert.ok(a.includes(B.LAVA));for(const id of a)assert.ok([B.AIR,B.BEDROCK,B.NETHERRACK,B.SOUL_SAND,B.BASALT,B.BLACKSTONE,B.GLOWSTONE,B.CRIMSON_NYLIUM,B.WARPED_NYLIUM,B.LAVA].includes(id));});
+test("End has a seeded center island and distant void",()=>{const a=gen.generateChunk(9988,0,0,DIMENSION_IDS.END),b=gen.generateChunk(9988,0,0,DIMENSION_IDS.END),far=gen.generateChunk(9988,500,500,DIMENSION_IDS.END);assert.equal(hex(a),hex(b));assert.ok(a.includes(B.END_STONE));assert.equal(far.includes(B.END_STONE),false);});
+test("dimension generators have distinct biome labels and reject Overworld",()=>{assert.equal(gen.biomeAt(9,0,0,DIMENSION_IDS.END),"end_highlands");assert.notEqual(gen.biomeAt(9,0,0,DIMENSION_IDS.NETHER),"overworld");assert.throws(()=>gen.generateChunk(1,0,0,DIMENSION_IDS.OVERWORLD),RangeError);});
+
+test("26.3 dimension-type metadata stays separate from Koruva runtime height",()=>{
+  assert.equal(DIMENSIONS[DIMENSION_IDS.OVERWORLD].vanillaHeight,384);
+  assert.equal(DIMENSIONS[DIMENSION_IDS.OVERWORLD].runtimeHeight,128);
+  assert.equal(DIMENSIONS[DIMENSION_IDS.NETHER].vanillaHeight,256);
+  assert.equal(DIMENSIONS[DIMENSION_IDS.NETHER].logicalHeight,128);
+  assert.equal(DIMENSIONS[DIMENSION_IDS.NETHER].coordinateScale,8);
+  assert.equal(DIMENSIONS[DIMENSION_IDS.END].ambientLight,0.25);
+});

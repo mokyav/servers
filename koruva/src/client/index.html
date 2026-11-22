@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Koruva</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧱</text></svg>">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="hud" hidden>
+  <div id="crosshair"></div>
+  <div id="info"></div>
+  <div id="bossbar" hidden role="group" aria-label="ボスの体力">
+    <div id="bossbar-name">エンダードラゴン</div>
+    <div id="bossbar-track" role="progressbar" aria-label="ボスの体力" aria-valuemin="0" aria-valuemax="100"><i id="bossbar-fill"></i></div>
+  </div>
+  <div id="roombadge" hidden><span id="roomcode"></span><button id="copylink" title="招待リンクをコピー">リンクをコピー</button></div>
+  <div id="chatlog"></div>
+  <input id="chatinput" type="text" maxlength="200" autocomplete="off" placeholder="メッセージを入力して Enter" hidden>
+  <div id="chatsuggest" hidden></div>
+  <div id="playerlist" hidden></div>
+  <div id="toast"></div>
+  <div id="breakbar" hidden><i></i></div>
+  <div id="hearts" hidden></div>
+  <div id="hunger" hidden></div>
+  <div id="experience-hud" hidden aria-label="経験値">
+    <span>Lv <b id="experience-level">0</b></span>
+    <div id="experience-bar" role="progressbar" aria-label="次のレベルまで" aria-valuemin="0" aria-valuemax="100"><i id="experience-fill"></i></div>
+  </div>
+  <div id="effects-hud" aria-live="polite"></div>
+  <div id="visionfx" aria-hidden="true"></div>
+  <div id="hotbar"></div>
+  <div id="underwater" hidden></div>
+</div>
+
+<div id="inventory" class="inventory-overlay" hidden>
+  <div id="inventory-layout">
+    <section id="survival-inventory" aria-label="プレイヤーインベントリ">
+      <div id="mc-inventory-window">
+        <div id="mc-inventory-title">インベントリ</div>
+        <div id="player-armor-slots" aria-label="防具スロット"></div>
+        <canvas id="inventory-player-preview" width="64" height="112" aria-label="プレイヤーのプレビュー"></canvas>
+        <div id="player-offhand-slot" aria-label="オフハンド"></div>
+        <div id="player-main-inventory" aria-label="インベントリ"></div>
+        <div id="player-hotbar-slots" aria-label="ホットバー"></div>
+        <div id="crafting-grid-2x2" aria-label="2×2クラフト枠">
+        </div>
+        <button id="crafting-preview-result" type="button" class="mc-slot crafting-result-slot" aria-label="クラフト完成品" disabled></button>
+        <div id="mc-cursor-item" hidden></div>
+      </div>
+      <div id="invhint">クリックでアイテムを持つ／置く。Shift+クリックで移動。</div>
+      <section id="workbench-panel" hidden aria-label="作業台クラフト">
+        <h3>作業台 - 3×3クラフト</h3>
+        <div class="workbench-row">
+          <div id="crafting-grid-3x3" aria-label="3×3クラフト枠"></div>
+          <span class="workbench-arrow" aria-hidden="true"></span>
+          <button id="crafting-table-result" class="mc-slot" type="button" aria-label="作業台完成品" disabled></button>
+        </div>
+        <small>3×3専用レシピも作成できます。完成品をクリックしてください。</small>
+      </section>
+    </section>
+    <section id="creative-inventory" hidden aria-label="クリエイティブアイテム一覧">
+      <h2>アイテム選択 <small>選択中のホットバー枠へ追加</small></h2>
+      <div id="creative-tabs" role="tablist" aria-label="アイテムカテゴリ">
+        <button type="button" data-category="all" class="on">すべて</button>
+        <button type="button" data-category="building">建築</button>
+        <button type="button" data-category="nature">自然</button>
+        <button type="button" data-category="tools">道具</button>
+        <button type="button" data-category="combat">戦闘</button>
+        <button type="button" data-category="food">食料</button>
+        <button type="button" data-category="redstone">レッドストーン</button>
+      </div>
+      <input id="creative-search" type="search" placeholder="アイテム名またはIDで検索" aria-label="アイテム検索">
+      <div id="invgrid"></div>
+      <div id="invhotbar"></div>
+    </section>
+    <aside id="inv-status">
+      <h3>ステータス効果</h3><div id="inventory-effects"></div>
+      <h3>食料</h3><div id="food-items"></div>
+      <p class="inventory-controls">E / Esc：閉じる<br>左クリック：持つ・置く<br>右クリック：半分に分ける・1個置く<br>Shift+クリック：クイック移動<br>完成品スロット：クラフト</p>
+    </aside>
+  </div>
+  <details id="crafting-panel">
+    <summary>クラフトレシピ一覧</summary>
+    <p>現在利用可能なレシピ。必要素材を所持していると作成できます。</p>
+    <input id="craft-search" type="search" placeholder="レシピ名またはIDで検索" aria-label="レシピ検索">
+    <div id="craft-recipes"></div>
+  </details>
+</div>
+
+<div class="furnace-overlay" hidden id="furnace-overlay" role="dialog" aria-modal="true" aria-labelledby="furnace-title">
+  <section class="furnace-window">
+    <header class="furnace-header"><div><small>サーバー共有設備</small><h2 id="furnace-title">かまど</h2></div><button id="furnace-close" type="button" aria-label="閉じる">×</button></header>
+    <p id="furnace-status" aria-live="polite">待機中</p>
+    <div class="furnace-slots">
+      <div class="furnace-slot"><span>素材</span><strong id="furnace-input-value">空</strong><button id="furnace-take-input" type="button">取り出す</button></div>
+      <div class="furnace-slot"><span>燃料</span><strong id="furnace-fuel-value">空</strong><button id="furnace-take-fuel" type="button">取り出す</button></div>
+      <div class="furnace-slot furnace-output"><span>完成品</span><strong id="furnace-output-value">空</strong><button id="furnace-take-output" type="button">回収</button></div>
+    </div>
+    <div class="furnace-progress-track" role="progressbar" aria-label="精錬進行度" aria-valuemin="0" aria-valuemax="100"><i id="furnace-progress"></i></div>
+    <p id="furnace-progress-label">精錬進行度 0%</p>
+    <div class="furnace-insert">
+      <label for="furnace-item">所持アイテム</label><select id="furnace-item"></select>
+      <label for="furnace-count">個数</label><input id="furnace-count" type="number" min="1" max="64" step="1" value="1" inputmode="numeric"/>
+      <div class="furnace-actions"><button id="furnace-insert-input" type="button">素材に入れる</button><button id="furnace-insert-fuel" type="button">燃料に入れる</button></div>
+    </div>
+    <p class="furnace-hint">E / Esc または閉じるボタンで戻る。素材・燃料はサーバー側で検証されます。</p>
+  </section>
+</div>
+<div id="title" class="screen">
+  <div class="card">
+    <h1>Koru<span>va</span></h1>
+    <p class="sub">ブラウザで遊べるマルチプレイ・ボクセルサンドボックス</p>
+
+    <div class="row">
+      <label>名前<input id="name" maxlength="16" placeholder="name" autocomplete="off" autocapitalize="off" spellcheck="false"><small class="hint">使える文字: a-z A-Z 0-9 _ (16文字まで・空白や記号は不可)</small></label>
+    </div>
+    <div class="skinrow">
+      <canvas id="skinpreview" width="64" height="112" aria-label="Minecraftスキンのプレビュー"></canvas>
+      <div class="skin-controls">
+        <label>腕のモデル
+          <select id="skinmodel">
+            <option value="classic">クラシック（4px）</option>
+            <option value="slim">スリム（3px）</option>
+          </select>
+        </label>
+        <label class="skin-upload">Minecraft Javaスキン（64×64 PNG）
+          <input id="skinfile" type="file" accept="image/png,.png">
+          <small id="skinstatus" class="hint">初期スキンを使用中。64×64 PNGを選ぶと自分やルームの全員に反映されます（旧64×32も可）</small>
+        </label>
+        <button id="skinclear" class="ghost">初期スキンに戻す</button>
+      </div>
+    </div>
+
+    <div class="btns">
+      <button id="btn-solo" class="primary">ソロで遊ぶ</button>
+      <button id="btn-solo-new" class="ghost" hidden>新しいワールド</button>
+    </div>
+    <div class="modesel" id="modesel">
+      <span>ルームのゲームモード</span>
+      <div class="seg">
+        <button type="button" data-mode="creative" class="on">クリエイティブ</button>
+        <button type="button" data-mode="survival">サバイバル</button>
+        <button type="button" data-mode="adventure">アドベンチャー</button>
+        <button type="button" data-mode="spectator">スペクテイター</button>
+      </div>
+      <small id="modedesc">飛行OK・ブロック無限・すぐ壊せる</small>
+    </div>
+    <div class="btns">
+      <button id="btn-create" class="primary alt">ルームを作成</button>
+    </div>
+    <div class="join">
+      <input id="joincode" maxlength="6" placeholder="ルームコード" autocapitalize="characters" spellcheck="false">
+      <button id="btn-join" class="primary alt">参加</button>
+    </div>
+    <p id="titleerr" class="err"></p>
+    <p class="help">WASD・タッチスティック 移動 / マウス・画面スワイプ 視点 / 左クリック・掘るボタン 破壊 / 右クリック・設置ボタン / Shift ダッシュ / C スニーク / 1-9・ホイール ホットバー / E インベントリ / Enter・T チャット / Esc メニュー / V 三人称 / Space2回 飛行(クリエイティブ)</p>
+  </div>
+</div>
+
+<div id="pause" class="screen" hidden>
+  <div class="card">
+    <h2 id="pausetitle">一時停止</h2>
+    <button id="btn-resume" class="primary">ゲームに戻る</button>
+    <div class="grid2">
+      <button id="btn-save" class="ghost">セーブ</button>
+      <button id="btn-load" class="ghost">ロード</button>
+    </div>
+    <label class="slider">描画負荷レベル
+      <select id="quality-level">
+        <option value="1">1 · Minimum (2チャンク)</option><option value="2">2 · Very Low (3チャンク)</option>
+        <option value="3">3 · Low (4チャンク)</option><option value="4">4 · Low+ (5チャンク)</option>
+        <option value="5">5 · Normal (6チャンク)</option><option value="6">6 · Normal+ (7チャンク)</option>
+        <option value="7">7 · High (8チャンク)</option><option value="8">8 · Very High (9チャンク)</option>
+        <option value="9">9 · Extreme (10チャンク)</option><option value="10">10 · Ultra Extreme (12チャンク)</option>
+        <option value="custom">Custom</option>
+      </select>
+    </label>
+    <label class="auto-optimize"><input id="auto-optimize" type="checkbox"> FPSに応じて自動調整（描画距離のみ）</label>
+    <small id="quality-note">プリセットは描画距離、Mob描画距離、クライアント側チャンク処理を調整します。Mob AIなどサーバーシミュレーションには影響しません。</small>
+    <div class="mobile-control-settings" aria-label="モバイル操作設定">
+      <label for="mobile-look-sensitivity">タッチ視点感度 <output id="mobile-look-sensitivity-value">1.0×</output>
+        <input id="mobile-look-sensitivity" type="range" min="0.5" max="2.5" step="0.1" value="1" aria-describedby="mobile-look-sensitivity-help">
+        <small id="mobile-look-sensitivity-help">画面をスワイプしたときの視点移動量 (0.5–2.5×)</small>
+      </label>
+      <label for="mobile-handedness">操作ボタン配置
+        <select id="mobile-handedness"><option value="right">右利き: 移動は左・操作は右</option><option value="left">左利き: 移動は右・操作は左</option></select>
+      </label>
+    </div>
+    <label class="slider">Mob描画距離 <b id="entity-distance-val"></b>ブロック<input id="entity-distance" type="range" max="96" min="16" step="8"></label>
+    <label class="slider">描画距離 <b id="rdval"></b><input type="range" id="rd" min="2" max="12" step="1"></label>
+    <label class="slider">視点感度 <b id="sensval"></b><input type="range" id="sens" min="1" max="10" step="1"></label>
+    <button id="btn-copycode" class="ghost" hidden>ルームコードをコピー</button>
+    <button id="btn-admin" class="admin" hidden>🛠 サーバー管理</button>
+    <button id="btn-quit" class="danger">サーバーを抜ける</button>
+    <p id="pausemsg" class="sub"></p>
+  </div>
+</div>
+
+<div id="admin" class="screen" hidden>
+  <div class="card">
+    <h2>サーバー管理 <small class="hostbadge">ホスト専用</small></h2>
+    <h3>プレイヤー</h3>
+    <div id="adminplayers" class="adminlist"></div>
+    <h3>BAN中</h3>
+    <div id="adminbans" class="adminlist"></div>
+    <button id="btn-admin-close" class="primary">メニューに戻る</button>
+  </div>
+</div>
+
+<div id="loading" class="screen" hidden>
+  <div class="card"><h2 id="loadtext">読み込み中…</h2><div class="bar"><i id="loadbar"></i></div></div>
+</div>
+
+<script type="module" src="./main.ts"></script>
+</body>
+</html>

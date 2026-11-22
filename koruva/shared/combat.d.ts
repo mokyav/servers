@@ -1,0 +1,14 @@
+export type AttackItem = keyof typeof ATTACK_INTERVAL_SECONDS;
+export declare const TICKS_PER_SECOND: number;
+export declare const TICK_MS: number;
+export declare const ATTACK_INTERVAL_SECONDS: Readonly<Record<string, number>>;
+export declare const ACTION_COOLDOWN_SECONDS: Readonly<Record<string, number>>;
+export declare function attackDelayTicks(item?: string): number;
+export declare function attackChargeProgress(elapsedTicks: number, fullChargeTicks: number): number;
+export declare function damageMultiplier(elapsedTicks: number, fullChargeTicks: number): number;
+export declare function actionCooldownTicks(action: string, blockBreakSeconds?: number): number;
+export declare function isCriticalHit(state: { falling: boolean; onGround: boolean; climbing?: boolean; inWater?: boolean; blinded?: boolean; riding?: boolean }): boolean;
+export declare function meleeDamage(baseDamage: number, elapsedTicks: number, fullChargeTicks: number, critical?: boolean): number;
+export declare function applyDamageWithInvulnerability(amount: number, nowMs: number, lastHurtAtMs?: number, lastDamage?: number, durationMs?: number): { applied: number; lastHurtAtMs: number; lastDamage: number };
+export declare const MOB_BASE_HEALTH: Readonly<Record<string, number>>;
+export declare function mobBaseHealth(type: string): number;

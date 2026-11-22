@@ -1,0 +1,51 @@
+{
+  "source": "attached client.zip assets/minecraft",
+  "gameVersion": "26.3",
+  "dataVersion": {
+    "major": 121,
+    "minor": 0
+  },
+  "worldVersion": 5023,
+  "counts": {
+    "blockstates": 1288,
+    "blockModels": 2883,
+    "itemDefinitions": 1658,
+    "itemModels": 1309,
+    "blockTextures": 1300,
+    "itemTextures": 831,
+    "entityTextures": 743,
+    "particleDefinitions": 115,
+    "registeredBlockTextureMappings": 1288,
+    "registeredItemTextureMappings": 1658,
+    "spawnEggMobIds": 88,
+    "supportedShapedCraftingRecipes": 733,
+    "supportedShapelessCraftingRecipes": 230,
+    "supportedCraftingRecipesTotal": 963,
+    "inventoryUsableItemIdentifiers": 1657,
+    "legacyVanillaTextureAliases": 29,
+    "vanillaModelTextureFallbackCorrections": 37
+  },
+  "dimensions": [
+    "minecraft:overworld",
+    "minecraft:the_nether",
+    "minecraft:the_end"
+  ],
+  "limitations": [
+    "The 1300 supplied Java 26.3 block texture PNGs match the supplied client.zip byte-for-byte. Every world-atlas tile is 16x16 pixels; 32x32 and 64x64 source files are nearest-neighbour resampled, while vertical/horizontal animation sheets are cropped to one frame before atlas sampling.",
+    "Official blockstate and block-model JSON assets are bundled. 37 generic texture fallbacks were corrected from the supplied models, but complex model geometry, multipart blocks, face-specific UV rotation, tint indexes, block entities and all state variants are not yet rendered exactly like Java.",
+    "The HUD, player inventory, 3x3 crafting-table panel and widget button sprites use supplied Java 26.3 textures. Some non-vanilla panels and menu layout remain Koruva-specific.",
+    "Full Java-equivalent gameplay is not complete. Terrain/biome color tint, all entities, all item use actions, all effects, lighting, redstone and every recipe/state interaction still require additional parity work.",
+    "The current work has automated Node tests and source syntax checks; it has not been visually verified in a live browser or confirmed with a production Vite build in this environment."
+  ],
+  "rendering": {
+    "blockAtlasTileSize": [
+      16,
+      16
+    ],
+    "textureFilter": "nearest-neighbor / no mipmaps / half-texel UV inset",
+    "vanillaTextureAliases": 29,
+    "modelTextureCorrections": 37,
+    "colorSpace": "sRGB texture sampling and sRGB display output",
+    "animationMetadata": "Minecraft .mcmeta frame order and per-frame duration are loaded; interpolate=true animations blend adjacent 16x16 frames"
+  }
+}

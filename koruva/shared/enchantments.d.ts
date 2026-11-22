@@ -1,0 +1,12 @@
+export const ENCHANTMENT_MAX_LEVEL: Readonly<Record<string,number>>;
+export const ENCHANTMENT_IDS: readonly string[];
+export const ENCHANTMENT_LABELS: Readonly<Record<string,string>>;
+export function normalizeItemEnchantments(raw: unknown, blocks: any[], maxItems?: number): Record<string,Record<string,number>>;
+export function isEnchantmentCompatible(enchantId:string,itemId:number,blocks:any[]):boolean;
+export function areEnchantmentsCompatible(a:string,b:string):boolean;
+export function availableEnchantmentsForItemId(itemId:number,blocks:any[]):string[];
+export function getItemEnchantment(itemEnchantments:Record<string,Record<string,number>>,itemId:number,enchantId:string):number;
+export function setItemEnchantment(itemEnchantments:Record<string,Record<string,number>>,itemId:number,enchantId:string,level:number,blocks:any[]):Record<string,Record<string,number>> | null;
+export function enchantmentDamageBonus(itemEnchantments:any,itemId:number,targetType?:string,fallDistance?:number):number;
+export function enchantmentDamageProtection(itemEnchantments:any,armorSlots:number[],blocks:any[],cause?:string):number;
+export function elytraWearChance(itemEnchantments:any,elytraItemId:number):number;

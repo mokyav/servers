@@ -106,11 +106,17 @@ export class ChunkView {
       }
     }
 
-    // 2) 編集由来の即時メッシュ化
+    // 2) 編集・新規隣接チャンク由来の再メッシュ。
+    // 隣接チャンクが未生成の間はキューに残し、境界面を欠いたメッシュを確定させない。
     for (const c of this.urgent) {
+      if (this.world.getChunk(c.cx, c.cz) !== c) {
+        this.urgent.delete(c);
+        continue;
+      }
+      if (!this.hasNeighbors(c)) continue;
       if (this.entries.has(chunkKey(c.cx, c.cz)) || c.dirty) this.mesh(c);
+      this.urgent.delete(c);
     }
-    this.urgent.clear();
 
     // 3) 未メッシュ/ダーティを近い順に処理(4近傍が揃っているもののみ)
     let meshed = 0;
@@ -122,6 +128,7 @@ export class ChunkView {
       if (has && !c.dirty) continue;
       if (!this.hasNeighbors(c)) continue;
       this.mesh(c);
+      this.urgent.delete(c);
       meshed++;
     }
 
@@ -175,6 +182,7 @@ export class ChunkView {
     e.solid = this.swap(e.solid, res.solid, this.solidMat, c, 0);
     e.liquid = this.swap(e.liquid, res.liquid, this.liquidMat, c, 1);
     this.recount();
+    this.urgent.delete(c);
   }
 
   private swap(old: THREE.Mesh | null, data: MeshData | null, mat: THREE.Material, c: Chunk, order: number): THREE.Mesh | null {

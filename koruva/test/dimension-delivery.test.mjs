@@ -25,7 +25,7 @@ test("initial room streaming and dimension transfer share one worldgen version n
 });
 
 test("WebSocket opening has a finite timeout and ping heartbeat remains enabled", () => {
-  assert.match(net, /connectTimer = window\.setTimeout\(/);
+  assert.match(net, /connectionTimer = window\.setTimeout\(/);
   assert.match(net, /}, 15000\)/);
   assert.match(net, /window\.setInterval\([\s\S]*?ws\.send\("ping"\)[\s\S]*?25000\)/);
   assert.match(room, /setWebSocketAutoResponse\(new WebSocketRequestResponsePair\("ping", "pong"\)\)/);

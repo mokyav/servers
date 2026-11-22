@@ -191,7 +191,8 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
   const topY = Math.min(WORLD_HEIGHT - 1, chunk.maxY);
   const opaqueAt = (x: number, y: number, z: number): boolean => {
     const b = world.get(x, y, z);
-    return b === -1 ? true : BLOCKS[b].render === "opaque";
+    // An unloaded neighbour is temporary empty space. It is remeshed when loaded.
+    return b > 0 && BLOCKS[b]?.render === "opaque";
   };
 
   const emitFace = (target: Builder, def: typeof BLOCKS[number], x: number, y: number, z: number,
@@ -254,7 +255,6 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
             const cdx = Math.round(cullNormal[0]), cdy = Math.round(cullNormal[1]), cdz = Math.round(cullNormal[2]);
             if (Math.abs(cdx) + Math.abs(cdy) + Math.abs(cdz) === 1) {
               const neighbourId = world.get(x + cdx, y + cdy, z + cdz);
-              if (neighbourId === -1) continue;
               if (neighbourId > 0 && BLOCKS[neighbourId]?.render === "opaque" && BLOCKS[neighbourId]?.shape === "cube") continue;
             }
           }
@@ -318,8 +318,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
           for (const f of FACES) {
             const nx = x + f.n[0], ny = y + f.n[1], nz = z + f.n[2];
             const nid = world.get(nx, ny, nz);
-            if (nid === -1) continue;
-            if (nid !== 0) {
+            if (nid > 0) {
               const nd = BLOCKS[nid];
               // 隣が部分ブロックなら面を残す。接する部分での同一平面重なりは視覚上不可視。
               if (nd.render === "opaque" && nd.shape === "cube") continue;
@@ -340,8 +339,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
             } else {
               const nx = x + f.n[0], ny = y + f.n[1], nz = z + f.n[2];
               const nid = world.get(nx, ny, nz);
-              if (nid === -1) continue;
-              if (nid !== 0) {
+              if (nid > 0) {
                 const nd = BLOCKS[nid];
                 if (nd.render === "opaque") {
                   if (nd.shape === "cube") continue;

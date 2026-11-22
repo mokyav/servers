@@ -145,3 +145,13 @@ export class MinecraftInventoryUI {
     }
   }
 }
+
+
+/** Keep the creative item catalogue separate from the player inventory panel. */
+export function inventoryPanelVisibility(gameMode: string, workbenchOpen = false) {
+  const creativeInventory = gameMode === "creative" && !workbenchOpen;
+  return {
+    creativeInventory,
+    survivalInventory: !creativeInventory,
+  };
+}

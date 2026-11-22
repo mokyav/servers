@@ -13,7 +13,7 @@ import { NAME_RULE, validateName } from "../../shared/validate";
 import type { FurnaceState, FurnaceStation } from "../../shared/smelting.js";
 import { ATLAS_READY_EVENT, createAtlasCanvas } from "./atlas";
 import { clearBlockIconCache, blockIcon } from "./icons";
-import { MinecraftInventoryUI, type InventorySlotRef, type InventorySlotType } from "./inventory-ui";
+import { MinecraftInventoryUI, inventoryPanelVisibility, type InventorySlotRef, type InventorySlotType } from "./inventory-ui";
 import { applyArmorReduction, armorSlotForItemId, weaponStatsForItemId, weaponReachForItemId } from "../../shared/item-mechanics.js";
 import { normalizeItemEnchantments, availableEnchantmentsForItemId, setItemEnchantment, getItemEnchantment, ENCHANTMENT_LABELS, ENCHANTMENT_MAX_LEVEL, elytraWearChance } from "../../shared/enchantments.js";
 import { normalizeStackComponents, migrateLegacyEnchantments, makeStackRecord, setStackEnchantment, stackDataForSlot, withStackEnchantments, slotKey, combineAnvilStacks, grindstoneStack } from "../../shared/stack-components.js";
@@ -1471,9 +1471,9 @@ class Game {
     $("workbench-panel").hidden = !this.workbenchOpen;
     $("crafting-grid-2x2").hidden = this.workbenchOpen;
     $("crafting-preview-result").hidden = this.workbenchOpen;
-    const creative = this.gameMode === "creative" || this.gameMode === "spectator";
-    $("creative-inventory").hidden = !creative;
-    $("survival-inventory").hidden = false;
+    const panels = inventoryPanelVisibility(this.gameMode, this.workbenchOpen);
+    $("creative-inventory").hidden = !panels.creativeInventory;
+    $("survival-inventory").hidden = !panels.survivalInventory;
     const tabs = $("creative-tabs");
     if (tabs && tabs.dataset.bound !== "1") {
       tabs.dataset.bound = "1";
@@ -1486,7 +1486,7 @@ class Game {
       const search = $("creative-search") as HTMLInputElement;
       search?.addEventListener("input", () => this.renderCreativeCatalog(tabs.querySelector<HTMLButtonElement>("button.on")?.dataset.category ?? "all"));
     }
-    this.renderCreativeCatalog("all");
+    if (panels.creativeInventory) this.renderCreativeCatalog("all");
     this.renderCrafting();
     $("invhint").textContent = "左クリック：持つ／置く　右クリック：半分・1個　Shift+クリック：移動　完成品をクリック：クラフト";
     this.renderInventorySlots();

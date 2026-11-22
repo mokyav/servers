@@ -107,13 +107,12 @@ export class ChunkView {
     }
 
     // 2) 編集・新規隣接チャンク由来の再メッシュ。
-    // 隣接チャンクが未生成の間はキューに残し、境界面を欠いたメッシュを確定させない。
+    // 未ロード境界は一時的に空気として描画し、隣接チャンク到着時に再メッシュする。
     for (const c of this.urgent) {
       if (this.world.getChunk(c.cx, c.cz) !== c) {
         this.urgent.delete(c);
         continue;
       }
-      if (!this.hasNeighbors(c)) continue;
       if (this.entries.has(chunkKey(c.cx, c.cz)) || c.dirty) this.mesh(c);
       this.urgent.delete(c);
     }
@@ -126,7 +125,6 @@ export class ChunkView {
       if (!c) continue;
       const has = this.entries.has(chunkKey(c.cx, c.cz));
       if (has && !c.dirty) continue;
-      if (!this.hasNeighbors(c)) continue;
       this.mesh(c);
       this.urgent.delete(c);
       meshed++;
@@ -166,12 +164,6 @@ export class ChunkView {
     return v;
   }
 
-  private hasNeighbors(c: Chunk): boolean {
-    return !!(
-      this.world.getChunk(c.cx + 1, c.cz) && this.world.getChunk(c.cx - 1, c.cz) &&
-      this.world.getChunk(c.cx, c.cz + 1) && this.world.getChunk(c.cx, c.cz - 1)
-    );
-  }
 
   private mesh(c: Chunk) {
     const key = chunkKey(c.cx, c.cz);

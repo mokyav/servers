@@ -62,7 +62,17 @@ export class World {
   }
 
   unloadChunk(cx: number, cz: number) {
-    this.chunks.delete(chunkKey(cx, cz));
+    const removed = this.chunks.delete(chunkKey(cx, cz));
+    if (!removed) return;
+
+    // A retained neighbour may have culled faces against this chunk.
+    // Mark it dirty so the newly exposed boundary is rendered.
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const neighbor = this.chunks.get(chunkKey(cx + dx, cz + dz));
+      if (!neighbor) continue;
+      neighbor.dirty = true;
+      this.onChunkDirty?.(neighbor);
+    }
   }
 
   /** 範囲外Yは岩盤/空気、未ロードチャンクは -1 */

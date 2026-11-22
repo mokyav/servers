@@ -68,12 +68,18 @@ export function randomSkin(): Skin {
 
 export interface InvItem { id: number; count: number | null } // count=null → 無限(クリエイティブ)
 
+/** Count shown in the HUD is the quantity in that exact hotbar slot. */
+export function hotbarSlotCount(itemId: number, amount: number, survival: boolean): number | null {
+  if (!survival || !Number.isSafeInteger(itemId) || itemId <= 0) return null;
+  return Number.isFinite(amount) ? Math.max(0, Math.floor(amount)) : 0;
+}
+
 export class Hotbar {
   private slots: HTMLElement[] = [];
   private invSlots: HTMLElement[] = [];
   constructor(
     private atlas: HTMLCanvasElement,
-    private get: () => { hotbar: number[]; sel: number; count: (id: number) => number | null; stackData?: Record<string, { itemId?: number; damage?: number }> },
+    private get: () => { hotbar: number[]; hotbarCounts: number[]; sel: number; survival: boolean; stackData?: Record<string, { itemId?: number; damage?: number }> },
     private onSelect: (i: number) => void,
     private onAssign: (blockId: number) => void,
   ) {
@@ -111,11 +117,11 @@ export class Hotbar {
     return d;
   }
   refresh() {
-    const { hotbar, sel, count, stackData } = this.get();
+    const { hotbar, hotbarCounts, sel, survival, stackData } = this.get();
     for (const list of [this.slots, this.invSlots]) {
       list.forEach((el, i) => {
         const id = hotbar[i];
-        const c = id ? count(id) : null;
+        const c = hotbarSlotCount(id, hotbarCounts[i] ?? 0, survival);
         el.className = "slot" + (i === sel ? " sel" : "") + (id && c === 0 ? " none" : "");
         el.title = id ? BLOCKS[id].name : "";
         el.innerHTML = (id ? `<img alt="" src="${blockIcon(this.atlas, id)}">` : "") + `<span class="n">${i + 1}</span>` +

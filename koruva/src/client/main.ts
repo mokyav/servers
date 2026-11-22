@@ -286,7 +286,7 @@ class Game {
 
     this.hotbarUI = new Hotbar(
       this.atlas,
-      () => ({ hotbar: this.hotbar, sel: this.sel, count: (id) => this.countOf(id), stackData: this.stackData }),
+      () => ({ hotbar: this.hotbar, hotbarCounts: this.hotbarAmounts, sel: this.sel, survival: this.survival, stackData: this.stackData }),
       (i) => { this.sel = i; this.hotbarUI.refresh(); },
       (id) => {
         if (this.survival && this.counts[id] <= 0) return;
@@ -1487,6 +1487,7 @@ class Game {
       search?.addEventListener("input", () => this.renderCreativeCatalog(tabs.querySelector<HTMLButtonElement>("button.on")?.dataset.category ?? "all"));
     }
     if (panels.creativeInventory) this.renderCreativeCatalog("all");
+    else this.hotbarUI.setInventory([]);
     this.renderCrafting();
     $("invhint").textContent = "左クリック：持つ／置く　右クリック：半分・1個　Shift+クリック：移動　完成品をクリック：クラフト";
     this.renderInventorySlots();

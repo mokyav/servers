@@ -309,6 +309,7 @@ export class Room extends DurableObject<Env> {
         now: Date.now(), ttlMs: DROP_TTL_MS, maxDrops: MAX_DROPS,
         isValidItem: (itemId) => Number.isSafeInteger(itemId) && itemId > 0 && itemId < BLOCKS.length && !!BLOCKS[itemId],
         isValidInventoryItem: (itemId) => Number.isSafeInteger(itemId) && itemId > 0 && itemId < BLOCKS.length && !!BLOCKS[itemId],
+        getMaxStackSize: itemStackLimit,
       });
       for (const d of savedDrops) this.drops.set(d.eid, d);
       // 期限切れ・不正データもここで永続領域から掃除する。
@@ -2293,16 +2294,24 @@ export class Room extends DurableObject<Env> {
     await this.liveDrops();
     const before = [...this.drops.entries()];
     const evicted: Drop[] = [];
-    while (this.drops.size >= MAX_DROPS) {
-      const oldest = this.drops.keys().next().value as string;
-      const removed = this.drops.get(oldest);
-      this.drops.delete(oldest);
-      if (removed) evicted.push(removed);
-    }
-    const eid = crypto.randomUUID().slice(0, 8);
+    const created: Drop[] = [];
     const normalizedDimension = normalizeDimensionId(dimensionId);
-    const stackCount = Number.isSafeInteger(count) ? Math.max(1, Math.min(64, count)) : 1;
-    this.drops.set(eid, { eid, dimensionId: normalizedDimension, x, y, z, b, count: stackCount, at: Date.now() });
+    let remaining = Number.isSafeInteger(count) ? Math.max(1, count) : 1;
+    const stackLimit = itemStackLimit(b);
+    while (remaining > 0) {
+      while (this.drops.size >= MAX_DROPS) {
+        const oldest = this.drops.keys().next().value as string;
+        const removed = this.drops.get(oldest);
+        this.drops.delete(oldest);
+        if (removed) evicted.push(removed);
+      }
+      const eid = crypto.randomUUID().slice(0, 8);
+      const stackCount = Math.min(stackLimit, remaining);
+      const drop: Drop = { eid, dimensionId: normalizedDimension, x, y, z, b, count: stackCount, at: Date.now() };
+      this.drops.set(eid, drop);
+      created.push(drop);
+      remaining -= stackCount;
+    }
     try {
       await this.persistDrops();
     } catch (error) {
@@ -2310,7 +2319,7 @@ export class Room extends DurableObject<Env> {
       throw error;
     }
     for (const drop of evicted) this.broadcastDimension({ t: "gone", eid: drop.eid, by: "" }, drop.dimensionId);
-    this.broadcastDimension({ t: "drop", eid, x, y, z, b, count: stackCount }, normalizedDimension);
+    for (const drop of created) this.broadcastDimension({ t: "drop", eid: drop.eid, x: drop.x, y: drop.y, z: drop.z, b, count: drop.count }, normalizedDimension);
   }
 
   private async clearDrops() {

@@ -118,3 +118,14 @@ test("legacy and vanilla glass are routed to the translucent render layer", () =
   assert.equal(mesh.translucent?.vertexCount, 24, "isolated glass must emit six translucent faces");
   assert.equal(mesh.liquid, null);
 });
+
+
+test("an invalid runtime block ID cannot abort or hide the rest of a chunk mesh", () => {
+  const invalidId = BLOCKS.length + 20;
+  assert.ok(invalidId < 65535, "test ID must fit the world's Uint16Array");
+  const { chunk, world } = makeChunk([[2, 4, 3, invalidId]]);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.ok(mesh.solid);
+  assert.equal(mesh.solid.vertexCount, 24, "unknown blocks use a visible placeholder cube");
+  assert.equal(mesh.solid.indices.length, 36);
+});

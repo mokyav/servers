@@ -85,3 +85,57 @@ export function* iterateChunkEdits(chunks, chunkSize = 16, noEdit = NO_EDIT_U16)
     }
   }
 }
+
+
+/**
+ * Yield bounded flattened edit batches. An empty batch is emitted periodically
+ * even when a region has no edits, allowing callers to yield to the event loop
+ * and report transfer progress without allocating the full world edit list.
+ */
+export function* iterateChunkEditBatches(
+  chunks,
+  chunkSize = 16,
+  noEdit = NO_EDIT_U16,
+  maxRecords = 3000,
+  progressEveryChunks = 16,
+) {
+  if (!(chunks instanceof Map)) throw new TypeError("chunks must be a Map");
+  if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0 ||
+      !Number.isInteger(noEdit) || noEdit < 1 || noEdit > NO_EDIT_U16 ||
+      !Number.isSafeInteger(maxRecords) || maxRecords <= 0 ||
+      !Number.isSafeInteger(progressEveryChunks) || progressEveryChunks <= 0) {
+    throw new TypeError("invalid chunk edit batch options");
+  }
+
+  const plane = chunkSize * chunkSize;
+  let batch = [];
+  let chunksSinceProgress = 0;
+  for (const [key, cells] of chunks) {
+    if (!(cells instanceof Uint8Array) && !(cells instanceof Uint16Array)) continue;
+    const split = String(key).indexOf(",");
+    if (split <= 0) continue;
+    const cx = Number(String(key).slice(0, split));
+    const cz = Number(String(key).slice(split + 1));
+    if (!Number.isSafeInteger(cx) || !Number.isSafeInteger(cz) || cells.length % plane !== 0) continue;
+    const ox = cx * chunkSize, oz = cz * chunkSize;
+    for (let index = 0; index < cells.length; index++) {
+      const blockId = cells[index];
+      if (blockId === noEdit) continue;
+      const x = index % chunkSize;
+      const z = Math.floor(index / chunkSize) % chunkSize;
+      const y = Math.floor(index / plane);
+      batch.push(ox + x, y, oz + z, blockId);
+      if (batch.length >= maxRecords * 4) {
+        yield batch;
+        batch = [];
+      }
+    }
+    chunksSinceProgress++;
+    if (chunksSinceProgress >= progressEveryChunks) {
+      yield batch;
+      batch = [];
+      chunksSinceProgress = 0;
+    }
+  }
+  if (batch.length > 0) yield batch;
+}

@@ -1149,7 +1149,10 @@ export class Room extends DurableObject<Env> {
           if (dx * dx + dy * dy + dz * dz > SERVER_REACH * SERVER_REACH) { this.sendInventory(ws, me); return; }
         } else if (!craftRecipeFitsGrid(recipe, 2, 2) || !Array.isArray(grid) || grid.length !== 9
           || grid.some((itemId, index) => ![0, 1, 3, 4].includes(index) && itemId !== 0)) { this.sendInventory(ws, me); return; }
-        const result = craftFromGrid(me.counts, msg.recipeId, grid, recipes, { creative: gm === "creative", maxStack: 64 });
+        const outputItemId = recipe?.output?.itemId ?? 0;
+        const currentOutput = outputItemId > 0 ? Math.max(0, me.counts[outputItemId] ?? 0) : 0;
+        const maxCount = outputItemId > 0 ? currentOutput + inventoryCapacityFor(me, outputItemId) : 0;
+        const result = craftFromGrid(me.counts, msg.recipeId, grid, recipes, { creative: gm === "creative", maxStack: 64, maxCount });
         if (!result.ok) { this.sendInventory(ws, me); return; }
         me.counts = result.counts;
         await this.persistInventory(ws, me);
@@ -2205,7 +2208,7 @@ export class Room extends DurableObject<Env> {
   private async handleDeathDrops(ws: WebSocket, st: PlayerState) {
     if (st.deathDropsHandled || st.vitals.gameMode === "creative" || st.vitals.gameMode === "spectator") return;
     st.deathDropsHandled = true;
-    const stacks = buildDeathDropStacks(st.counts, [], BLOCKS.length, MAX_STACK, itemStackLimit);
+    const stacks = buildDeathDropStacks(st.counts, st.armorSlots, BLOCKS.length, MAX_STACK, itemStackLimit);
     const priorDrops = new Map(this.drops);
     const priorCounts = st.counts, priorArmor = st.armorSlots, priorExperience = st.vitals.experience;
     const priorStackData = st.stackData, priorEnchantments = st.itemEnchantments, priorElytraDamage = st.elytraDamage;

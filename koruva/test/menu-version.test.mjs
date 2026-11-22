@@ -20,10 +20,10 @@ test("title menu shows the build's Koruva version", async () => {
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
   assert.equal(pkg.version.replace(/\\.0$/, ""), "1.0");
-  assert.match(html, /id="game-version" class="game-version">Version 1\\.0<\\/p>/);
-  assert.match(css, /#game-version\\.game-version\\s*\\{/);
-  assert.match(vite, /__KORUVA_VERSION__: JSON\\.stringify\\(displayVersion\\)/);
-  assert.match(vite, /packageJson\\.version\\.replace\\(\\/\\\\\\.0\\$\\/, ""\\)/);
-  assert.match(main, /declare const __KORUVA_VERSION__: string;/);
-  assert.match(main, /\\$\\("game-version"\\)\\.textContent = `Version \\\\${__KORUVA_VERSION__\\}`;/);
+  assert.ok(html.includes('id="game-version" class="game-version">Version 1.0</p>'));
+  assert.ok(css.includes("#game-version.game-version {"));
+  assert.ok(vite.includes('define: { __KORUVA_VERSION__: JSON.stringify(displayVersion) }'));
+  assert.ok(vite.includes('packageJson.version.replace(/\\.0$/, "")'));
+  assert.ok(main.includes("declare const __KORUVA_VERSION__: string;"));
+  assert.ok(main.includes('$("game-version").textContent = `Version ${__KORUVA_VERSION__}`;'));
 });

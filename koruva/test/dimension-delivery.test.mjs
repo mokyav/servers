@@ -49,3 +49,11 @@ test("dimension transfer trusts the server's target-world safe arrival position"
   assert.match(handler, /const pos = \{ x: m\.p\[0\], y: m\.p\[1\], z: m\.p\[2\] \}/);
   assert.doesNotMatch(handler, /safeDimensionSpawn/);
 });
+
+
+test("post-join dimension edits are applied by the normal server-message handler", () => {
+  const start = main.indexOf("  onServerMsg(m: ServerMsg) {");
+  const end = main.indexOf("\n  roomTime(): number", start);
+  const handler = main.slice(start, end > start ? end : undefined);
+  assert.match(handler, /case "edits": \{[\s\S]*?this\.world\.importEdits\(m\.list\)/);
+});

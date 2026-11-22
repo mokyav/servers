@@ -381,13 +381,13 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
     if (v !== 3) return generateChunkLegacy(seed, cx, cz, v);
     const data = new Uint16Array(V), ox = cx * S, oz = cz * S;
     for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) {
-      const wx = ox + x, wz = oz + z, h = heightAt(seed, wx, wz), biome = v === 1 ? "legacy" : biomeAt(seed, wx, wz, v), coast = h <= SEA + 3;
+      const wx = ox + x, wz = oz + z, h = heightAt(seed, wx, wz), biome = biomeAt(seed, wx, wz, v);
       const [topBlock, subBlock] = v === 1 ? [h >= 46 ? B.SNOW : h <= SEA + 1 ? B.SAND : B.GRASS, h <= SEA + 1 ? B.SAND : h >= 46 ? B.STONE : B.DIRT] : surfaceFor(biome);
       const baseStone = block("stone", B.STONE), bedrock = block("bedrock", B.BEDROCK);
       for (let y = 0; y <= h; y++) {
         let id = baseStone;
         if (y === 0) id = bedrock;
-        else if (y === h) id = v === 1 ? topBlock : (coast && !biome.includes("desert") ? block("sand", B.SAND) : topBlock);
+        else if (y === h) id = topBlock;
         else if (y >= h - 3) id = y === h - 1 && (biome === "desert" || biome.includes("badlands")) ? block("sandstone", B.SANDSTONE) : subBlock;
         else if (v === 1 && y > 1 && rand2(seed + 5, wx + y * 7919, wz - y * 104729) < .012) id = B.ORE;
         else if (v !== 1 && y > 1 && rand3(seed + 6, wx, y, wz) < .007) id = B.GRAVEL;

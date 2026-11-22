@@ -32,6 +32,10 @@ export function isValidSoloSave(value) {
   if (p.counts !== undefined && (!integerArray(p.counts) || p.counts.some((n) => n < 0))) return false;
   if (p.cursorItem !== undefined && (!Number.isSafeInteger(p.cursorItem) || p.cursorItem < 0 || p.cursorItem >= 100_000)) return false;
   if (p.cursorCount !== undefined && (!Number.isSafeInteger(p.cursorCount) || p.cursorCount < 0 || p.cursorCount > 64)) return false;
+  if (p.workbenchGrid !== undefined && (!integerArray(p.workbenchGrid, 9) || p.workbenchGrid.length !== 9 || p.workbenchGrid.some((id) => id < 0))) return false;
+  if (p.workbenchGridAmounts !== undefined && (!integerArray(p.workbenchGridAmounts, 9) || p.workbenchGridAmounts.length !== 9 || p.workbenchGridAmounts.some((n) => n < 0 || n > 64))) return false;
+  if (p.craftGrid !== undefined && (!integerArray(p.craftGrid, 4) || p.craftGrid.length !== 4 || p.craftGrid.some((id) => id < 0))) return false;
+  if (p.craftGridAmounts !== undefined && (!integerArray(p.craftGridAmounts, 4) || p.craftGridAmounts.length !== 4 || p.craftGridAmounts.some((n) => n < 0 || n > 64))) return false;
   if ((p.cursorItem ?? 0) === 0 && (p.cursorCount ?? 0) !== 0) return false;
   if ((p.cursorItem ?? 0) > 0 && (p.cursorCount ?? 0) <= 0) return false;
   if (p.stackData !== undefined && !validStackData(p.stackData)) return false;

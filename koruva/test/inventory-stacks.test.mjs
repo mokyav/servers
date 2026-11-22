@@ -26,6 +26,7 @@ test("stack limits match Java 26.3 item registry categories", () => {
   assert.equal(maxStackSizeForItemKey("minecraft:tnt_minecart"), 1);
   assert.equal(maxStackSizeForItemKey("minecraft:command_block_minecart"), 1);
   assert.equal(maxStackSizeForItemKey("minecraft:black_bundle"), 1);
+  assert.equal(maxStackSizeForItemKey("minecraft:water_bucket"), 1);
   assert.equal(maxStackSizeForItemKey("minecraft:shulker_box"), 1);
   assert.equal(maxStackSizeForItemKey("minecraft:writable_book"), 1);
   assert.equal(maxStackSizeForItemKey("minecraft:beetroot_soup"), 1);

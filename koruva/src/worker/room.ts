@@ -1,6 +1,7 @@
 import { applyDamageWithInvulnerability, attackDelayTicks, isCriticalHit, meleeDamage, mobBaseHealth } from "../../shared/combat.js";
 import { applyArmorReduction, normalizeArmorSlots, weaponStatsForItemId, weaponReachForItemId } from "../../shared/item-mechanics.js";
 import { normalizeStackComponents, validateStackComponents, setStackEnchantment, stackDataForSlot, withStackEnchantments, combineAnvilStacks, grindstoneStack } from "../../shared/stack-components.js";
+import { inventoryStorageCapacity, maxInventoryCountForItemKey, maxStackSizeForItemKey } from "../../shared/inventory-stacks.js";
 import { countEnchantingBookshelves, thornsRetaliation, windBurstImpulse, frostWalkerRadius, sweepingDamage, breachArmorMultiplier, bowShotProfile, crossbowShotProfile, tridentShotProfile } from "../../shared/enchantment-runtime.js";
 import { tickDragonCrystalHealing, dragonBlastDamage } from "../../shared/end-fight.js";
 import { fishingBiteDelay, isFishingOpenWater, rollFishingLootEntry } from "../../shared/fishing.js";
@@ -172,8 +173,20 @@ interface FishingSession {
 function normalizeInventory(raw: unknown): number[] {
   const counts = new Array(BLOCKS.length).fill(0);
   if (!Array.isArray(raw)) return counts;
-  for (const id of INVENTORY_ITEMS) { const v = raw[id]; if (typeof v === "number" && Number.isFinite(v) && v > 0) counts[id] = Math.min(MAX_STACK, Math.floor(v)); }
+  for (const id of INVENTORY_ITEMS) { const v = raw[id]; if (typeof v === "number" && Number.isFinite(v) && v > 0) counts[id] = Math.min(maxInventoryCountForItemKey(BLOCKS[id]?.key ?? ""), Math.floor(v)); }
   return counts;
+}
+
+function itemStackLimit(itemId: number): number {
+  return maxStackSizeForItemKey(BLOCKS[itemId]?.key ?? "");
+}
+
+function inventoryCapacityFor(st: Pick<PlayerState, "counts" | "stackData">, itemId: number, incomingComponents: any = null): number {
+  if (!Number.isSafeInteger(itemId) || itemId <= 0 || itemId >= BLOCKS.length || !BLOCKS[itemId]) return 0;
+  const current = Math.max(0, Math.floor(st.counts[itemId] ?? 0));
+  const aggregateFree = Math.max(0, maxInventoryCountForItemKey(BLOCKS[itemId].key ?? "") - current);
+  const slotFree = inventoryStorageCapacity(st.stackData, itemId, BLOCKS, current, incomingComponents);
+  return Math.max(0, Math.min(aggregateFree, slotFree));
 }
 
 /**

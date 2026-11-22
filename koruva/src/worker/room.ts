@@ -49,10 +49,10 @@ import { resolveCommandTargets } from "../../shared/command-targets.js";
 import { parseTeleportPosition } from "../../shared/teleport.js";
 import type { Env } from "./env";
 
-/** クライアント→サーバーのメッセージ長上限(文字数)。 */
-const MAX_MESSAGE_BYTES = 4096;
-const MAX_STACK_DATA_BYTES = 32_768;
-const MAX_HELLO_BYTES = 262_144;
+/** クライアント→サーバーのメッセージ長上限(UTF-16文字数)。 */
+const MAX_MESSAGE_CHARS = 4096;
+const MAX_STACK_DATA_CHARS = 32_768;
+const MAX_HELLO_CHARS = 262_144;
 
 interface Meta {
   code: string;
@@ -379,17 +379,18 @@ export class Room extends DurableObject<Env> {
     // サイズ上限は種別ごとに分ける。hello は全ブロック分の所持数配列(BLOCKS.length 件)や
     // スキンPNG(最大32,000文字)を含むため 4096 では必ず超え、黙って捨てられて接続が
     // タイムアウトしていた。まず緩い上限で弾き、パース後に種別ごとの上限を適用する。
-    if (typeof raw !== "string" || raw.length > MAX_HELLO_BYTES || !this.meta) return;
-    if (this.left.has(ws)) return; // キック/BAN済みソケットからの操作は無視
+    if (!this.meta || this.left.has(ws)) return; // 未作成ルーム / キック・切断済み
+    if (typeof raw !== "string") return this.refuse(ws, "テキスト形式のメッセージのみ対応しています");
+    if (raw.length > MAX_HELLO_CHARS) return this.refuse(ws, "メッセージが大きすぎます");
     let msg: ClientMsg;
     try {
       msg = JSON.parse(raw);
     } catch {
-      return;
+      return this.refuse(ws, "メッセージ形式が正しくありません");
     }
-    if (!msg || typeof msg !== "object") return;
-    const sizeLimit = msg.t === "hello" ? MAX_HELLO_BYTES : msg.t === "stack-data" ? MAX_STACK_DATA_BYTES : MAX_MESSAGE_BYTES;
-    if (raw.length > sizeLimit) return;
+    if (!msg || typeof msg !== "object" || Array.isArray(msg)) return this.refuse(ws, "メッセージ形式が正しくありません");
+    const sizeLimit = msg.t === "hello" ? MAX_HELLO_CHARS : msg.t === "stack-data" ? MAX_STACK_DATA_CHARS : MAX_MESSAGE_CHARS;
+    if (raw.length > sizeLimit) return this.refuse(ws, "メッセージが大きすぎます");
     const me = this.player(ws);
 
     if (msg.t === "hello") {
@@ -427,7 +428,7 @@ export class Room extends DurableObject<Env> {
       // BAN 判定(ホスト本人は常に入室可能。自分を締め出さないため)
       if (!me.host && this.isBanned(me)) {
         this.send(ws, { t: "kicked", reason: "このルームからBANされています" });
-        this.left.add(ws);
+        this.leave(ws);
         try { ws.close(4003, "banned"); } catch { /* already closed */ }
         return;
       }
@@ -2101,10 +2102,12 @@ export class Room extends DurableObject<Env> {
 
   // ---- helpers ----
   private leave(ws: WebSocket) {
-    if (this.left.has(ws)) return; // 二重通知を防ぐ(evict と close イベントの両方から呼ばれる)
-    this.left.add(ws);
-    const me = this.mem.get(ws) ?? (ws.deserializeAttachment() as PlayerState | null);
+    const alreadyLeft = this.left.has(ws);
+    // refuse/BAN は close より先に left を付けるため、その場合も強参照の mem から必ず除去する。
+    const me = this.mem.get(ws) ?? (alreadyLeft ? null : ws.deserializeAttachment() as PlayerState | null);
     this.mem.delete(ws);
+    if (alreadyLeft) return; // 二重通知を防ぐ(evict と close イベントの両方から呼ばれる)
+    this.left.add(ws);
     if (me?.joined) {
       void this.persistVitals(me);
       me.joined = false;
@@ -2115,7 +2118,7 @@ export class Room extends DurableObject<Env> {
   /** 入室を拒否してエラーを返し、切断する */
   private refuse(ws: WebSocket, message: string) {
     this.send(ws, { t: "error", message });
-    this.left.add(ws);
+    this.leave(ws);
     try { ws.close(4002, "refused"); } catch { /* already closed */ }
   }
 

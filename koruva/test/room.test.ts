@@ -1,4 +1,4 @@
-import { B, MINECRAFT_ITEM_TO_RUNTIME_ID, POTION_VARIANT_ITEM_IDS } from "../shared/blocks";
+import { B, BLOCKS, MINECRAFT_ITEM_TO_RUNTIME_ID, POTION_VARIANT_ITEM_IDS } from "../shared/blocks";
 // Durable Object (Room) のロジックを、Cloudflare ランタイムの簡易モックで検証する
 const OrigResponse = Response;
 (globalThis as any).Response = class extends OrigResponse {
@@ -367,6 +367,41 @@ ok(r.status === 409, "満員は 409");
 const none: any = new Room(makeCtx(new Map()) as any, {} as any);
 await (globalThis as any).__pending;
 ok((await none.fetch(wsReq())).status === 404, "存在しないルームは 404");
+
+// ---- 大きな hello と拒否済みソケットの後始末 ----
+{
+  const largeStore = new Map<string, any>();
+  const largeRoom: any = new Room(makeCtx(largeStore) as any, {} as any);
+  await (globalThis as any).__pending;
+  await largeRoom.create("LARGE1", 11, "creative", HOST_TOKEN);
+  await largeRoom.fetch(wsReq());
+  const largeSocket = largeRoom.ctx.sockets[largeRoom.ctx.sockets.length - 1] as FakeSocket;
+  const counts = new Array(BLOCKS.length).fill(0);
+  counts[B.STONE] = 1;
+  const hello = JSON.stringify({ t: "hello", name: "LargeHello", skin: {}, counts, hostToken: HOST_TOKEN });
+  ok(hello.length > 4096 && hello.length < 262144, "大きな hello のサイズは通常メッセージ上限を超える");
+  await largeRoom.webSocketMessage(largeSocket, hello);
+  ok(largeSocket.inbox.some((m: any) => m.t === "init") && largeSocket.inbox.some((m: any) => m.t === "edits" && m.done), "大きな hello でも入室・初期同期できる");
+
+  const stackPayload = JSON.stringify({
+    t: "stack-data",
+    stackData: { "hotbar:0": { itemId: B.STONE, count: 1, customName: "Long payload accepted" } },
+    padding: "x".repeat(5000),
+  });
+  ok(stackPayload.length > 4096 && stackPayload.length < 32768, "stack-data は通常メッセージより大きい上限を使う");
+  await largeRoom.webSocketMessage(largeSocket, stackPayload);
+  ok(largeRoom.player(largeSocket).stackData["hotbar:0"]?.customName === "Long payload accepted", "大きな stack-data を受理して反映する");
+
+  const refusedSocket = await connect(largeRoom, "Invalid Name");
+  ok(refusedSocket.closed && !largeRoom.mem.has(refusedSocket), "名前拒否時にソケット状態も即座に解放する");
+  await largeRoom.webSocketClose(refusedSocket);
+  ok(!largeRoom.mem.has(refusedSocket), "拒否済みソケットの close 後も mem に残らない");
+
+  await largeRoom.fetch(wsReq());
+  const oversizedSocket = largeRoom.ctx.sockets[largeRoom.ctx.sockets.length - 1] as FakeSocket;
+  await largeRoom.webSocketMessage(oversizedSocket, JSON.stringify({ t: "hello", name: "TooLarge", skin: {}, padding: "x".repeat(262144) }));
+  ok(oversizedSocket.closed && !largeRoom.mem.has(oversizedSocket), "上限超過 hello は切断して接続枠を解放する");
+}
 
 console.log(fail ? `${fail} FAILED` : "ALL PASSED");
 process.exit(fail ? 1 : 0);

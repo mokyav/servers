@@ -2152,6 +2152,12 @@ class Game {
         this.chat.add(`ディメンションを切り替えました: ${m.dimensionId}`);
         break;
       }
+      case "edits": {
+        // Initial room entry is handled by startRoom's progress-aware listener.
+        // Subsequent dimension transfers arrive through this regular message path.
+        this.world.importEdits(m.list);
+        break;
+      }
       case "join":
         this.remotes.add(m.player);
         this.chat.add(`${m.player.name} が入室しました`);

@@ -151,6 +151,7 @@ class Game {
   pitch = 0;
   fly = false;
   thirdPerson = false;
+  thirdPersonFront = false;
   keys = new Set<string>();
   private physicalKeys = new Set<string>();
   private mobileKeys = new Set<string>();
@@ -661,7 +662,20 @@ class Game {
       if (/^Digit[1-9]$/.test(e.code)) { this.sel = +e.code.slice(5) - 1; this.hotbarUI.refresh(); this.showHeld(); }
       else if (e.code === "KeyE") { e.preventDefault(); this.openInventory(); }
       else if (e.code === "KeyT" || e.code === "Enter" || e.code === "NumpadEnter") { e.preventDefault(); this.openChat(); }
-      else if (e.code === "KeyV") { this.thirdPerson = !this.thirdPerson; toast(this.thirdPerson ? "三人称視点" : "一人称視点"); }
+      else if (e.code === "KeyV") {
+        if (!this.thirdPerson) {
+          this.thirdPerson = true;
+          this.thirdPersonFront = false;
+          toast("三人称視点");
+        } else if (!this.thirdPersonFront) {
+          this.thirdPersonFront = true;
+          toast("三人称視点（前）");
+        } else {
+          this.thirdPerson = false;
+          this.thirdPersonFront = false;
+          toast("一人称視点");
+        }
+      }
       else if (e.code === "Space") {
         const elytraId = MINECRAFT_ITEM_TO_RUNTIME_ID["minecraft:elytra"] ?? 0;
         if (!this.body.onGround && this.body.vy < -0.05 && this.armorSlots[1] === elytraId && this.elytraDamage < 432 && !this.fallFlying) {
@@ -3092,16 +3106,21 @@ class Game {
       if (this.mouseR && now - this.lastPlace > 220) { this.doPlace(); this.lastPlace = now; }
     } else if (this.survival) this.stopDig();
 
-    // カメラ
+    // カメラ: Vキーで一人称 → 三人称 → 三人称（前）を循環する。
     const cx = b.x, cy = b.y + this.eyeH, cz = b.z;
-    this.camera.rotation.set(this.pitch, this.yaw, 0);
     if (this.thirdPerson) {
       const dx = Math.sin(this.yaw) * Math.cos(this.pitch), dy = -Math.sin(this.pitch), dz = Math.cos(this.yaw) * Math.cos(this.pitch);
-      // 視線の後ろ方向に最大4ブロック、壁があれば手前で止める
-      const h = raycast(this.world, cx, cy, cz, dx, dy, dz, 4);
+      const side = this.thirdPersonFront ? -1 : 1;
+      const ox = dx * side, oy = dy * side, oz = dz * side;
+      // カメラとプレイヤーの間に壁がある場合は、壁の手前まで距離を短縮する。
+      const h = raycast(this.world, cx, cy, cz, ox, oy, oz, 4);
       const dist = h ? Math.max(0.5, Math.hypot(h.x + 0.5 - cx, h.y + 0.5 - cy, h.z + 0.5 - cz) - 0.9) : 4;
-      this.camera.position.set(cx + dx * dist, cy + dy * dist, cz + dz * dist);
-    } else this.camera.position.set(cx, cy, cz);
+      this.camera.rotation.set(this.thirdPersonFront ? -this.pitch : this.pitch, this.yaw + (this.thirdPersonFront ? Math.PI : 0), 0);
+      this.camera.position.set(cx + ox * dist, cy + oy * dist, cz + oz * dist);
+    } else {
+      this.camera.rotation.set(this.pitch, this.yaw, 0);
+      this.camera.position.set(cx, cy, cz);
+    }
   }
 
   updateTarget(now: number) {

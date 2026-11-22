@@ -1,4 +1,4 @@
-import { B, MINECRAFT_ITEM_TO_RUNTIME_ID, POTION_VARIANT_ITEM_IDS } from "../shared/blocks";
+import { B, BLOCKS, MINECRAFT_ITEM_TO_RUNTIME_ID, POTION_VARIANT_ITEM_IDS } from "../shared/blocks";
 // Durable Object (Room) のロジックを、Cloudflare ランタイムの簡易モックで検証する
 const OrigResponse = Response;
 (globalThis as any).Response = class extends OrigResponse {
@@ -367,6 +367,26 @@ ok(r.status === 409, "満員は 409");
 const none: any = new Room(makeCtx(new Map()) as any, {} as any);
 await (globalThis as any).__pending;
 ok((await none.fetch(wsReq())).status === 404, "存在しないルームは 404");
+
+// ---- 大きな hello と拒否済みソケットの後始末 ----
+{
+  const largeStore = new Map<string, any>();
+  const largeRoom: any = new Room(makeCtx(largeStore) as any, {} as any);
+  await (globalThis as any).__pending;
+  await largeRoom.create("LARGE1", 11);
+  await largeRoom.fetch(wsReq());
+  const largeSocket = largeRoom.ctx.sockets[largeRoom.ctx.sockets.length - 1] as FakeSocket;
+  const counts = new Array(BLOCKS.length).fill(0);
+  const hello = JSON.stringify({ t: "hello", name: "LargeHello", skin: {}, counts });
+  ok(hello.length > 4096 && hello.length < 262144, "大きな hello のサイズは通常メッセージ上限を超える");
+  await largeRoom.webSocketMessage(largeSocket, hello);
+  ok(largeSocket.inbox.some((m: any) => m.t === "init") && largeSocket.inbox.some((m: any) => m.t === "edits" && m.done), "大きな hello でも入室・初期同期できる");
+
+  const refusedSocket = await connect(largeRoom, "Invalid Name");
+  ok(largeRoom.mem.has(refusedSocket), "拒否直後はソケット状態が一時保持される");
+  await largeRoom.webSocketClose(refusedSocket);
+  ok(!largeRoom.mem.has(refusedSocket), "拒否済みソケットの close 後に mem から削除される");
+}
 
 console.log(fail ? `${fail} FAILED` : "ALL PASSED");
 process.exit(fail ? 1 : 0);

@@ -150,12 +150,14 @@ export class ChunkView {
   readyRatio(px: number, pz: number, radius: number): number {
     const pcx = Math.floor(px / CHUNK_SIZE), pcz = Math.floor(pz / CHUNK_SIZE);
     let total = 0, ready = 0;
-    for (let dz = -radius; dz <= radius; dz++) for (let dx = -radius; dx <= radius; dx++) {
+    // Match the exact ring used by generation and meshing. A square check would
+    // include corner chunks that the ring scheduler intentionally never requests.
+    for (const [dx, dz] of this.ring(radius)) {
       total++;
       const c = this.world.getChunk(pcx + dx, pcz + dz);
       if (c && !c.dirty && this.entries.has(chunkKey(c.cx, c.cz))) ready++;
     }
-    return ready / total;
+    return total > 0 ? ready / total : 1;
   }
 
   private ringCache = new Map<number, [number, number][]>();

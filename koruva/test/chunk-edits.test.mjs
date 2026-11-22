@@ -85,3 +85,34 @@ test("streaming edit iterator rejects invalid configuration and ignores malforme
   ]);
   assert.deepEqual([...iterateChunkEdits(chunks, 2)], [[3, 0, 2, 11]]);
 });
+
+
+test("bounded chunk edit batches cap payloads and emit progress for empty chunks", async () => {
+  const { iterateChunkEditBatches } = await import("../shared/chunk-edits.js");
+  const chunks = new Map([
+    ["-1,2", new Uint16Array([NO_EDIT, 7, NO_EDIT, NO_EDIT, 9, NO_EDIT, NO_EDIT, NO_EDIT])],
+    ["0,-1", new Uint16Array([NO_EDIT, NO_EDIT, 5, NO_EDIT, NO_EDIT, NO_EDIT, NO_EDIT, NO_EDIT])],
+    ["1,1", new Uint16Array(8).fill(NO_EDIT)],
+  ]);
+  const batches = [...iterateChunkEditBatches(chunks, 2, NO_EDIT_U16, 1, 1)];
+  assert.ok(batches.every((batch) => batch.length <= 4 && batch.length % 4 === 0));
+  assert.deepEqual(batches.filter((batch) => batch.length > 0), [
+    [-1, 0, 2, 7],
+    [-2, 1, 2, 9],
+    [0, 0, -1, 5],
+  ]);
+  assert.equal(batches.filter((batch) => batch.length === 0).length, 3);
+});
+
+test("empty dimension chunk maps still produce a completion-capable empty batch", async () => {
+  const { iterateChunkEditBatches } = await import("../shared/chunk-edits.js");
+  assert.deepEqual([...iterateChunkEditBatches(new Map(), 16)], []);
+  const emptyChunk = new Map([["0,0", new Uint16Array(16 * 16 * 2).fill(NO_EDIT_U16)]]);
+  assert.deepEqual([...iterateChunkEditBatches(emptyChunk, 16, NO_EDIT_U16, 3000, 1)], [[]]);
+});
+
+test("bounded chunk edit batches reject invalid batch settings", async () => {
+  const { iterateChunkEditBatches } = await import("../shared/chunk-edits.js");
+  assert.throws(() => [...iterateChunkEditBatches(new Map(), 16, NO_EDIT_U16, 0)], /options/);
+  assert.throws(() => [...iterateChunkEditBatches(new Map(), 16, NO_EDIT_U16, 10, 0)], /options/);
+});

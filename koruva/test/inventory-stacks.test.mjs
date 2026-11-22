@@ -10,7 +10,15 @@ test("stack limits follow common Java item categories", () => {
   assert.equal(maxStackSizeForItemKey("minecraft:ender_pearl"), 16);
   assert.equal(maxStackSizeForItemKey("minecraft:bucket"), 16);
   assert.equal(maxStackSizeForItemKey("minecraft:water_bucket"), 1);
-  assert.equal(maxStackSizeForItemKey("minecraft:oak_boat"), 16);
+  // Java boats/rafts and all minecart variants are non-stackable.
+  assert.equal(maxStackSizeForItemKey("minecraft:oak_boat"), 1);
+  assert.equal(maxStackSizeForItemKey("minecraft:oak_chest_boat"), 1);
+  assert.equal(maxStackSizeForItemKey("minecraft:bamboo_raft"), 1);
+  assert.equal(maxStackSizeForItemKey("minecraft:bamboo_chest_raft"), 1);
+  assert.equal(maxStackSizeForItemKey("minecraft:minecart"), 1);
+  assert.equal(maxStackSizeForItemKey("minecraft:hopper_minecart"), 1);
+  assert.equal(maxStackSizeForItemKey("minecraft:tnt_minecart"), 1);
+  assert.equal(maxStackSizeForItemKey("minecraft:command_block_minecart"), 1);
   assert.equal(maxStackSizeForItemKey("minecraft:oak_planks"), 64);
 });
 

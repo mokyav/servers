@@ -1,3 +1,9 @@
+## 2026-11-22 — Stage 7 existing-room re-entry regression
+
+- Added a regression test for the room-init dimension/transform payload and client restoration order (`test/room-entry-world-state.test.mjs`).
+- Direct source-level regression assertions against the current GitHub files: 6/6 passed.
+- Full Node suite, TypeScript typecheck, Vite/Workers build, deployment, and browser/WebGL multiplayer QA were not run in this editing session.
+
 ## 2026-11-22 — Cycle28 / Stage6 / Mobfix 再統合・復旧
 
 - `node --experimental-strip-types --test test/*.test.mjs`: 327 tests passed / 327 total, 0 failed.

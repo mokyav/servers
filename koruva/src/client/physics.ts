@@ -195,7 +195,10 @@ export function raycast(
     const def = BLOCKS[id];
     if (id <= 0 || !def || def.render === "liquid" || (!def.solid && (!def.placeable || def.itemOnly))) continue;
     const modelMask = getModelCollisionMask(id);
-    if (modelMask) {
+    // Some vanilla cutout models (saplings/flowers) are zero-thickness crossed
+    // planes. Their volume mask is intentionally empty, so use the plant fallback
+    // below for targeting rather than treating the model as unselectable.
+    if (modelMask && !modelMask.empty) {
       const resolution = MODEL_COLLISION_RESOLUTION;
       const qx = Math.max(0, Math.min(resolution - 1, Math.floor((px - x) * resolution)));
       const qy = Math.max(0, Math.min(resolution - 1, Math.floor((py - y) * resolution)));

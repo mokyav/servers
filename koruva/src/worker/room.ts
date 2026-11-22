@@ -887,7 +887,8 @@ export class Room extends DurableObject<Env> {
           const loot = rollFishingLootEntry(getItemEnchantment(enchants, active.rodItemId, "luck_of_the_sea"), Math.random, { openWater: active.openWater, biome: active.biome });
           const lootId = MINECRAFT_ITEM_TO_RUNTIME_ID[`minecraft:${loot.itemKey}`] ?? MINECRAFT_ITEM_TO_RUNTIME_ID["minecraft:cod"] ?? 0;
           const lootCount = Math.max(1, Math.floor(loot.count ?? 1));
-          if (lootId <= 0 || addInventoryItems(me, lootId, lootCount) !== lootCount) { this.sys(ws, "インベントリに空きがありません"); return; }
+          if (lootId <= 0 || inventoryCapacityFor(me, lootId) < lootCount) { this.sys(ws, "インベントリに空きがありません"); return; }
+          addInventoryItems(me, lootId, lootCount);
           const experience = addExperience(me.vitals.experience ?? 0, 1 + Math.floor(Math.random() * 6));
           me.vitals.experience = experience;
           this.fishingSessions.delete(ownerKey);

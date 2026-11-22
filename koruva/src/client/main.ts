@@ -986,6 +986,10 @@ class Game {
     return inventoryStorageCapacity(this.stackData, id, BLOCKS, this.counts[id] ?? 0, incoming);
   }
 
+  private craftOutputMaxCount(id: number): number {
+    return Math.max(0, (this.counts[id] ?? 0) + this.storageCapacity(id, null));
+  }
+
   private slotValue(slot: InventorySlotRef): number {
     if (slot.type === "hotbar") return this.hotbar[slot.index] ?? 0;
     if (slot.type === "main") return this.mainInventory[slot.index] ?? 0;
@@ -1499,7 +1503,7 @@ class Game {
     const creative = this.gameMode === "creative";
     const grid = this.inventoryCraftGrid();
     for (const recipe of CRAFT_RECIPES) {
-      if (craftFromGrid(this.counts, recipe.id, grid, CRAFT_RECIPES, { creative, maxStack: 64 }).ok) return recipe;
+      if (craftFromGrid(this.counts, recipe.id, grid, CRAFT_RECIPES, { creative, maxStack: 64, maxCount: this.craftOutputMaxCount(recipe.output.itemId) }).ok) return recipe;
     }
     return null;
   }
@@ -1520,11 +1524,11 @@ class Game {
       this.net.send({ t: "craft", recipeId: recipe.id, grid });
       return;
     }
-    const result = craftFromGrid(this.counts, recipe.id, grid, CRAFT_RECIPES, { creative: this.gameMode === "creative", maxStack: 64 });
+    const result = craftFromGrid(this.counts, recipe.id, grid, CRAFT_RECIPES, { creative: this.gameMode === "creative", maxStack: 64, maxCount: this.craftOutputMaxCount(recipe.output.itemId) });
     if (!result.ok) { toast("材料が不足しているか、所持数の上限です"); return; }
     this.counts.splice(0, this.counts.length, ...result.counts);
     if (this.gameMode !== "creative") this.consumeOneCraftGridBatch();
-    this.syncInventorySlots(); this.hotbarUI.refresh(); this.autosave(true);
+    this.syncInventorySlots(); this.hotbarUI.refresh(); this.sendStackData(); this.autosave(true);
     this.renderInventorySlots(); this.renderCrafting();
   }
 
@@ -1532,7 +1536,7 @@ class Game {
     if (!this.workbenchOpen || this.gameMode === "spectator" || !this.workbenchGrid.some(id => id > 0)) return null;
     const creative = this.gameMode === "creative";
     for (const recipe of CRAFT_RECIPES) {
-      if (craftFromGrid(this.counts, recipe.id, this.workbenchGrid, CRAFT_RECIPES, { creative, maxStack: 64 }).ok) return recipe;
+      if (craftFromGrid(this.counts, recipe.id, this.workbenchGrid, CRAFT_RECIPES, { creative, maxStack: 64, maxCount: this.craftOutputMaxCount(recipe.output.itemId) }).ok) return recipe;
     }
     return null;
   }
@@ -1557,11 +1561,11 @@ class Game {
       this.pendingCraftWorkbench = true;
       return;
     }
-    const result = craftFromGrid(this.counts, recipe.id, grid, CRAFT_RECIPES, { creative: this.gameMode === "creative", maxStack: 64 });
+    const result = craftFromGrid(this.counts, recipe.id, grid, CRAFT_RECIPES, { creative: this.gameMode === "creative", maxStack: 64, maxCount: this.craftOutputMaxCount(recipe.output.itemId) });
     if (!result.ok) { toast("材料が不足しているか、所持数の上限です"); return; }
     this.counts.splice(0, this.counts.length, ...result.counts);
     this.consumeWorkbenchGridBatch();
-    this.syncInventorySlots(); this.hotbarUI.refresh(); this.autosave(true);
+    this.syncInventorySlots(); this.hotbarUI.refresh(); this.sendStackData(); this.autosave(true);
     this.renderInventorySlots(); this.renderCrafting();
   }
 
@@ -1647,7 +1651,7 @@ class Game {
           this.net.send({ t: "craft", recipeId: recipe.id, grid });
           return;
         }
-        const result = craftFromGrid(this.counts, recipe.id, grid, CRAFT_RECIPES, { creative, maxStack: 64 });
+        const result = craftFromGrid(this.counts, recipe.id, grid, CRAFT_RECIPES, { creative, maxStack: 64, maxCount: this.craftOutputMaxCount(recipe.output.itemId) });
         if (!result.ok) { toast("材料が不足しているか、所持数の上限です"); return; }
         this.counts.splice(0, this.counts.length, ...result.counts);
         this.autosave(true);
@@ -2130,7 +2134,7 @@ class Game {
         this.counts = incomingCounts;
         if (m.clearHotbar) { this.hotbar = new Array(9).fill(0); this.autosave(true); }
         else this.pruneHotbar();
-        this.syncInventorySlots(); this.hotbarUI.refresh();
+        this.syncInventorySlots(); this.hotbarUI.refresh(); this.sendStackData();
         if (this.state === "inventory") { this.renderCrafting(); this.renderInventorySlots(); }
         if (this.state === "furnace") this.renderFurnacePanel();
         break;

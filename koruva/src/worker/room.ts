@@ -125,6 +125,12 @@ interface PlayerState {
   deathDropsHandled?: boolean;
 }
 
+/** Durable Object の WebSocket attachment は16KiB上限。countsは正の所持数だけ保存する。 */
+interface PlayerAttachment extends Omit<PlayerState, "counts"> {
+  counts: number[];
+  countsEncoding: "sparse-v1";
+}
+
 const EDIT_BATCH = 3000;
 const MAX_DROPS = 300;
 const MAX_MOBS = 100;
@@ -345,15 +351,44 @@ export class Room extends DurableObject<Env> {
       chatB: { tokens: 5, last: now },
       vitals: createVitals(this.meta?.mode ?? "creative"), counts: new Array(BLOCKS.length).fill(0), armorSlots: [0, 0, 0, 0], itemEnchantments: {}, stackData: {}, elytraDamage: 0, fallFlying: false, lastPosAt: now, lastJumpAt: 0, lastDamageAt: 0, sprint: false, swimming: false,
     };
-    server.serializeAttachment(st);
+    this.serializePlayer(server, st);
     this.mem.set(server, st);
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  private encodePlayerAttachment(st: PlayerState): PlayerAttachment {
+    const sparseCounts: number[] = [];
+    for (let id = 1; id < st.counts.length; id++) {
+      const count = st.counts[id];
+      if (Number.isSafeInteger(count) && count > 0) sparseCounts.push(id, count);
+    }
+    const { counts: _counts, ...rest } = st;
+    return { ...rest, counts: sparseCounts, countsEncoding: "sparse-v1" };
+  }
+
+  private decodePlayerAttachment(raw: unknown): PlayerState | null {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const attachment = raw as Record<string, unknown>;
+    // 旧形式(countsが通常配列)も読み込めるようにして、接続中の既存Socketを壊さない。
+    if (attachment.countsEncoding !== "sparse-v1") return raw as PlayerState;
+
+    const counts = new Array(BLOCKS.length).fill(0);
+    if (Array.isArray(attachment.counts)) {
+      for (let i = 0; i + 1 < attachment.counts.length; i += 2) {
+        const id = attachment.counts[i], count = attachment.counts[i + 1];
+        if (typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0 || id >= BLOCKS.length) continue;
+        if (typeof count !== "number" || !Number.isSafeInteger(count) || count <= 0 || count > MAX_STACK) continue;
+        counts[id] = count;
+      }
+    }
+    const { countsEncoding: _encoding, ...rest } = attachment;
+    return { ...rest, counts } as unknown as PlayerState;
   }
 
   private player(ws: WebSocket): PlayerState {
     let p = this.mem.get(ws);
     if (!p) {
-      const a = ws.deserializeAttachment() as PlayerState | null;
+      const a = this.decodePlayerAttachment(ws.deserializeAttachment());
       p = a ?? {
         id: crypto.randomUUID().slice(0, 8), name: "Player", skin: DEFAULT_SKIN, p: [0, 40, 0], r: [0, 0],
         joined: false, dimensionId: DIMENSION_IDS.OVERWORLD, host: false, cid: "", ip: "",
@@ -449,7 +484,7 @@ export class Room extends DurableObject<Env> {
         me.r = sanitizeRot(msg.r, [0, 0]);
       }
       me.joined = true;
-      ws.serializeAttachment(me);
+      this.serializePlayer(ws, me);
       if (me.cid) await this.persistVersionedPlayerSave(me);
       await this.persistPlayerLocation(me);
 
@@ -2107,7 +2142,10 @@ export class Room extends DurableObject<Env> {
     for(const ws of this.ctx.getWebSockets()){const cur=this.mem.get(ws);if(cur?.id===st.id){this.serializePlayer(ws,st);break;}}
   }
 
-  private serializePlayer(ws: WebSocket, st: PlayerState) { try { ws.serializeAttachment(st); } catch { /* closed socket */ } }
+  private serializePlayer(ws: WebSocket, st: PlayerState) {
+    try { ws.serializeAttachment(this.encodePlayerAttachment(st)); }
+    catch (error) { console.warn("[Koruva WS] player attachment serialization failed", error); }
+  }
 
   private sendStats(st: PlayerState, event?: "death" | "respawn") {
     this.broadcast({ t: "stats", id: st.id, vitals: st.vitals, event });

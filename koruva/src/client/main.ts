@@ -286,7 +286,7 @@ class Game {
 
     this.hotbarUI = new Hotbar(
       this.atlas,
-      () => ({ hotbar: this.hotbar, sel: this.sel, count: (id) => this.countOf(id), stackData: this.stackData }),
+      () => ({ hotbar: this.hotbar, hotbarCounts: this.hotbarAmounts, sel: this.sel, survival: this.survival, stackData: this.stackData }),
       (i) => { this.sel = i; this.hotbarUI.refresh(); },
       (id) => {
         if (this.survival && this.counts[id] <= 0) return;

@@ -264,6 +264,7 @@ class Game {
     const textureLoader = new THREE.TextureLoader();
     this.breakTextures = Array.from({ length: 10 }, (_, i) => {
       const texture = textureLoader.load(`/assets/minecraft/textures/block/destroy_stage_${i}.png`);
+      texture.colorSpace = THREE.SRGBColorSpace;
       texture.magFilter = THREE.NearestFilter;
       texture.minFilter = THREE.NearestFilter;
       texture.generateMipmaps = false;

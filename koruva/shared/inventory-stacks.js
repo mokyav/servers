@@ -1,17 +1,31 @@
+import { MINECRAFT_ITEM_STACK_SIZES } from "./minecraft-item-stack-sizes.js";
+
 /** Minecraft-like stack sizing and storage-capacity helpers. */
 const HOTBAR_SLOTS = 9;
 const MAIN_SLOTS = 27;
 export const PLAYER_STORAGE_SLOT_COUNT = HOTBAR_SLOTS + MAIN_SLOTS;
 export const PLAYER_TOTAL_SLOT_COUNT = PLAYER_STORAGE_SLOT_COUNT + 4 + 1 + 4 + 9 + 1; // armor, offhand, crafting, table, cursor
 
+/**
+ * Resolve vanilla Java items from the versioned registry rather than guessing
+ * from name fragments (e.g. spawn eggs, banner patterns and boats overlap).
+ * Custom namespaces keep conservative category fallbacks for Koruva items.
+ */
 export function maxStackSizeForItemKey(key = "") {
   const id = String(key).toLowerCase();
-  if (/(?:_sword|_pickaxe|_axe|_shovel|_hoe|_spear|_helmet|_chestplate|_leggings|_boots|_mace|_horse_armor|_shulker_box|_boat)$/.test(id)
-    || /(?:^|:)(?:bow|crossbow|trident|shield|elytra|fishing_rod|flint_and_steel|shears|carrot_on_a_stick|warped_fungus_on_a_stick|brush|spyglass|compass|clock|recovery_compass|water_bucket|lava_bucket|milk_bucket|powder_snow_bucket|cod_bucket|salmon_bucket|tropical_fish_bucket|pufferfish_bucket|axolotl_bucket|tadpole_bucket|minecart|chest_minecart|furnace_minecart|saddle|totem_of_undying|name_tag|lead|goat_horn|bundle|enchanted_book|written_book|knowledge_book|filled_map|mace)$/.test(id)
-    || /(?:^|:)(?:potion|splash_potion|lingering_potion)$/.test(id)
+  if (id.startsWith("minecraft:")) {
+    const itemPath = id.slice("minecraft:".length);
+    return MINECRAFT_ITEM_STACK_SIZES[itemPath] ?? 64;
+  }
+
+  const itemPath = id.includes(":") ? id.slice(id.indexOf(":") + 1) : id;
+  if (/(?:_sword|_pickaxe|_axe|_shovel|_hoe|_spear|_helmet|_chestplate|_leggings|_boots|_mace|_horse_armor|_shulker_box|_boat|_raft|_bed|_bundle)$/.test(itemPath)
+    || /^(?:bow|crossbow|trident|shield|elytra|fishing_rod|flint_and_steel|shears|carrot_on_a_stick|warped_fungus_on_a_stick|brush|spyglass|water_bucket|lava_bucket|milk_bucket|powder_snow_bucket|cod_bucket|salmon_bucket|tropical_fish_bucket|pufferfish_bucket|axolotl_bucket|tadpole_bucket|sulfur_cube_bucket|(?:[a-z0-9_]+_)?minecart|saddle|totem_of_undying|goat_horn|bundle|enchanted_book|writable_book|knowledge_book|debug_stick|music_disc_[a-z0-9_]+|potion|splash_potion|lingering_potion|beetroot_soup|mushroom_stew|rabbit_stew|suspicious_stew|cake)$/.test(itemPath)
     || id.startsWith("koruva:potion_")) return 1;
-  if (/(?:ender_pearl|snowball|egg|honey_bottle|sign|banner|armor_stand)$/.test(id)) return 16;
-  if (/(?:^|:)bucket$/.test(id)) return 16;
+
+  if (/^(?:bucket|ender_pearl|snowball|egg|blue_egg|brown_egg|honey_bottle|armor_stand)$/.test(itemPath)
+    || /(?:_sign|_hanging_sign|_banner|_cushion)$/.test(itemPath)) return 16;
+
   return 64;
 }
 

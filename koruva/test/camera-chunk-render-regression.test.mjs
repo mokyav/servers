@@ -31,3 +31,14 @@ test("urgent chunk remeshing shares the per-frame mesh budget", () => {
   assert.match(urgent, /this\.mesh\(c\);\s*meshed\+\+/);
   assert.match(normal, /if \(meshed >= meshBudget\) break/);
 });
+
+
+test("initial loading waits for every chunk in the visible streaming ring", () => {
+  const main = read("../src/client/main.ts");
+  const chunkView = read("../src/client/chunkview.ts");
+  assert.match(main, /readyRatio\(this\.body\.x, this\.body\.z, this\.view\.renderDistance\)/);
+  assert.match(main, /if \(r >= 1\) this\.finishLoading\(\)/);
+  assert.doesNotMatch(main, /r >= 0\.99 \|\| performance\.now\(\) - this\.loadStart > 10000/);
+  assert.match(chunkView, /for \(const \[dx, dz\] of this\.ring\(radius\)\)/);
+  assert.match(chunkView, /return total > 0 \? ready \/ total : 1/);
+});

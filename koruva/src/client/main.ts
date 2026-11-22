@@ -1833,6 +1833,8 @@ class Game {
     this.pending.clear();
     const saved = loadRoomPlayer(code);
     let gotInit = false;
+    let roomEntryPosition: [number, number, number] | null = null;
+    let roomEntryRotation: [number, number] | null = null;
     const done = new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("ルームの読み込みがタイムアウトしました")), 20000);
       this.net.onMessage = (m) => {
@@ -1843,7 +1845,12 @@ class Game {
           this.isHost = m.host;
           this.fly = m.mode === "creative" || m.mode === "spectator";
           if (m.vitals) this.applyVitals(m.vitals);
-          this.world.reset(m.seed, normalizeWorldgenVersion(m.worldgenVersion ?? LEGACY_WORLDGEN_VERSION));
+          // The server owns the player's saved dimension and transform. Do not inherit the
+          // previous local World.dimensionId when joining a different room or re-entering.
+          const initDimensionId = typeof m.dimensionId === "string" ? m.dimensionId : DIMENSION_IDS.OVERWORLD;
+          roomEntryPosition = m.p && m.p.every((value) => Number.isFinite(value)) ? [...m.p] : null;
+          roomEntryRotation = m.r && m.r.every((value) => Number.isFinite(value)) ? [...m.r] : null;
+          this.world.reset(m.seed, normalizeWorldgenVersion(m.worldgenVersion ?? LEGACY_WORLDGEN_VERSION), initDimensionId);
           this.view.clear();
           this.remotes.clear();
           this.t0 = m.t0;
@@ -1881,6 +1888,13 @@ class Game {
     if (saved) this.applyPlayerSave(saved, true); else {
       this.setSpawn(); this.counts = serverCounts; this.armorSlots = serverArmorSlots;
       this.syncInventorySlots(); this.sendEquipment();
+    }
+    // applyPlayerSave/setSpawn may restore stale client coordinates; the room init snapshot
+    // is authoritative and matches the dimension whose edit list was just received.
+    if (roomEntryPosition) {
+      const [x, y, z] = roomEntryPosition;
+      this.body = { x, y, z, vx: 0, vy: 0, vz: 0, onGround: false };
+      if (roomEntryRotation) { this.yaw = roomEntryRotation[0]; this.pitch = roomEntryRotation[1]; }
     }
     this.sendStackData();
     this.time = this.roomTime();

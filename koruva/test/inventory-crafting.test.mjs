@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { playerCraftGridToRecipeGrid, consumePlayerCraftGrid } from "../shared/inventory-crafting.js";
 import { MINECRAFT_ITEM_TO_RUNTIME_ID } from "../shared/minecraft-item-runtime.js";
-import { createCraftRecipes, craftFromGrid } from "../shared/gameplay.js";
+import { createCraftRecipes, craftFromCounts, craftFromGrid } from "../shared/gameplay.js";
 
 const oakPlanks = MINECRAFT_ITEM_TO_RUNTIME_ID["minecraft:oak_planks"];
 const recipes = createCraftRecipes({ OAK_PLANKS: oakPlanks });
@@ -30,4 +30,38 @@ test("2×2 grid accepts a matching crafting-table recipe and rejects 3×3-only s
   assert.ok(stairs);
   const stairGrid = playerCraftGridToRecipeGrid([oakPlanks, 0, oakPlanks, oakPlanks]);
   assert.equal(craftFromGrid(counts, stairs.id, stairGrid, recipes).ok, false);
+});
+
+
+test("crafting enforces the item-specific output stack cap", () => {
+  const recipe = recipes.find((item) => item.id === "minecraft:crafting_table_from_oak_planks");
+  const craftingTable = MINECRAFT_ITEM_TO_RUNTIME_ID["minecraft:crafting_table"];
+  assert.ok(recipe);
+  assert.ok(Number.isInteger(craftingTable) && craftingTable > 0);
+  const grid = playerCraftGridToRecipeGrid([oakPlanks, oakPlanks, oakPlanks, oakPlanks]);
+
+  const almostFull = Array(inventorySize).fill(0);
+  almostFull[oakPlanks] = 4;
+  almostFull[craftingTable] = 63;
+
+  const acceptedGrid = craftFromGrid(almostFull, recipe.id, grid, recipes, { maxCount: 64 });
+  assert.equal(acceptedGrid.ok, true);
+  assert.equal(acceptedGrid.counts[craftingTable], 64);
+
+  const acceptedCounts = craftFromCounts(almostFull, recipe.id, recipes, { maxCount: 64 });
+  assert.equal(acceptedCounts.ok, true);
+  assert.equal(acceptedCounts.counts[craftingTable], 64);
+
+  const full = almostFull.slice();
+  full[craftingTable] = 64;
+
+  const rejectedGrid = craftFromGrid(full, recipe.id, grid, recipes, { maxCount: 64 });
+  assert.equal(rejectedGrid.ok, false);
+  assert.equal(rejectedGrid.reason, "stack_limit");
+  assert.deepEqual(rejectedGrid.counts, full);
+
+  const rejectedCounts = craftFromCounts(full, recipe.id, recipes, { maxCount: 64 });
+  assert.equal(rejectedCounts.ok, false);
+  assert.equal(rejectedCounts.reason, "stack_limit");
+  assert.deepEqual(rejectedCounts.counts, full);
 });

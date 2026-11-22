@@ -31,3 +31,26 @@ test("2×2 grid accepts a matching crafting-table recipe and rejects 3×3-only s
   const stairGrid = playerCraftGridToRecipeGrid([oakPlanks, 0, oakPlanks, oakPlanks]);
   assert.equal(craftFromGrid(counts, stairs.id, stairGrid, recipes).ok, false);
 });
+
+test("crafting enforces the item-specific output stack cap", () => {
+  const recipe = recipes.find((item) => item.id === "minecraft:crafting_table_from_oak_planks");
+  const craftingTable = MINECRAFT_ITEM_TO_RUNTIME_ID["minecraft:crafting_table"];
+  assert.ok(recipe);
+  assert.ok(Number.isInteger(craftingTable) && craftingTable > 0);
+  const grid = playerCraftGridToRecipeGrid([oakPlanks, oakPlanks, oakPlanks, oakPlanks]);
+
+  const almostFull = Array(inventorySize).fill(0);
+  almostFull[oakPlanks] = 4;
+  almostFull[craftingTable] = 63;
+  const accepted = craftFromGrid(almostFull, recipe.id, grid, recipes, { maxCount: 64 });
+  assert.equal(accepted.ok, true);
+  assert.equal(accepted.counts[craftingTable], 64);
+
+  const full = almostFull.slice();
+  full[craftingTable] = 64;
+  const rejected = craftFromGrid(full, recipe.id, grid, recipes, { maxCount: 64 });
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.reason, "stack_limit");
+  assert.deepEqual(rejected.counts, full);
+});
+

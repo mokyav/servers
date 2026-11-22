@@ -15,9 +15,19 @@
 - Legacy and vanilla glass are checked for translucent render-layer routing.
 - Existing tests cover chunk borders, shared-face culling, neighbour invalidation on unload, camera ray targeting, mesh-budget limits, and initial visible-ring readiness.
 
+
+## Follow-up rendering corrections
+
+- Model-backed blocks now count themselves as rendered only after at least one face has actually been emitted. If a model/state reference is missing or empty, the mesher falls back to the block's voxel shape instead of silently omitting the block.
+- Unknown/corrupt block runtime IDs now use a visible stone placeholder rather than throwing during chunk mesh generation and potentially leaving the entire chunk unrendered.
+- Chunk frustum bounds are computed from the actual generated vertices. This handles vanilla models that extend beyond a nominal full-cube box and avoids false frustum culling.
+- Urgent remeshing is restricted to already-meshed chunks inside the visible ring. New or offscreen chunks no longer consume urgent budget ahead of visible near-to-far meshing.
+- Fog end distance now extends beyond the edge of the generated chunk ring, so outer chunks are not fully blended into the sky before reaching the configured render distance.
+- Added regression checks for unknown block IDs, model fallback behavior, computed frustum bounds, fog distance, and visible-only urgent remeshing.
+
 ## Validation status
 
 - Changes are committed to `fix/koruva-camera-chunk-loading-2026-11-22` and included in PR #9.
-- The previous Cloudflare Workers build check reported `failure`. The latest branch head does not currently have a check run attached, so the cause of the earlier failure and the final build status remain unverified.
+- A previous Cloudflare Workers build check reported `failure`. Newer branch revisions have not yet produced a completed check result, so build status remains unverified.
 - The Node test suite, TypeScript typecheck, Vite build, deployed Worker, and live browser/WebGL rendering have not been run from this environment.
 - PR #9 remains open and unmerged; `main` has not been changed.

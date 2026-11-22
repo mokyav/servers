@@ -887,8 +887,7 @@ export class Room extends DurableObject<Env> {
           const loot = rollFishingLootEntry(getItemEnchantment(enchants, active.rodItemId, "luck_of_the_sea"), Math.random, { openWater: active.openWater, biome: active.biome });
           const lootId = MINECRAFT_ITEM_TO_RUNTIME_ID[`minecraft:${loot.itemKey}`] ?? MINECRAFT_ITEM_TO_RUNTIME_ID["minecraft:cod"] ?? 0;
           const lootCount = Math.max(1, Math.floor(loot.count ?? 1));
-          if (lootId <= 0 || (me.counts[lootId] ?? 0) + lootCount > 36 * MAX_STACK) { this.sys(ws, "インベントリに空きがありません"); return; }
-          me.counts[lootId] = Math.min(MAX_STACK, (me.counts[lootId] ?? 0) + lootCount);
+          if (lootId <= 0 || addInventoryItems(me, lootId, lootCount) !== lootCount) { this.sys(ws, "インベントリに空きがありません"); return; }
           const experience = addExperience(me.vitals.experience ?? 0, 1 + Math.floor(Math.random() * 6));
           me.vitals.experience = experience;
           this.fishingSessions.delete(ownerKey);
@@ -967,7 +966,10 @@ export class Room extends DurableObject<Env> {
         if (potion.effectId) addEffect(me.vitals, potion.effectId, potion.durationTicks, potion.amplifier);
         if (gm !== "creative") {
           me.counts[itemId] = Math.max(0, me.counts[itemId] - 1);
-          if (bottleId && bottleId < me.counts.length) me.counts[bottleId] = Math.min(MAX_STACK, (me.counts[bottleId] ?? 0) + 1);
+          if (bottleId && bottleId < me.counts.length && addInventoryItems(me, bottleId, 1) === 0) {
+            // Drinking is still allowed when the inventory is full; the returned empty bottle drops nearby.
+            await this.spawnDrop(me.p[0], me.p[1], me.p[2], bottleId, me.dimensionId, 1);
+          }
           await this.persistInventory(ws, me); this.sendInventory(ws, me);
         }
         await this.persistVitals(me); this.sendStats(me);
@@ -1339,9 +1341,9 @@ export class Room extends DurableObject<Env> {
         if (isXpDrop && (!survival || !xpTransfer || xpTransfer.taken <= 0)) return;
         const rawItem = Number.isSafeInteger(dr.itemId) ? dr.itemId : dr.b;
         const item = survival && !isXpDrop && Number.isSafeInteger(rawItem) && (rawItem ?? 0) > 0 && (rawItem ?? 0) < BLOCKS.length && BLOCKS[rawItem ?? 0] ? rawItem! : 0;
-        const amount = Number.isSafeInteger(dr.count) ? Math.max(1, Math.min(MAX_STACK, dr.count!)) : 1;
-        const current = item > 0 ? Math.max(0, Math.floor(me.counts[item] ?? 0)) : 0;
-        const capacity = item > 0 ? Math.max(0, MAX_STACK - current) : 0;
+        const stackLimit = item > 0 ? itemStackLimit(item) : MAX_STACK;
+        const amount = Number.isSafeInteger(dr.count) ? Math.max(1, Math.min(stackLimit, dr.count!)) : 1;
+        const capacity = item > 0 ? inventoryCapacityFor(me, item) : 0;
         if (item > 0 && capacity === 0) return;
         const taken = item > 0 ? Math.min(amount, capacity) : 0;
         const remaining = item > 0 ? amount - taken : 0;
@@ -1503,7 +1505,7 @@ export class Room extends DurableObject<Env> {
     } else if (msg.action === "take") {
       if (slot !== "input" && slot !== "fuel" && slot !== "output") { this.sendFurnace(ws, saved); return; }
       const currentId = slot === "input" ? saved.state.inputItemId : slot === "fuel" ? saved.state.fuelItemId : saved.state.outputItemId;
-      const available = currentId > 0 ? Math.max(0, MAX_STACK - (me.counts[currentId] ?? 0)) : 0;
+      const available = currentId > 0 ? inventoryCapacityFor(me, currentId) : 0;
       const requested = Number.isSafeInteger(msg.count) ? Math.max(1, Math.min(MAX_STACK, msg.count as number)) : MAX_STACK;
       const taken = removeFurnaceItems(saved.state, slot, Math.min(requested, available));
       if (!taken.ok || taken.moved <= 0 || taken.itemId <= 0) { this.sendFurnace(ws, saved); return; }
@@ -1897,7 +1899,11 @@ export class Room extends DurableObject<Env> {
         const dist=Math.hypot(dx,dy,dz)||1;
         if(dist<1.25) {
           const itemId=projectile.itemId??(MINECRAFT_ITEM_TO_RUNTIME_ID["minecraft:trident"]??0);
-          if(itemId>0) { ownerPlayer.st.counts[itemId]=Math.min(MAX_STACK,(ownerPlayer.st.counts[itemId]??0)+1); await this.persistInventory(ownerPlayer.ws,ownerPlayer.st); this.sendInventory(ownerPlayer.ws,ownerPlayer.st); }
+          if (itemId > 0) {
+            const returned = addInventoryItems(ownerPlayer.st, itemId, 1);
+            if (returned > 0) { await this.persistInventory(ownerPlayer.ws, ownerPlayer.st); this.sendInventory(ownerPlayer.ws, ownerPlayer.st); }
+            else await this.spawnDrop(projectile.x, projectile.y, projectile.z, itemId, projectile.dimensionId, 1);
+          }
           gone.push(eid); continue;
         }
         const speed=34;
@@ -2678,8 +2684,12 @@ export class Room extends DurableObject<Env> {
         return key === normalizedItemKey || key === itemKey || key === customItemKey || (key.endsWith("_north") && key.slice(0, -6) === itemKey);
       });
       if (!itemId) { this.sys(ws, `アイテムが見つかりません: ${rawItem ?? ""}`); return; }
-      for (const t of targets) { t.st.counts[itemId] = Math.min(MAX_STACK, (t.st.counts[itemId] ?? 0) + count); await this.persistInventory(t.ws, t.st); this.sendInventory(t.ws, t.st); }
-      this.sys(ws, `${BLOCKS[itemId].name} を ${targets.length} 人に付与しました`); return;
+      for (const t of targets) {
+        const accepted = addInventoryItems(t.st, itemId, count);
+        if (accepted > 0) { await this.persistInventory(t.ws, t.st); this.sendInventory(t.ws, t.st); }
+        this.sys(ws, `${t.st.name}: ${BLOCKS[itemId].name} ${accepted}/${count} 個を付与`);
+      }
+      return;
     }
     if (cmd === "tp") {
       const self: { ws: WebSocket; st: PlayerState }[] = [{ ws, st: me }];

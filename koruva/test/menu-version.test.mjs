@@ -19,7 +19,7 @@ test("title menu shows the build's Koruva version", async () => {
   assert.equal(pkg.version, "1.0.0");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
-  assert.equal(pkg.version.replace(/\\.0$/, ""), "1.0");
+  assert.equal(pkg.version.split(".").slice(0, 2).join("."), "1.0");
   assert.ok(html.includes('id="game-version" class="game-version">Version 1.0</p>'));
   assert.ok(css.includes("#game-version.game-version {"));
   assert.ok(vite.includes('define: { __KORUVA_VERSION__: JSON.stringify(displayVersion) }'));

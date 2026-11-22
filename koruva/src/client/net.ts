@@ -28,9 +28,14 @@ export class Net {
   onClose: (reason: string) => void = () => {};
 
   connect(code: string, hello: Extract<ClientMsg, { t: "hello" }>): Promise<void> {
+    const previous = this.ws;
+    this.ws = null;
     clearInterval(this.pingTimer);
     clearTimeout(this.connectTimer);
-    this.ws?.close(1000, "replaced");
+    this.pingTimer = 0;
+    this.connectTimer = 0;
+    previous?.close(1000, "replaced");
+
     return new Promise((resolve, reject) => {
       const proto = location.protocol === "https:" ? "wss" : "ws";
       let ws: WebSocket;
@@ -43,24 +48,31 @@ export class Net {
       this.ws = ws;
       let opened = false;
       let settled = false;
+      let connectionTimer = 0;
+      let socketPingTimer = 0;
 
       const failBeforeOpen = (message: string) => {
         if (settled || opened) return;
         settled = true;
-        clearTimeout(this.connectTimer);
-        if (this.ws === ws) this.ws = null;
+        clearTimeout(connectionTimer);
+        if (this.ws === ws) {
+          this.ws = null;
+          this.connectTimer = 0;
+        }
         try { ws.close(); } catch { /* already closed */ }
         reject(new Error(message));
       };
 
-      this.connectTimer = window.setTimeout(() => {
+      connectionTimer = window.setTimeout(() => {
         failBeforeOpen("サーバーへの接続がタイムアウトしました（15秒）");
       }, 15000);
+      this.connectTimer = connectionTimer;
 
       ws.onopen = () => {
         if (settled) return;
         opened = true;
-        clearTimeout(this.connectTimer);
+        clearTimeout(connectionTimer);
+        if (this.ws === ws) this.connectTimer = 0;
         try {
           // Send the handshake on this exact socket and report synchronous send failures.
           ws.send(JSON.stringify(hello));
@@ -71,10 +83,11 @@ export class Net {
           reject(new Error("サーバーへ入室情報を送信できませんでした"));
           return;
         }
-        this.pingTimer = window.setInterval(() => {
+        socketPingTimer = window.setInterval(() => {
           if (ws.readyState !== WebSocket.OPEN) return;
           try { ws.send("ping"); } catch { /* onclose will report the disconnect */ }
         }, 25000);
+        if (this.ws === ws) this.pingTimer = socketPingTimer;
         resolve();
       };
 
@@ -93,13 +106,15 @@ export class Net {
       };
 
       ws.onclose = (event) => {
-        clearTimeout(this.connectTimer);
-        clearInterval(this.pingTimer);
+        clearTimeout(connectionTimer);
+        clearInterval(socketPingTimer);
         console.warn("[Koruva WS] connection closed", { code: event.code, reason: event.reason, wasClean: event.wasClean });
         if (!opened) {
           failBeforeOpen(`サーバーに接続できませんでした (close ${event.code})`);
         } else if (this.ws === ws) {
           this.ws = null;
+          this.pingTimer = 0;
+          this.connectTimer = 0;
           this.onClose("サーバーとの接続が切れました");
         }
       };
@@ -125,6 +140,8 @@ export class Net {
     this.ws = null;
     clearTimeout(this.connectTimer);
     clearInterval(this.pingTimer);
+    this.connectTimer = 0;
+    this.pingTimer = 0;
     ws?.close(1000);
   }
 }

@@ -189,7 +189,7 @@ class Game {
   cursorItem = 0;
   cursorCount = 0;
   private lastInventoryClickAt = 0;
-  private lastInventoryClickKey = "";
+  private lastInventoryClickItem = 0;
   sel = 0;
   // ゲームモード / ホスト
   gameMode: GameMode = "creative";
@@ -983,7 +983,7 @@ class Game {
   private maxInventoryCount(id: number): number { return maxInventoryCountForItemKey(BLOCKS[id]?.key ?? ""); }
 
   private storageCapacity(id: number, incoming: any = null): number {
-    return inventoryStorageCapacity(this.stackData, id, BLOCKS, this.counts[id] ?? 0, incoming);
+    return inventoryStorageCapacity(this.currentStackSnapshot(), id, BLOCKS, this.counts[id] ?? 0, incoming);
   }
 
   private craftOutputMaxCount(id: number): number {
@@ -1149,19 +1149,22 @@ class Game {
     if (!Object.keys(this.stackData).length && Object.keys(this.itemEnchantments).length) this.stackData = migrateLegacyEnchantments(this.itemEnchantments, slots, BLOCKS);
   }
 
-  private sendStackData() {
-    if (this.mode !== "room" || !this.net.connected) return;
+  private currentStackSnapshot(): Record<string, any> {
     const slots = this.currentSlotItems();
-    const out: Record<string, unknown> = Object.create(null);
+    const out: Record<string, any> = Object.create(null);
     for (const [key, slot] of Object.entries(slots)) {
       const old = this.stackData[key];
       out[key] = { ...(old && old.itemId === slot.itemId ? old : {}), itemId: slot.itemId, count: slot.count };
     }
-    // Keep the local component table complete even in solo mode; it is also used to
-    // prevent named/enhanced/damaged stacks from being merged into plain items.
-    this.stackData = normalizeStackComponents(out, slots, BLOCKS);
-    if (this.mode !== "room" || !this.net.connected) return;
-    this.net.send({ t: "stack-data", stackData: this.stackData });
+    return out;
+  }
+
+  private sendStackData() {
+    const slots = this.currentSlotItems();
+    // Keep a complete slot snapshot locally in solo and multiplayer. Capacity checks
+    // must account for plain items too, not only stacks with special components.
+    this.stackData = normalizeStackComponents(this.currentStackSnapshot(), slots, BLOCKS);
+    if (this.mode === "room" && this.net.connected) this.net.send({ t: "stack-data", stackData: this.stackData });
   }
 
   private getStackEnchantments(key: string, itemId: number) {
@@ -1244,10 +1247,10 @@ class Game {
     const cursorMeta = this.stackData[cursorKey] ? { ...this.stackData[cursorKey] } : null;
     if (event.button !== 0 && event.button !== 2) return;
     const now = performance.now();
-    const doubleClick = event.button === 0 && this.lastInventoryClickKey === key && now - this.lastInventoryClickAt <= 350;
-    this.lastInventoryClickKey = key;
+    const doubleClick = event.button === 0 && currentId > 0 && this.lastInventoryClickItem === currentId && now - this.lastInventoryClickAt <= 350;
+    this.lastInventoryClickItem = currentId;
     this.lastInventoryClickAt = now;
-    if (doubleClick && this.cursorItem > 0) {
+    if (doubleClick && this.cursorItem > 0 && currentId === this.cursorItem) {
       this.collectMatchingStacksIntoCursor();
       this.renderInventorySlots(); this.renderCrafting(); this.sendEquipment(); this.sendStackData(); this.autosave(true);
       return;
@@ -1347,7 +1350,7 @@ class Game {
       slot.type === "armor" || slot.type === "offhand" ? ["main", "hotbar"]
       : slot.type === "main" ? ["hotbar"]
       : slot.type === "hotbar" ? ["main"]
-      : ["main"];
+      : ["main", "hotbar"];
     const left = this.moveStackToTypes(id, amount, destinations, metadata);
     if (left === amount) { toast(destinations.includes("hotbar") ? "ホットバーに空きがありません" : "インベントリに空きがありません"); return; }
     this.setSlotStack(slot, left > 0 ? id : 0, left);
@@ -1669,7 +1672,7 @@ class Game {
       const left = this.moveStackToTypes(id, amount, ["main", "hotbar"], metadata);
       this.setSlotStack({ type: "craft-table", index: i }, left > 0 ? id : 0, left);
       if (left > 0 && metadata) this.stackData[sourceKey] = { ...metadata, itemId: id, count: left };
-      if (left > 0) { toast("作業台にアイテムが残っています。インベントリに空きを作ってください"); this.renderInventorySlots(); return; }
+      if (left > 0) { toast("作業台にアイテムが残っています。インベントリに空きを作ってください"); this.renderInventorySlots(); this.sendStackData(); this.autosave(true); return; }
     }
     for (let i = 0; i < 4; i++) {
       const id = this.craftGrid[i] ?? 0, amount = this.craftGridAmounts[i] ?? 0;
@@ -1678,7 +1681,7 @@ class Game {
       const left = this.moveStackToTypes(id, amount, ["main", "hotbar"], metadata);
       this.setSlotStack({ type: "craft", index: i }, left > 0 ? id : 0, left);
       if (left > 0 && metadata) this.stackData[sourceKey] = { ...metadata, itemId: id, count: left };
-      if (left > 0) { toast("クラフト枠にアイテムが残っています。空きを作ってください"); this.renderInventorySlots(); return; }
+      if (left > 0) { toast("クラフト枠にアイテムが残っています。空きを作ってください"); this.renderInventorySlots(); this.sendStackData(); this.autosave(true); return; }
     }
     if (this.cursorItem > 0 && this.cursorCount > 0) {
       const cursorMeta = this.stackData["cursor:0"] ?? null;
@@ -1686,7 +1689,7 @@ class Game {
       const left = this.moveStackToTypes(cursorId, this.cursorCount, ["main", "hotbar"], cursorMeta);
       this.cursorCount = left; if (left <= 0) this.cursorItem = 0;
       this.setCursorStackData(cursorMeta, left);
-      if (left > 0) { toast("インベントリに空きがないため残りをカーソルに保持しています"); this.renderInventorySlots(); return; }
+      if (left > 0) { toast("インベントリに空きがないため残りをカーソルに保持しています"); this.renderInventorySlots(); this.sendStackData(); this.autosave(true); return; }
     }
     $("inventory").hidden = true;
     this.workbenchOpen = false; this.workbenchPos = null;
@@ -2841,6 +2844,7 @@ class Game {
     base.mainInventory = [...this.mainInventory]; base.hotbarAmounts = [...this.hotbarAmounts]; base.mainInventoryAmounts = [...this.mainInventoryAmounts];
     base.armorSlots = [...this.armorSlots]; base.armorAmounts = [...this.armorAmounts]; base.offhand = this.offhand; base.offhandAmount = this.offhandAmount;
     base.craftGrid = [...this.craftGrid]; base.craftGridAmounts = [...this.craftGridAmounts];
+    base.workbenchGrid = [...this.workbenchGrid]; base.workbenchGridAmounts = [...this.workbenchGridAmounts];
     base.cursorItem = this.cursorItem; base.cursorCount = this.cursorCount;
     base.itemEnchantments = this.itemEnchantments; base.stackData = this.stackData; base.elytraDamage = this.elytraDamage;
     return base;

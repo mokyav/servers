@@ -60,3 +60,28 @@ test("record cap and invalid inputs do not write", async () => {
   assert.equal(await writer.apply("new", 0, 1), false); assert.equal(await writer.apply("full", 4, 1), false);
   assert.equal(await writer.apply("full", 0, -1), false); assert.equal(await writer.apply("full", 0, NO_EDIT_U16), false); assert.equal(writes, 0);
 });
+
+
+test("streaming edit iterator preserves negative chunk coordinates and skips sentinel cells", async () => {
+  const { iterateChunkEdits } = await import("../shared/chunk-edits.js");
+  const chunks = new Map([
+    ["-1,2", new Uint16Array([NO_EDIT, 7, NO_EDIT, NO_EDIT, 9, NO_EDIT, NO_EDIT, NO_EDIT])],
+    ["0,-1", new Uint16Array([NO_EDIT, NO_EDIT, 5, NO_EDIT, NO_EDIT, NO_EDIT, NO_EDIT, NO_EDIT])],
+  ]);
+  assert.deepEqual([...iterateChunkEdits(chunks, 2)], [
+    [-1, 0, 2, 7],
+    [-2, 1, 2, 9],
+    [0, 0, -1, 5],
+  ]);
+});
+
+test("streaming edit iterator rejects invalid configuration and ignores malformed records", async () => {
+  const { iterateChunkEdits } = await import("../shared/chunk-edits.js");
+  assert.throws(() => [...iterateChunkEdits([], 16)], /Map/);
+  assert.throws(() => [...iterateChunkEdits(new Map(), 0)], /options/);
+  const chunks = new Map([
+    ["bad", new Uint16Array([1, 2])],
+    ["1,2", new Uint16Array([NO_EDIT, 11, NO_EDIT, NO_EDIT])],
+  ]);
+  assert.deepEqual([...iterateChunkEdits(chunks, 2)], [[3, 0, 2, 11]]);
+});

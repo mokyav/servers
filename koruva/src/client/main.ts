@@ -23,7 +23,7 @@ import { fishingBiteDelay, isFishingOpenWater, rollFishingLootEntry } from "../.
 import { addExperience } from "../../shared/experience.js";
 import { stepElytraPhysics } from "../../shared/elytra-physics.js";
 import { potionSpecForItemId } from "../../shared/potions.js";
-import { maxStackSizeForItemKey, mergeStackAmounts, splitStackInHalf } from "../../shared/inventory-stacks.js";
+import { maxStackSizeForItemKey, maxInventoryCountForItemKey, inventoryStorageCapacity, stackComponentsEqual as inventoryStackComponentsEqual, mergeStackAmounts, splitStackInHalf } from "../../shared/inventory-stacks.js";
 import { consumePlayerCraftGrid, playerCraftGridToRecipeGrid } from "../../shared/inventory-crafting.js";
 import { ChunkView } from "./chunkview";
 import { DropEntities } from "./drops";
@@ -69,7 +69,6 @@ const MAX_HP = 20;
 const MAX_HUNGER = 20;
 /** 満腹度がこれ以上あるときだけ体力が自然回復する */
 const REGEN_MIN_HUNGER = 14;
-const MAX_STACK = 999;
 /** 壊したときに手に入るブロック(無ければ同じブロック) */
 const DROPS: Record<number, number> = { [B.GRASS]: B.DIRT, [B.STONE]: B.COBBLE };
 
@@ -189,6 +188,8 @@ class Game {
   pendingCraftWorkbench = false;
   cursorItem = 0;
   cursorCount = 0;
+  private lastInventoryClickAt = 0;
+  private lastInventoryClickKey = "";
   sel = 0;
   // ゲームモード / ホスト
   gameMode: GameMode = "creative";
@@ -979,6 +980,12 @@ class Game {
 
   private maxStackSize(id: number): number { return maxStackSizeForItemKey(BLOCKS[id]?.key ?? ""); }
 
+  private maxInventoryCount(id: number): number { return maxInventoryCountForItemKey(BLOCKS[id]?.key ?? ""); }
+
+  private storageCapacity(id: number, incoming: any = null): number {
+    return inventoryStorageCapacity(this.stackData, id, BLOCKS, this.counts[id] ?? 0, incoming);
+  }
+
   private slotValue(slot: InventorySlotRef): number {
     if (slot.type === "hotbar") return this.hotbar[slot.index] ?? 0;
     if (slot.type === "main") return this.mainInventory[slot.index] ?? 0;
@@ -1088,6 +1095,9 @@ class Game {
         if (amount <= 0) break;
         if (this.slotValue(slot) !== id) continue;
         const current = this.slotAmount(slot);
+        const key = slotKey(slot.type, slot.index);
+        const metadata = key ? this.stackData[key] ?? null : null;
+        if (!this.stackComponentsEqual(metadata, null)) continue;
         const add = Math.min(amount, limit - current);
         if (add > 0) { this.setSlotStack(slot, id, current + add); amount -= add; }
       }
@@ -1141,46 +1151,78 @@ class Game {
     const out: Record<string, unknown> = Object.create(null);
     for (const [key, slot] of Object.entries(slots)) {
       const old = this.stackData[key];
-      out[key] = { itemId: slot.itemId, count: slot.count, ...(old && old.itemId === slot.itemId ? old : {}) };
+      out[key] = { ...(old && old.itemId === slot.itemId ? old : {}), itemId: slot.itemId, count: slot.count };
     }
-    this.net.send({ t: "stack-data", stackData: out });
+    // Keep the local component table complete even in solo mode; it is also used to
+    // prevent named/enhanced/damaged stacks from being merged into plain items.
+    this.stackData = normalizeStackComponents(out, slots, BLOCKS);
+    if (this.mode !== "room" || !this.net.connected) return;
+    this.net.send({ t: "stack-data", stackData: this.stackData });
   }
 
   private getStackEnchantments(key: string, itemId: number) {
     return stackDataForSlot(this.stackData, key, itemId, 1)?.enchantments ?? this.itemEnchantments[String(itemId)] ?? {};
   }
 
-  private moveStackToTypes(id: number, amount: number, types: ("main" | "hotbar")[]): number {
-    let left = amount;
+  private moveStackToTypes(id: number, amount: number, types: ("main" | "hotbar")[], incomingMeta: any = null): number {
+    let left = Math.max(0, Math.floor(amount));
     const limit = this.maxStackSize(id);
+    if (!this.validInventoryId(id) || left <= 0) return left;
+    // Fill compatible partial stacks first. Item components must match; item ID alone is not enough.
     for (const slot of this.inventorySlots(types)) {
       if (this.slotValue(slot) !== id) continue;
+      const key = slotKey(slot.type, slot.index);
+      const currentMeta = key ? this.stackData[key] ?? null : null;
+      if (!this.stackComponentsEqual(currentMeta, incomingMeta)) continue;
       const current = this.slotAmount(slot);
       const merged = mergeStackAmounts(current, left, limit);
-      if (merged.moved > 0) { this.setSlotStack(slot, id, merged.total); left = merged.remaining; }
+      if (merged.moved > 0) {
+        this.setSlotStack(slot, id, merged.total);
+        if (key && (currentMeta || incomingMeta)) this.stackData[key] = { ...(currentMeta ?? incomingMeta), itemId: id, count: merged.total };
+        left = merged.remaining;
+      }
       if (!left) return 0;
     }
+    // Then put the remainder into empty slots without splitting component data.
     for (const slot of this.inventorySlots(types)) {
       if (this.slotValue(slot) !== 0) continue;
       const add = Math.min(left, limit);
-      this.setSlotStack(slot, id, add); left -= add;
+      this.setSlotStack(slot, id, add);
+      const key = slotKey(slot.type, slot.index);
+      if (key && incomingMeta) this.stackData[key] = { ...incomingMeta, itemId: id, count: add };
+      left -= add;
       if (!left) return 0;
     }
     return left;
   }
 
   private stackComponentsEqual(a: any, b: any): boolean {
-    const clean = (v: any) => JSON.stringify({
-      enchantments: v?.enchantments ?? {}, damage: Number(v?.damage ?? 0),
-      repairCost: Number(v?.repairCost ?? 0), customName: v?.customName ?? "",
-      chargedProjectiles: v?.chargedProjectiles ?? [],
-    });
-    return clean(a) === clean(b);
+    return inventoryStackComponentsEqual(a, b);
   }
 
   private setCursorStackData(record: any, count: number) {
     if (!record || count <= 0) delete this.stackData["cursor:0"];
-    else this.stackData["cursor:0"] = { ...record, count };
+    else this.stackData["cursor:0"] = { ...record, itemId: this.cursorItem, count };
+  }
+
+  private collectMatchingStacksIntoCursor() {
+    if (!this.validInventoryId(this.cursorItem) || this.cursorCount <= 0) return;
+    const cursorMeta = this.stackData["cursor:0"] ?? null;
+    let room = Math.max(0, this.maxStackSize(this.cursorItem) - this.cursorCount);
+    for (const slot of this.inventorySlots(["hotbar", "main", "armor", "offhand", "craft", "craft-table"])) {
+      if (room <= 0) break;
+      if (this.slotValue(slot) !== this.cursorItem) continue;
+      const key = slotKey(slot.type, slot.index);
+      const metadata = key ? this.stackData[key] ?? null : null;
+      if (!this.stackComponentsEqual(metadata, cursorMeta)) continue;
+      const amount = Math.min(room, this.slotAmount(slot));
+      if (amount <= 0) continue;
+      const left = this.slotAmount(slot) - amount;
+      this.setSlotStack(slot, left > 0 ? this.cursorItem : 0, left);
+      this.cursorCount += amount;
+      room -= amount;
+    }
+    this.setCursorStackData(cursorMeta, this.cursorCount);
   }
 
   private handleInventorySlotClick(slot: InventorySlotRef, event: PointerEvent) {
@@ -1196,6 +1238,16 @@ class Game {
     const currentId = this.slotValue(slot), currentAmount = this.slotAmount(slot);
     const currentMeta = this.stackData[key] ? { ...this.stackData[key] } : null;
     const cursorMeta = this.stackData[cursorKey] ? { ...this.stackData[cursorKey] } : null;
+    if (event.button !== 0 && event.button !== 2) return;
+    const now = performance.now();
+    const doubleClick = event.button === 0 && this.lastInventoryClickKey === key && now - this.lastInventoryClickAt <= 350;
+    this.lastInventoryClickKey = key;
+    this.lastInventoryClickAt = now;
+    if (doubleClick && this.cursorItem > 0) {
+      this.collectMatchingStacksIntoCursor();
+      this.renderInventorySlots(); this.renderCrafting(); this.sendEquipment(); this.sendStackData(); this.autosave(true);
+      return;
+    }
     const rightClick = event.button === 2;
     if (!rightClick) {
       if (this.cursorItem === 0) {
@@ -1267,45 +1319,35 @@ class Game {
     const id = this.slotValue(slot), amount = this.slotAmount(slot), sourceKey = slotKey(slot.type, slot.index);
     if (!id || amount <= 0 || !sourceKey) return;
     const metadata = this.stackData[sourceKey] ? { ...this.stackData[sourceKey] } : null;
-    const moveToEmpty = (types: ("main" | "hotbar")[], targetOverride?: InventorySlotRef) => {
-      const target = targetOverride ?? this.firstEmptyInventorySlot(types);
-      if (!target) return false;
-      this.setSlotStack(target, id, amount);
-      const targetKey = slotKey(target.type, target.index);
-      if (targetKey && metadata) this.stackData[targetKey] = { ...metadata, count: amount };
-      this.setSlotStack(slot, 0, 0);
-      return true;
-    };
-    if (metadata && (metadata.enchantments || metadata.damage || metadata.customName || metadata.chargedProjectiles || metadata.repairCost)) {
-      let moved = false;
-      if (slot.type === "armor" || slot.type === "offhand") moved = moveToEmpty(["main", "hotbar"]);
-      else if (slot.type === "main") {
-        const armor = armorSlotForItemId(id, BLOCKS);
-        if (armor >= 0 && this.armorSlots[armor] === 0 && amount === 1) moved = moveToEmpty([], { type: "armor", index: armor });
-        else if (/(?:shield)$/.test(BLOCKS[id]?.key ?? "") && this.offhand === 0 && amount === 1) moved = moveToEmpty([], { type: "offhand", index: 0 });
-        else moved = moveToEmpty(["hotbar"]);
-      } else moved = moveToEmpty(["main"]);
-      if (!moved) { toast("特殊データ付きスタックを移動できる空きスロットがありません"); return; }
-    } else if (slot.type === "armor" || slot.type === "offhand") {
-      const left = this.moveStackToTypes(id, amount, ["main", "hotbar"]);
-      if (left === amount) { toast("インベントリに空きがありません"); return; }
-      this.setSlotStack(slot, left > 0 ? id : 0, left);
-    } else if (slot.type === "main") {
+
+    // Main-inventory equipment follows Java-style quick equip before ordinary transfer.
+    if (slot.type === "main" && amount === 1) {
       const armor = armorSlotForItemId(id, BLOCKS);
-      if (armor >= 0 && this.armorSlots[armor] === 0 && amount === 1) {
-        this.setSlotStack({ type: "armor", index: armor }, id, 1); this.setSlotStack(slot, 0, 0);
-      } else if (/(?:shield)$/.test(BLOCKS[id]?.key ?? "") && this.offhand === 0 && amount === 1) {
-        this.setSlotStack({ type: "offhand", index: 0 }, id, 1); this.setSlotStack(slot, 0, 0);
-      } else {
-        const left = this.moveStackToTypes(id, amount, ["hotbar"]);
-        if (left === amount) { toast("ホットバーに空きがありません"); return; }
-        this.setSlotStack(slot, left > 0 ? id : 0, left);
+      if (armor >= 0 && this.armorSlots[armor] === 0) {
+        this.setSlotStack({ type: "armor", index: armor }, id, 1);
+        if (metadata) this.stackData[`armor:${armor}`] = { ...metadata, itemId: id, count: 1 };
+        this.setSlotStack(slot, 0, 0);
+        this.renderInventorySlots(); this.sendEquipment(); this.sendStackData(); this.autosave(true);
+        return;
       }
-    } else {
-      const left = this.moveStackToTypes(id, amount, ["main"]);
-      if (left === amount) { toast("インベントリに空きがありません"); return; }
-      this.setSlotStack(slot, left > 0 ? id : 0, left);
+      if (BLOCKS[id]?.key?.endsWith("_shield") && this.offhand === 0) {
+        this.setSlotStack({ type: "offhand", index: 0 }, id, 1);
+        if (metadata) this.stackData["offhand:0"] = { ...metadata, itemId: id, count: 1 };
+        this.setSlotStack(slot, 0, 0);
+        this.renderInventorySlots(); this.sendEquipment(); this.sendStackData(); this.autosave(true);
+        return;
+      }
     }
+
+    const destinations: ("main" | "hotbar")[] =
+      slot.type === "armor" || slot.type === "offhand" ? ["main", "hotbar"]
+      : slot.type === "main" ? ["hotbar"]
+      : slot.type === "hotbar" ? ["main"]
+      : ["main"];
+    const left = this.moveStackToTypes(id, amount, destinations, metadata);
+    if (left === amount) { toast(destinations.includes("hotbar") ? "ホットバーに空きがありません" : "インベントリに空きがありません"); return; }
+    this.setSlotStack(slot, left > 0 ? id : 0, left);
+    if (left > 0 && metadata) this.stackData[sourceKey] = { ...metadata, itemId: id, count: left };
     this.renderInventorySlots(); this.renderCrafting(); this.sendEquipment(); this.sendStackData(); this.autosave(true);
   }
 
@@ -1619,25 +1661,33 @@ class Game {
     for (let i = 0; i < 9; i++) {
       const id = this.workbenchGrid[i] ?? 0, amount = this.workbenchGridAmounts[i] ?? 0;
       if (!id || amount <= 0) continue;
-      const left = this.moveStackToTypes(id, amount, ["main", "hotbar"]);
+      const sourceKey = `craft-table:${i}`, metadata = this.stackData[sourceKey] ?? null;
+      const left = this.moveStackToTypes(id, amount, ["main", "hotbar"], metadata);
       this.setSlotStack({ type: "craft-table", index: i }, left > 0 ? id : 0, left);
+      if (left > 0 && metadata) this.stackData[sourceKey] = { ...metadata, itemId: id, count: left };
       if (left > 0) { toast("作業台にアイテムが残っています。インベントリに空きを作ってください"); this.renderInventorySlots(); return; }
     }
     for (let i = 0; i < 4; i++) {
       const id = this.craftGrid[i] ?? 0, amount = this.craftGridAmounts[i] ?? 0;
       if (!id || amount <= 0) continue;
-      const left = this.moveStackToTypes(id, amount, ["main", "hotbar"]);
+      const sourceKey = `craft:${i}`, metadata = this.stackData[sourceKey] ?? null;
+      const left = this.moveStackToTypes(id, amount, ["main", "hotbar"], metadata);
       this.setSlotStack({ type: "craft", index: i }, left > 0 ? id : 0, left);
+      if (left > 0 && metadata) this.stackData[sourceKey] = { ...metadata, itemId: id, count: left };
       if (left > 0) { toast("クラフト枠にアイテムが残っています。空きを作ってください"); this.renderInventorySlots(); return; }
     }
     if (this.cursorItem > 0 && this.cursorCount > 0) {
-      const left = this.moveStackToTypes(this.cursorItem, this.cursorCount, ["main", "hotbar"]);
+      const cursorMeta = this.stackData["cursor:0"] ?? null;
+      const cursorId = this.cursorItem;
+      const left = this.moveStackToTypes(cursorId, this.cursorCount, ["main", "hotbar"], cursorMeta);
       this.cursorCount = left; if (left <= 0) this.cursorItem = 0;
+      this.setCursorStackData(cursorMeta, left);
       if (left > 0) { toast("インベントリに空きがないため残りをカーソルに保持しています"); this.renderInventorySlots(); return; }
     }
     $("inventory").hidden = true;
     this.workbenchOpen = false; this.workbenchPos = null;
     this.state = "playing";
+    this.sendEquipment(); this.sendStackData(); this.autosave(true);
     this.requestLock();
   }
   private portalCheckAt = 0;
@@ -1857,7 +1907,7 @@ class Game {
           this.clockOffset = m.now - Date.now();
           for (const p of m.players) this.remotes.add(p);
           for (const d of m.drops ?? []) { if (d.xp !== undefined) this.drops.addExperience(d.eid, d.x, d.y, d.z, d.xp); else this.drops.add(d.eid, d.x, d.y, d.z, d.itemId ?? d.b ?? 0, d.count ?? 1); }
-          this.counts = Array.from({ length: BLOCKS.length }, (_, i) => Math.min(64, Math.max(0, Math.floor(m.counts[i] ?? 0))));
+          this.counts = Array.from({ length: BLOCKS.length }, (_, i) => Math.min(maxInventoryCountForItemKey(BLOCKS[i]?.key ?? ""), Math.max(0, Math.floor(m.counts[i] ?? 0))));
           if (Array.isArray(m.armorSlots)) this.armorSlots = m.armorSlots.slice(0, 4).map((id, index) => this.validInventoryId(id) && armorSlotForItemId(id, BLOCKS) === index ? id : 0);
           this.itemEnchantments = normalizeItemEnchantments(m.itemEnchantments, BLOCKS);
           this.stackData = normalizeStackComponents(m.stackData, {}, BLOCKS);
@@ -1928,7 +1978,7 @@ class Game {
     this.sel = Math.min(8, Math.max(0, p.sel | 0));
     if (!preserveCounts) {
       this.counts = new Array(BLOCKS.length).fill(0);
-      if (Array.isArray(p.counts)) for (let i = 1; i < BLOCKS.length; i++) { const v = p.counts[i]; if (typeof v === "number" && v > 0) this.counts[i] = Math.min(MAX_STACK, Math.floor(v)); }
+      if (Array.isArray(p.counts)) for (let i = 1; i < BLOCKS.length; i++) { const v = p.counts[i]; if (typeof v === "number" && v > 0) this.counts[i] = Math.min(maxInventoryCountForItemKey(BLOCKS[i]?.key ?? ""), Math.floor(v)); }
     }
     this.mainInventory = Array.isArray(p.mainInventory) && p.mainInventory.length === 27
       ? p.mainInventory.map(id => this.validInventoryId(id) ? id : 0) : new Array(27).fill(0);
@@ -1954,7 +2004,9 @@ class Game {
     this.workbenchGridAmounts = Array.isArray(p.workbenchGridAmounts) && p.workbenchGridAmounts.length === 9 ? p.workbenchGridAmounts.map(n => Math.max(0, Math.min(64, Math.floor(Number(n) || 0)))) : Array(9).fill(0);
     this.workbenchOpen = false; this.workbenchPos = null;
     this.pendingCraftGrid = null; this.pendingCraftWorkbench = false;
-    this.cursorItem = 0; this.cursorCount = 0;
+    this.cursorItem = this.validInventoryId(p.cursorItem ?? 0) ? (p.cursorItem ?? 0) : 0;
+    this.cursorCount = this.cursorItem > 0 ? Math.min(this.maxStackSize(this.cursorItem), Math.max(0, Math.floor(Number(p.cursorCount) || 0))) : 0;
+    if (this.cursorCount <= 0) this.cursorItem = 0;
     this.health = typeof p.health === "number" ? Math.min(MAX_HP, Math.max(1, Math.round(p.health))) : MAX_HP;
     this.hunger = typeof p.hunger === "number" ? Math.min(MAX_HUNGER, Math.max(0, Math.round(p.hunger))) : MAX_HUNGER;
     this.exhaustion = 0; this.starveT = 0;
@@ -2066,7 +2118,7 @@ class Game {
         break;
       }
       case "inventory": {
-        const incomingCounts = Array.from({ length: BLOCKS.length }, (_, i) => Math.min(64, Math.max(0, Math.floor(m.counts[i] ?? 0))));
+        const incomingCounts = Array.from({ length: BLOCKS.length }, (_, i) => Math.min(maxInventoryCountForItemKey(BLOCKS[i]?.key ?? ""), Math.max(0, Math.floor(m.counts[i] ?? 0))));
         if (this.pendingCraftGrid) {
           const succeeded = incomingCounts.some((count, i) => count !== (this.counts[i] ?? 0));
           if (succeeded && this.gameMode !== "creative") {
@@ -2219,17 +2271,13 @@ class Game {
     if (!this.validInventoryId(id) || !Number.isFinite(n) || n <= 0) return 0;
     const requested = Math.floor(n);
     const current = this.counts[id] ?? 0;
-    const capacity = this.inventorySlots(["hotbar", "main"]).reduce((sum, slot) => {
-      const slotId = this.slotValue(slot);
-      if (slotId === id) return sum + Math.max(0, this.maxStackSize(id) - this.slotAmount(slot));
-      if (!slotId) return sum + this.maxStackSize(id);
-      return sum;
-    }, 0);
-    const accepted = Math.min(requested, MAX_STACK - current, capacity);
+    const capacity = this.storageCapacity(id, null);
+    const accepted = Math.min(requested, this.maxInventoryCount(id) - current, capacity);
     if (accepted <= 0) { toast("インベントリに空きがありません"); return 0; }
     this.counts[id] = current + accepted;
     const left = this.moveStackToTypes(id, accepted, ["hotbar", "main"]);
     if (left > 0) this.counts[id] -= left;
+    this.sendStackData();
     this.hotbarUI.refresh(); if (this.state === "inventory") this.renderInventorySlots();
     this.autosave(true);
     toast(`${BLOCKS[id].name} +${accepted}`, 700);
@@ -2249,7 +2297,7 @@ class Game {
       const amount = this.slotAmount(slot) - 1;
       this.setSlotStack(slot, amount > 0 ? id : 0, amount);
     }
-    this.syncInventorySlots(); this.sendEquipment();
+    this.syncInventorySlots(); this.sendEquipment(); this.sendStackData();
     this.hotbarUI.refresh(); if (this.state === "inventory") this.renderInventorySlots();
     this.autosave(true);
   }
@@ -2789,6 +2837,7 @@ class Game {
     base.mainInventory = [...this.mainInventory]; base.hotbarAmounts = [...this.hotbarAmounts]; base.mainInventoryAmounts = [...this.mainInventoryAmounts];
     base.armorSlots = [...this.armorSlots]; base.armorAmounts = [...this.armorAmounts]; base.offhand = this.offhand; base.offhandAmount = this.offhandAmount;
     base.craftGrid = [...this.craftGrid]; base.craftGridAmounts = [...this.craftGridAmounts];
+    base.cursorItem = this.cursorItem; base.cursorCount = this.cursorCount;
     base.itemEnchantments = this.itemEnchantments; base.stackData = this.stackData; base.elytraDamage = this.elytraDamage;
     return base;
   }

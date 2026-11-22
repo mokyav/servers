@@ -1143,6 +1143,32 @@ class Game {
     return out;
   }
 
+  /** Restore authoritative server stack records into their exact UI slots. */
+  private restoreSlotContentsFromStackData() {
+    for (const [key, record] of Object.entries(this.stackData ?? {})) {
+      if (!record || !this.validInventoryId(Number(record.itemId)) || !Number.isSafeInteger(record.count) || record.count <= 0) continue;
+      if (key === "cursor:0") {
+        const id = Number(record.itemId);
+        const count = Math.min(this.maxStackSize(id), record.count);
+        this.cursorItem = count > 0 ? id : 0;
+        this.cursorCount = count;
+        if (count > 0) this.stackData[key] = { ...record, itemId: id, count };
+        else delete this.stackData[key];
+        continue;
+      }
+      const match = /^(hotbar|main|armor|offhand|craft|craft-table):(\\d+)$/.exec(key);
+      if (!match) continue;
+      const slot: InventorySlotRef = { type: match[1] as InventorySlotType, index: Number(match[2]) };
+      const limits: Record<InventorySlotType, number> = { hotbar: 9, main: 27, armor: 4, offhand: 1, craft: 4, "craft-table": 9 };
+      if (slot.index < 0 || slot.index >= limits[slot.type]) continue;
+      const id = Number(record.itemId);
+      if (!this.inventorySlotValid(slot, id)) continue;
+      const count = Math.min(slot.type === "armor" || slot.type === "offhand" ? 1 : this.maxStackSize(id), record.count);
+      this.setSlotStack(slot, id, count);
+      this.stackData[key] = { ...record, itemId: id, count };
+    }
+  }
+
   private normalizeCurrentStackData(raw: unknown) {
     const slots = this.currentSlotItems();
     this.stackData = normalizeStackComponents(raw, slots, BLOCKS);
@@ -1942,10 +1968,21 @@ class Game {
     await done;
     const serverCounts = [...this.counts];
     const serverArmorSlots = [...this.armorSlots];
+    const serverStackData = normalizeStackComponents(this.stackData, {}, BLOCKS);
+    const serverEnchantments = this.itemEnchantments;
+    const serverElytraDamage = this.elytraDamage;
     if (saved) this.applyPlayerSave(saved, true); else {
       this.setSpawn(); this.counts = serverCounts; this.armorSlots = serverArmorSlots;
-      this.syncInventorySlots(); this.sendEquipment();
+      this.stackData = serverStackData;
+      this.itemEnchantments = serverEnchantments;
+      this.elytraDamage = serverElytraDamage;
+      this.sendEquipment();
     }
+    // Server stack records carry the canonical slot layout and per-item components.
+    // Restore them after local save loading so a fresh device or stale local save cannot
+    // erase named, enchanted, damaged, cursor, or crafting-grid stacks.
+    this.restoreSlotContentsFromStackData();
+    this.syncInventorySlots();
     // applyPlayerSave/setSpawn may restore stale client coordinates; the room init snapshot
     // is authoritative and matches the dimension whose edit list was just received.
     if (roomEntryPosition) {

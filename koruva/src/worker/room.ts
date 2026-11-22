@@ -371,7 +371,9 @@ export class Room extends DurableObject<Env> {
   }
 
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
-    if (typeof raw !== "string" || raw.length > 4096 || !this.meta) return;
+    // hello may include a validated 64x64 PNG skin data URL (up to 32,000 chars).
+    // Keep a bounded frame size, but do not silently discard valid join messages.
+    if (typeof raw !== "string" || raw.length > 40_000 || !this.meta) return;
     if (this.left.has(ws)) return; // キック/BAN済みソケットからの操作は無視
     let msg: ClientMsg;
     try {

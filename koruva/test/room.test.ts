@@ -383,9 +383,14 @@ ok((await none.fetch(wsReq())).status === 404, "存在しないルームは 404"
   ok(largeSocket.inbox.some((m: any) => m.t === "init") && largeSocket.inbox.some((m: any) => m.t === "edits" && m.done), "大きな hello でも入室・初期同期できる");
 
   const refusedSocket = await connect(largeRoom, "Invalid Name");
-  ok(largeRoom.mem.has(refusedSocket), "拒否直後はソケット状態が一時保持される");
+  ok(refusedSocket.closed && !largeRoom.mem.has(refusedSocket), "名前拒否時にソケット状態も即座に解放する");
   await largeRoom.webSocketClose(refusedSocket);
-  ok(!largeRoom.mem.has(refusedSocket), "拒否済みソケットの close 後に mem から削除される");
+  ok(!largeRoom.mem.has(refusedSocket), "拒否済みソケットの close 後も mem に残らない");
+
+  await largeRoom.fetch(wsReq());
+  const oversizedSocket = largeRoom.ctx.sockets[largeRoom.ctx.sockets.length - 1] as FakeSocket;
+  await largeRoom.webSocketMessage(oversizedSocket, JSON.stringify({ t: "hello", name: "TooLarge", skin: {}, padding: "x".repeat(262144) }));
+  ok(oversizedSocket.closed && !largeRoom.mem.has(oversizedSocket), "上限超過 hello は切断して接続枠を解放する");
 }
 
 console.log(fail ? `${fail} FAILED` : "ALL PASSED");

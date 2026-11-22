@@ -10,6 +10,13 @@ test("death drops preserve inventory and equipped armor as capped stacks", () =>
   ]);
 });
 
+test("death drops split tools and vehicles into one-item stacks", () => {
+  const stacks = buildDeathDropStacks([0, 0, 3, 0, 0], [], 5, 64, (id) => id === 2 ? 1 : 64);
+  assert.deepEqual(stacks, [
+    { itemId: 2, count: 1 }, { itemId: 2, count: 1 }, { itemId: 2, count: 1 },
+  ]);
+});
+
 test("death-drop construction rejects invalid IDs and malformed counts", () => {
   assert.deepEqual(buildDeathDropStacks([0, 2.5, -1, 4], [NaN, 0], 4), [{ itemId: 3, count: 4 }]);
 });

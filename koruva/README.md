@@ -150,4 +150,4 @@ The project includes an asset bundle derived from the provided `client.zip` and 
 
 ## Minecraft Java 26.3 world expansion
 
-The 26.3 data import and scope/compatibility notes are documented in [`KORUVA_26.3_EXPANSION_NOTES.md`](./KORUVA_26.3_EXPANSION_NOTES.md).
+The 26.3 data import and scope/compatibility notes are documented in [`KORUVA_26.3_EXPANSION_NOTES.md`](./KORUVA_26.3_EXPANSION_NOTES.md).  updated

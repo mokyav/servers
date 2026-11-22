@@ -76,6 +76,19 @@ ok(
   a.att?.countsEncoding === "sparse-v1" && a.att?.counts?.length === 0,
   "WebSocket attachment は所持数を疎配列化して16KiB未満に収める",
 );
+const aliceBeforeRestore = room.player(a);
+aliceBeforeRestore.counts[B.STONE] = 2;
+room.serializePlayer(a, aliceBeforeRestore);
+room.mem.delete(a);
+const aliceAfterRestore = room.player(a);
+ok(
+  aliceAfterRestore.id === aliceBeforeRestore.id &&
+  aliceAfterRestore.counts.length === BLOCKS.length &&
+  aliceAfterRestore.counts[B.STONE] === 2,
+  "疎配列attachmentから所持数とプレイヤー状態を復元",
+);
+aliceAfterRestore.counts[B.STONE] = 0;
+room.serializePlayer(a, aliceAfterRestore);
 const init = a.inbox.find((m) => m.t === "init");
 ok(init?.seed === 42 && init.code === "ABC234" && init.players.length === 0, "init: seed/code");
 ok(a.inbox.some((m) => m.t === "edits" && m.done === true), "初回 edits done");

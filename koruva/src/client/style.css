@@ -438,3 +438,54 @@ canvas#gl { touch-action: none; }
 .mc-durability-bar, .slot-durability { position:absolute; left:4px; right:4px; bottom:3px; height:3px; background:rgba(0,0,0,.72); pointer-events:none; overflow:hidden; z-index:2; }
 .mc-durability-bar i, .slot-durability i { display:block; height:100%; }
 .slot-durability { left:5px; right:5px; bottom:3px; height:3px; }
+
+
+/* Correctly scale the vanilla HUD hotbar sprite to the nine item slots.
+   48px slots correspond to a 2.4x scale of the 182x22 / 24x24 HUD assets. */
+#hotbar {
+  --hotbar-slot-size: 48px;
+  gap: 0;
+  padding: calc(var(--hotbar-slot-size) * 0.05);
+  background-color: transparent;
+  background-image: url('/assets/minecraft/textures/gui/sprites/hud/hotbar.png');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  border-radius: 0;
+}
+#hotbar .slot {
+  width: var(--hotbar-slot-size);
+  height: var(--hotbar-slot-size);
+  flex: 0 0 var(--hotbar-slot-size);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+#hotbar .slot img {
+  position: absolute;
+  inset: 0;
+  width: 80%;
+  height: 80%;
+  margin: auto;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+#hotbar .slot.sel {
+  background-image: url('/assets/minecraft/textures/gui/sprites/hud/hotbar_selection.png');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 120% 120%;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  box-shadow: none;
+}
+@media (max-width: 760px) and (pointer: coarse) {
+  #hotbar {
+    --hotbar-slot-size: clamp(28px, 8.6vw, 40px);
+    gap: 0;
+    padding: calc(var(--hotbar-slot-size) * 0.05);
+  }
+}

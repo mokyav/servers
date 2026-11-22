@@ -49,6 +49,11 @@ import { resolveCommandTargets } from "../../shared/command-targets.js";
 import { parseTeleportPosition } from "../../shared/teleport.js";
 import type { Env } from "./env";
 
+/** クライアント→サーバーのメッセージ長上限(文字数)。 */
+const MAX_MESSAGE_BYTES = 4096;
+const MAX_STACK_DATA_BYTES = 32_768;
+const MAX_HELLO_BYTES = 262_144;
+
 interface Meta {
   code: string;
   seed: number;
@@ -371,9 +376,10 @@ export class Room extends DurableObject<Env> {
   }
 
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
-    // hello may include a validated 64x64 PNG skin data URL (up to 32,000 chars).
-    // Keep a bounded frame size, but do not silently discard valid join messages.
-    if (typeof raw !== "string" || raw.length > 40_000 || !this.meta) return;
+    // サイズ上限は種別ごとに分ける。hello は全ブロック分の所持数配列(BLOCKS.length 件)や
+    // スキンPNG(最大32,000文字)を含むため 4096 では必ず超え、黙って捨てられて接続が
+    // タイムアウトしていた。まず緩い上限で弾き、パース後に種別ごとの上限を適用する。
+    if (typeof raw !== "string" || raw.length > MAX_HELLO_BYTES || !this.meta) return;
     if (this.left.has(ws)) return; // キック/BAN済みソケットからの操作は無視
     let msg: ClientMsg;
     try {
@@ -381,8 +387,10 @@ export class Room extends DurableObject<Env> {
     } catch {
       return;
     }
-    const me = this.player(ws);
     if (!msg || typeof msg !== "object") return;
+    const sizeLimit = msg.t === "hello" ? MAX_HELLO_BYTES : msg.t === "stack-data" ? MAX_STACK_DATA_BYTES : MAX_MESSAGE_BYTES;
+    if (raw.length > sizeLimit) return;
+    const me = this.player(ws);
 
     if (msg.t === "hello") {
       if (me.joined) return;

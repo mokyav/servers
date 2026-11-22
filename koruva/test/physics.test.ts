@@ -1,6 +1,6 @@
 import { World } from "../src/client/world";
 import { collides, moveBody, raycast, type Body } from "../src/client/physics";
-import { B, BLOCK_COUNT, BLOCKS, MINECRAFT_BLOCK_TO_ID, MINECRAFT_ITEM_TO_RUNTIME_ID, blockPlacementId } from "../shared/blocks";
+import { B, BLOCK_COUNT, BLOCKS, MINECRAFT_BLOCK_TO_ID, MINECRAFT_ITEM_TO_RUNTIME_ID, blockHasPartialModelShape, blockPlacementId } from "../shared/blocks";
 let fail = 0;
 const ok = (c: boolean, m: string) => { if (!c) { fail++; console.log("FAIL", m); } else console.log("ok  ", m); };
 const w = new World(1);
@@ -58,6 +58,23 @@ const paneWorld = new World(34); paneWorld.ensureChunk(0, 0).data.fill(0); paneW
 ok(!!BLOCKS[glassPane] && BLOCKS[glassPane].shape === "pane" && collides(paneWorld, 4.5, 1, 4.5), "ガラス板は中央の薄い十字形で衝突する");
 const carpetWorld = new World(35); carpetWorld.ensureChunk(0, 0).data.fill(0); carpetWorld.setBlock(4, 1, 4, whiteCarpet);
 ok(!!BLOCKS[whiteCarpet] && BLOCKS[whiteCarpet].shape === "carpet" && collides(carpetWorld, 4.5, 1.1, 4.5) && !collides(carpetWorld, 4.5, 1.3, 4.5), "カーペットは薄い高さの衝突判定を持つ");
+// Modern model-based blocks can be visually partial even when their broad shape is "cube".
+const lanternId = MINECRAFT_BLOCK_TO_ID["minecraft:lantern"];
+const lanternWorld = new World(36); lanternWorld.ensureChunk(0, 0).data.fill(0);
+lanternWorld.setBlock(4, 1, 4, lanternId);
+ok(BLOCKS[lanternId]?.shape === "cube" && blockHasPartialModelShape(lanternId), "ランタンは部分モデル衝突マスクを使う");
+ok(!collides(lanternWorld, 4.5, 1.5, 4.5), "ランタンのモデル上部の空間ではプレイヤーが衝突しない");
+ok(collides(lanternWorld, 4.5, 1.05, 4.5), "ランタンの下部モデルにはプレイヤーが衝突する");
+
+// Loading a neighbour must invalidate the already-meshed chunk at their shared edge.
+const edgeWorld = new World(37);
+const existingEdge = edgeWorld.ensureChunk(0, 0);
+existingEdge.dirty = false;
+let edgeInvalidated = false;
+edgeWorld.onChunkDirty = (chunk) => { if (chunk === existingEdge) edgeInvalidated = true; };
+edgeWorld.ensureChunk(1, 0);
+ok(existingEdge.dirty && edgeInvalidated, "隣接チャンク生成時に既存チャンクの境界メッシュを再生成対象にする");
+
 const sword = MINECRAFT_ITEM_TO_RUNTIME_ID["minecraft:diamond_sword"];
 ok(sword > BLOCK_COUNT && BLOCKS[sword].itemOnly === true && blockPlacementId(sword, 0) === 0, "非ブロックアイテムはワールドに設置できない");
 // Sneak edge clamp: a player on a one-block platform must not walk off its edge.

@@ -55,6 +55,7 @@ import { createSoloRedstoneRuntime } from "../../shared/solo-redstone.js";
 THREE.ColorManagement.enabled = false;
 
 type State = "title" | "loading" | "paused" | "playing" | "inventory" | "furnace" | "chat";
+declare const __KORUVA_VERSION__: string;
 type FurnaceView = { x: number; y: number; z: number; station: FurnaceStation; state: FurnaceState; active: boolean };
 const DEFAULT_HOTBAR: number[] = [B.GRASS, B.DIRT, B.STONE, B.PLANKS, B.LOG, B.GLASS, B.BRICK, B.LAMP, B.SAND];
 const CRAFT_RECIPES = createCraftRecipes(B);
@@ -246,6 +247,7 @@ class Game {
   spawn: [number, number, number] = [0.5, 40, 0.5];
 
   constructor() {
+    $("game-version").textContent = `Version ${__KORUVA_VERSION__}`;
     this.chat.setNameProvider(() => [this.profile.name, ...this.remotes.names().map(p => p.name)]);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));

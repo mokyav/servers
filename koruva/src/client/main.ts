@@ -2138,8 +2138,10 @@ class Game {
         this.mobModels.clear(); for (const mob of m.mobs ?? []) this.mobModels.add(mob);
         this.projectileEntities.clear(); for (const projectile of m.projectiles ?? []) this.projectileEntities.add(projectile);
         this.localFishing=null; this.fishingRightHeld=false; $("bossbar").hidden=true;
-        const safe = this.safeDimensionSpawn(m.p[0], m.p[2]);
-        const pos = safe ?? { x: m.p[0], y: m.p[1], z: m.p[2] };
+        // The Worker selected this safe arrival against the target dimension's
+        // persisted edits. Re-running spawn search before receiving those edits can
+        // choose a different (or obstructed) location on the client.
+        const pos = { x: m.p[0], y: m.p[1], z: m.p[2] };
         this.body = { x: pos.x, y: pos.y, z: pos.z, vx: 0, vy: 0, vz: 0, onGround: false };
         this.fallFlying = false;
         this.spawn = [pos.x, pos.y, pos.z];

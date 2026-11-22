@@ -19,3 +19,35 @@ test('v3 exposes the complete 26.3 biome and structure registries and creates de
   const a=gen.generateChunk(20261121,-3,4,3),b=gen.generateChunk(20261121,-3,4,3);
   assert.equal(sha(a),sha(b)); assert.equal(a.length,S*S*H);
 });
+
+
+test("v3 carves 3D caves as well as the legacy world generator", () => {
+  const caveSeed = 23017;
+  let caves = 0;
+  for (let cz = -2; cz <= 2; cz++) for (let cx = -2; cx <= 2; cx++) {
+    const data = gen.generateChunk(caveSeed, cx, cz, 3);
+    for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) {
+      const h = gen.heightAt(caveSeed, cx * S + x, cz * S + z);
+      for (let y = 4; y < h - 4; y++) if (data[idx(x, y, z)] === B.AIR) caves++;
+    }
+  }
+  assert.ok(caves > 100, `expected v3 cave carving, found ${caves} air cells`);
+});
+
+test("v3 stony shore keeps its biome surface instead of becoming generic sand", () => {
+  const seed = 20261122;
+  let location = null;
+  outer: for (let z = -4096; z <= 4096; z += 16) {
+    for (let x = -4096; x <= 4096; x += 16) {
+      if (gen.biomeAt(seed, x, z, 3) === "stony_shore" && gen.heightAt(seed, x, z) <= 25) {
+        location = { x, z, height: gen.heightAt(seed, x, z) };
+        break outer;
+      }
+    }
+  }
+  assert.ok(location, "test seed should contain a low-elevation stony shore");
+  const chunk = gen.generateChunk(seed, Math.floor(location.x / S), Math.floor(location.z / S), 3);
+  const lx = ((location.x % S) + S) % S, lz = ((location.z % S) + S) % S;
+  assert.equal(chunk[idx(lx, location.height, lz)], B.STONE,
+    "stony shore uses stone surface; coastal override must not replace it with sand");
+});

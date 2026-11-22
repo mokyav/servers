@@ -2,6 +2,7 @@ import { World } from "../src/client/world";
 import { collides, moveBody, raycast, type Body } from "../src/client/physics";
 import { getModelCollisionMask, modelCollisionCellIsSolid } from "../src/client/model-collision";
 import { B, BLOCK_COUNT, BLOCKS, MINECRAFT_BLOCK_TO_ID, MINECRAFT_ITEM_TO_RUNTIME_ID, blockHasPartialModelShape, blockPlacementId } from "../shared/blocks";
+import { canPlaceBlockAt } from "../shared/block-behavior.js";
 let fail = 0;
 const ok = (c: boolean, m: string) => { if (!c) { fail++; console.log("FAIL", m); } else console.log("ok  ", m); };
 const w = new World(1);
@@ -77,6 +78,30 @@ ok(!raycast(lanternWorld, 4.28, 1.2, 4.5, -1, 0, 0, 0.2), "ランタンの見た
 const movingBesideLantern: Body = { x: 3.5, y: 1.05, z: 4.5, vx: 5, vy: 0, vz: 0, onGround: false };
 moveBody(lanternWorld, movingBesideLantern, 0.2);
 ok(movingBesideLantern.x > 4.0 && movingBesideLantern.x < 4.02, `ランタンの見た目の輪郭で移動が止まる x=${movingBesideLantern.x.toFixed(3)}`);
+
+// Non-solid plant models remain selectable even though they do not collide with players.
+const birchSapling = MINECRAFT_BLOCK_TO_ID["minecraft:birch_sapling"];
+const plantWorld = new World(38); plantWorld.ensureChunk(0, 0).data.fill(0);
+const grassBlock = MINECRAFT_BLOCK_TO_ID["minecraft:grass_block"];
+plantWorld.setBlock(8, 1, 8, grassBlock);
+ok(canPlaceBlockAt((x, y, z) => plantWorld.get(x, y, z), birchSapling, 8, 2, 8, BLOCKS),
+  "苗木は草ブロック上に設置できる");
+plantWorld.setBlock(8, 2, 8, birchSapling);
+ok(!BLOCKS[birchSapling].solid, "苗木はプレイヤーと衝突しない非固体ブロック");
+const saplingHit = raycast(plantWorld, 8.5, 2.45, 6.5, 0, 0, 1, 3);
+ok(!!saplingHit && saplingHit.x === 8 && saplingHit.y === 2 && saplingHit.z === 8,
+  `シラカバの苗木を視認・採掘対象として選択できる ${JSON.stringify(saplingHit)}`);
+
+// Cake placement uses the fresh bites=0 state and requires a supporting block.
+const cakeItem = MINECRAFT_BLOCK_TO_ID["minecraft:cake"];
+const freshCake = blockPlacementId(cakeItem, 0);
+ok(String(BLOCKS[freshCake]?.state?.bites ?? "") === "0", "ケーキは未消費 bites=0 の状態で設置する");
+const cakeWorld = new World(39); cakeWorld.ensureChunk(0, 0).data.fill(0);
+cakeWorld.setBlock(5, 1, 5, B.STONE);
+ok(canPlaceBlockAt((x, y, z) => cakeWorld.get(x, y, z), freshCake, 5, 2, 5, BLOCKS),
+  "ケーキは固体ブロック上に設置できる");
+ok(!canPlaceBlockAt((x, y, z) => cakeWorld.get(x, y, z), freshCake, 5, 3, 5, BLOCKS),
+  "ケーキは支えのない場所に設置できない");
 
 // Loading a neighbour must invalidate the already-meshed chunk at their shared edge.
 const edgeWorld = new World(37);

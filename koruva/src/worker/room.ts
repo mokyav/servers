@@ -49,10 +49,10 @@ import { resolveCommandTargets } from "../../shared/command-targets.js";
 import { parseTeleportPosition } from "../../shared/teleport.js";
 import type { Env } from "./env";
 
-/** クライアント→サーバーのメッセージ長上限(文字数)。 */
-const MAX_MESSAGE_BYTES = 4096;
-const MAX_STACK_DATA_BYTES = 32_768;
-const MAX_HELLO_BYTES = 262_144;
+/** クライアント→サーバーのメッセージ長上限(UTF-16文字数)。 */
+const MAX_MESSAGE_CHARS = 4096;
+const MAX_STACK_DATA_CHARS = 32_768;
+const MAX_HELLO_CHARS = 262_144;
 
 interface Meta {
   code: string;
@@ -379,7 +379,7 @@ export class Room extends DurableObject<Env> {
     // サイズ上限は種別ごとに分ける。hello は全ブロック分の所持数配列(BLOCKS.length 件)や
     // スキンPNG(最大32,000文字)を含むため 4096 では必ず超え、黙って捨てられて接続が
     // タイムアウトしていた。まず緩い上限で弾き、パース後に種別ごとの上限を適用する。
-    if (typeof raw !== "string" || raw.length > MAX_HELLO_BYTES || !this.meta) return;
+    if (typeof raw !== "string" || raw.length > MAX_HELLO_CHARS || !this.meta) return;
     if (this.left.has(ws)) return; // キック/BAN済みソケットからの操作は無視
     let msg: ClientMsg;
     try {
@@ -388,7 +388,7 @@ export class Room extends DurableObject<Env> {
       return;
     }
     if (!msg || typeof msg !== "object") return;
-    const sizeLimit = msg.t === "hello" ? MAX_HELLO_BYTES : msg.t === "stack-data" ? MAX_STACK_DATA_BYTES : MAX_MESSAGE_BYTES;
+    const sizeLimit = msg.t === "hello" ? MAX_HELLO_CHARS : msg.t === "stack-data" ? MAX_STACK_DATA_CHARS : MAX_MESSAGE_CHARS;
     if (raw.length > sizeLimit) return;
     const me = this.player(ws);
 
@@ -2101,10 +2101,12 @@ export class Room extends DurableObject<Env> {
 
   // ---- helpers ----
   private leave(ws: WebSocket) {
-    if (this.left.has(ws)) return; // 二重通知を防ぐ(evict と close イベントの両方から呼ばれる)
-    this.left.add(ws);
-    const me = this.mem.get(ws) ?? (ws.deserializeAttachment() as PlayerState | null);
+    const alreadyLeft = this.left.has(ws);
+    // refuse/BAN は close より先に left を付けるため、その場合も強参照の mem から必ず除去する。
+    const me = this.mem.get(ws) ?? (alreadyLeft ? null : ws.deserializeAttachment() as PlayerState | null);
     this.mem.delete(ws);
+    if (alreadyLeft) return; // 二重通知を防ぐ(evict と close イベントの両方から呼ばれる)
+    this.left.add(ws);
     if (me?.joined) {
       void this.persistVitals(me);
       me.joined = false;

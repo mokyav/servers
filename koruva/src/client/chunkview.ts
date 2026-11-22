@@ -38,6 +38,7 @@ void main() {
 
 interface Entry {
   solid: THREE.Mesh | null;
+  translucent: THREE.Mesh | null;
   liquid: THREE.Mesh | null;
 }
 
@@ -53,6 +54,7 @@ export class ChunkView {
     uOpacity: { value: 1 },
   };
   private solidMat: THREE.ShaderMaterial;
+  private translucentMat: THREE.ShaderMaterial;
   private atlasCanvas: HTMLCanvasElement;
   private atlasTexture: THREE.CanvasTexture;
   private liquidMat: THREE.ShaderMaterial;
@@ -74,6 +76,11 @@ export class ChunkView {
     tex.colorSpace = THREE.SRGBColorSpace;
     this.uniforms.map.value = tex;
     this.solidMat = new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: VERT, fragmentShader: FRAG, side: THREE.FrontSide });
+    const translucentU = { ...this.uniforms, uOpacity: { value: 0.42 } };
+    this.translucentMat = new THREE.ShaderMaterial({
+      uniforms: translucentU, vertexShader: VERT, fragmentShader: FRAG,
+      transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    });
     const liquidU = { ...this.uniforms, uOpacity: { value: 0.68 } };
     this.liquidMat = new THREE.ShaderMaterial({
       uniforms: liquidU, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, side: THREE.DoubleSide,
@@ -183,8 +190,9 @@ export class ChunkView {
     const res = buildChunkMesh(this.world, c, tileUV);
     c.dirty = false;
     let e = this.entries.get(key);
-    if (!e) this.entries.set(key, (e = { solid: null, liquid: null }));
+    if (!e) this.entries.set(key, (e = { solid: null, translucent: null, liquid: null }));
     e.solid = this.swap(e.solid, res.solid, this.solidMat, c, 0);
+    e.translucent = this.swap(e.translucent, res.translucent, this.translucentMat, c, 1);
     e.liquid = this.swap(e.liquid, res.liquid, this.liquidMat, c, 1);
     this.statsDirty = true;
     this.urgent.delete(c);
@@ -218,7 +226,7 @@ export class ChunkView {
   private dispose(key: number) {
     const e = this.entries.get(key);
     if (!e) return;
-    for (const m of [e.solid, e.liquid]) {
+    for (const m of [e.solid, e.translucent, e.liquid]) {
       if (m) {
         this.group.remove(m);
         m.geometry.dispose();
@@ -231,7 +239,7 @@ export class ChunkView {
   private recount() {
     let tris = 0;
     for (const e of this.entries.values()) {
-      for (const m of [e.solid, e.liquid]) if (m) tris += (m.geometry.getIndex()?.count ?? 0) / 3;
+      for (const m of [e.solid, e.translucent, e.liquid]) if (m) tris += (m.geometry.getIndex()?.count ?? 0) / 3;
     }
     this.stats.meshed = this.entries.size;
     this.stats.triangles = tris;

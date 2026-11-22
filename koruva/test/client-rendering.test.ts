@@ -4,6 +4,7 @@ import { inventoryPanelVisibility } from "../src/client/inventory-ui";
 import { hotbarSlotCount } from "../src/client/ui";
 import { World } from "../src/client/world";
 import { B, BLOCKS, MINECRAFT_BLOCK_TO_ID } from "../shared/blocks";
+import { itemDropTexturePath } from "../shared/drop-item-texture.js";
 import { CHUNK_SIZE, CHUNK_VOLUME, WORLD_HEIGHT } from "../shared/constants";
 import { buildChunkMesh } from "../src/client/mesher";
 import type { Chunk } from "../src/client/world";
@@ -119,6 +120,24 @@ test("legacy and vanilla glass are routed to the translucent render layer", () =
   assert.equal(mesh.liquid, null);
 });
 
+
+test("vanilla cutout plants are emitted to their own model layer", () => {
+  const birchSapling = MINECRAFT_BLOCK_TO_ID["minecraft:birch_sapling"];
+  assert.ok(birchSapling > 0);
+  assert.equal(BLOCKS[birchSapling].render, "cutout");
+  const { chunk, world } = makeChunk([[4, 3, 6, birchSapling]]);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.equal(mesh.solid, null, "saplings must not be emitted into the opaque layer");
+  assert.ok(mesh.cutout && mesh.cutout.vertexCount > 0, "saplings must use the alpha-tested cutout layer");
+});
+
+test("items with an official item sprite use it even when the item is also a placeable block", () => {
+  const cake = MINECRAFT_BLOCK_TO_ID["minecraft:cake"];
+  assert.ok(cake > 0);
+  assert.equal(itemDropTexturePath(BLOCKS[cake]), "item/cake");
+  const birchSapling = MINECRAFT_BLOCK_TO_ID["minecraft:birch_sapling"];
+  assert.equal(itemDropTexturePath(BLOCKS[birchSapling]), null, "block-only sapling texture should remain a block icon");
+});
 
 test("an invalid runtime block ID cannot abort or hide the rest of a chunk mesh", () => {
   const invalidId = BLOCKS.length + 20;

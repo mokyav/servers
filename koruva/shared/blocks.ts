@@ -311,6 +311,9 @@ export function blockPlacementId(id: number, yaw: number, half: "top" | "bottom"
     const token = MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID[item]?.token;
     if (token) {
       const facingName = ["north", "east", "south", "west"][facing];
+      // Place a fresh cake, never an already-eaten bites variant.
+      if (token === "cake") return minecraftBlockVariantId(token, { bites: 0 }) ?? item;
+      if (token === "candle_cake") return minecraftBlockVariantId(token, { lit: false }) ?? item;
       if (token.endsWith("_bed")) return minecraftBlockVariantId(token, { facing: facingName, part: "foot" }) ?? item;
       if (token === "chest" || token === "trapped_chest" || token === "ender_chest" || token.endsWith("_chest")) return minecraftBlockVariantId(token, { facing: facingName }) ?? item;
       if (token.endsWith("_log") || token.endsWith("_wood") || token.endsWith("_stem") || token === "bamboo_block") return minecraftBlockVariantId(token, { axis: "y" }) ?? item;

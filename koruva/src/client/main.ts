@@ -2969,7 +2969,9 @@ class Game {
     const under = this.ready && inLiquid(this.world, eye.x, eye.y, eye.z);
     $("underwater").hidden = !under;
     let fog: [number, number, number] = sky.skyColor;
-    const far = Math.max(40, this.settings.rd * 16 - 6);
+    // The chunk ring includes whole chunk rectangles, not only chunk centers.
+    // Keep the fog end beyond the outer ring so edge chunks are not mistaken for missing chunks.
+    const far = Math.max(64, (this.settings.rd + 3) * 16);
     let near = far * 0.55, farD = far;
     if (under) { fog = [0.12 * sky.light[0], 0.28 * sky.light[1], 0.55 * sky.light[2]]; near = 1; farD = 30; }
     this.renderer.setClearColor(new THREE.Color(fog[0], fog[1], fog[2]));

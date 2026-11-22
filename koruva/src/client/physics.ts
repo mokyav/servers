@@ -1,4 +1,4 @@
-import { BLOCKS, blockOccupiesSubcell } from "../../shared/blocks";
+import { BLOCKS, blockHasPartialModelShape, blockOccupiesSubcell } from "../../shared/blocks";
 import type { World } from "./world";
 
 export const PLAYER_W = 0.6;
@@ -21,7 +21,7 @@ export function collides(world: World, x: number, y: number, z: number): boolean
     const id = world.get(bx, by, bz);
     if (id === -1) return true;
     if (id <= 0 || !BLOCKS[id]?.solid) continue;
-    if (BLOCKS[id].shape === "cube") {
+    if (BLOCKS[id].shape === "cube" && !blockHasPartialModelShape(id)) {
       if (x + HW > bx && x - HW < bx + 1 && y + PLAYER_H > by && y < by + 1 && z + HW > bz && z - HW < bz + 1) return true;
       continue;
     }

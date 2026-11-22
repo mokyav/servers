@@ -1,5 +1,6 @@
 import { PROCESSING_RECIPES, fuelBurnTicks as sourceFuelBurnTicks } from "./processing.js";
 import { MINECRAFT_ITEM_TO_RUNTIME_ID } from "./minecraft-item-runtime.js";
+import { maxStackSizeForItemKey } from "./inventory-stacks.js";
 
 const recipes = new Map();
 const fuels = new Set();
@@ -19,6 +20,10 @@ for (const recipe of PROCESSING_RECIPES) {
   for (const choices of recipe.inputs || []) for (const itemId of choices) {
     if (!recipes.has(`furnace:${itemId}`) && recipe.type === "smelting") recipes.set(`furnace:${itemId}`, recipe);
   }
+}
+const runtimeItemKeyById = new Map(Object.entries(MINECRAFT_ITEM_TO_RUNTIME_ID).map(([key, id]) => [id, key]));
+function itemStackLimit(itemId) {
+  return maxStackSizeForItemKey(runtimeItemKeyById.get(itemId) ?? "");
 }
 const fuelIds = new Set();
 for (const recipe of PROCESSING_RECIPES) {
@@ -61,11 +66,11 @@ export function normalizeFurnaceState(value) {
   const fuelItemId = fuelCount && isFuelItem(value.fuelItemId) ? value.fuelItemId : 0;
   const outputItemId = outputCount && outputs.has(value.outputItemId) ? value.outputItemId : 0;
   return {
-    inputItemId, inputCount: inputItemId ? inputCount : 0,
-    fuelItemId, fuelCount: fuelItemId ? fuelCount : 0,
+    inputItemId, inputCount: inputItemId ? Math.min(inputCount, itemStackLimit(inputItemId)) : 0,
+    fuelItemId, fuelCount: fuelItemId ? Math.min(fuelCount, itemStackLimit(fuelItemId)) : 0,
     burnTicks: Number.isSafeInteger(value.burnTicks) ? Math.max(0, Math.min(20000, value.burnTicks)) : 0,
     cookTicks: Number.isSafeInteger(value.cookTicks) ? Math.max(0, Math.min(199, value.cookTicks)) : 0,
-    outputItemId, outputCount: outputItemId ? outputCount : 0,
+    outputItemId, outputCount: outputItemId ? Math.min(outputCount, itemStackLimit(outputItemId)) : 0,
   };
 }
 export function insertFurnaceItems(value, slot, itemId, count = 1) {
@@ -74,7 +79,7 @@ export function insertFurnaceItems(value, slot, itemId, count = 1) {
       || !(slot === "input" ? isSmeltableItem(itemId) : isFuelItem(itemId))) return { ok: false, moved: 0, state };
   const idKey = `${slot}ItemId`, countKey = `${slot}Count`;
   if (state[idKey] && state[idKey] !== itemId) return { ok: false, moved: 0, state };
-  const moved = Math.min(FURNACE_MAX_STACK - state[countKey], count);
+  const moved = Math.min(itemStackLimit(itemId), FURNACE_MAX_STACK - state[countKey], count);
   if (!moved) return { ok: false, moved: 0, state };
   return { ok: true, moved, state: { ...state, [idKey]: itemId, [countKey]: state[countKey] + moved } };
 }
@@ -99,9 +104,10 @@ export function advanceFurnaceState(value, ticks = 1, station = "furnace") {
   let completed = 0;
   for (let i = 0; i < steps; i++) {
     const recipe = smeltingRecipe(next.inputItemId, station);
+    const outputLimit = recipe ? Math.min(FURNACE_MAX_STACK, itemStackLimit(recipe.outputItemId)) : 0;
     const canCook = !!(recipe && next.inputCount > 0
       && (!next.outputCount || next.outputItemId === recipe.outputItemId)
-      && next.outputCount + recipe.outputCount <= FURNACE_MAX_STACK);
+      && next.outputCount + recipe.outputCount <= outputLimit);
     if (next.burnTicks <= 0 && canCook && next.fuelCount > 0) {
       const burn = fuelBurnTicks(next.fuelItemId);
       if (burn > 0) { next.burnTicks = burn; next.fuelCount--; if (!next.fuelCount) next.fuelItemId = 0; }

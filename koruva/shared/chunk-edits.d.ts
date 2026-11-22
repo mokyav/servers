@@ -8,3 +8,13 @@ export class PersistentChunkEdits {
   constructor(chunks: Map<string, ChunkRecord>, persist: PersistChunkRecord, options: PersistentChunkEditsOptions);
   apply(key: string, index: number, value: number): Promise<boolean>;
 }
+
+export type ChunkEdit = [x: number, y: number, z: number, blockId: number];
+export function* iterateChunkEdits(chunks: Map<string, ChunkRecord>, chunkSize?: number, noEdit?: number): Generator<ChunkEdit, void, unknown>;
+export function* iterateChunkEditBatches(
+  chunks: Map<string, ChunkRecord>,
+  chunkSize?: number,
+  noEdit?: number,
+  maxRecords?: number,
+  progressEveryChunks?: number,
+): Generator<number[], void, unknown>;

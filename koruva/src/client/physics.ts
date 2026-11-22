@@ -192,7 +192,8 @@ export function raycast(
     }
     const id = world.get(x, y, z);
     if (id === -1) return null;
-    if (id <= 0 || !BLOCKS[id] || !BLOCKS[id].solid || BLOCKS[id].render === "liquid") continue;
+    const def = BLOCKS[id];
+    if (id <= 0 || !def || def.render === "liquid" || (!def.solid && (!def.placeable || def.itemOnly))) continue;
     const modelMask = getModelCollisionMask(id);
     if (modelMask) {
       const resolution = MODEL_COLLISION_RESOLUTION;
@@ -204,7 +205,13 @@ export function raycast(
       const qx = Math.max(0, Math.min(3, Math.floor((px - x) * 4)));
       const qy = Math.max(0, Math.min(3, Math.floor((py - y) * 4)));
       const qz = Math.max(0, Math.min(3, Math.floor((pz - z) * 4)));
-      if (!blockOccupiesSubcell(id, qx, qy, qz)) continue;
+      if (def.solid) {
+        if (!blockOccupiesSubcell(id, qx, qy, qz)) continue;
+      } else if ((qx !== 1 && qx !== 2) || (qz !== 1 && qz !== 2)) {
+        // Fallback for placeable cutout blocks whose model data is unavailable:
+        // keep a narrow central selection column instead of making the whole voxel solid.
+        continue;
+      }
     }
     let nx = 0, ny = 0, nz = 0;
     if (lastEmptyX !== x) nx = -Math.sign(dx);

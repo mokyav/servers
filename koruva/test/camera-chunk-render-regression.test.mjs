@@ -42,3 +42,26 @@ test("initial loading waits for every chunk in the visible streaming ring", () =
   assert.match(chunkView, /for \(const \[dx, dz\] of this\.ring\(radius\)\)/);
   assert.match(chunkView, /return total > 0 \? ready \/ total : 1/);
 });
+
+
+test("chunk vertices stay local while the renderer applies the chunk transform once", () => {
+  const mesher = read("../src/client/mesher.ts");
+  const chunkView = read("../src/client/chunkview.ts");
+  assert.match(mesher, /target\.pos\.push\(px - ox, py, pz - oz\)/);
+  assert.match(mesher, /target\.pos\.push\(x - ox \+ transformed\[0\] \/ 16, y \+ transformed\[1\] \/ 16, z - oz \+ transformed\[2\] \/ 16\)/);
+  assert.match(chunkView, /m\.position\.set\(c\.cx \* CHUNK_SIZE, 0, c\.cz \* CHUNK_SIZE\)/);
+});
+
+test("translucent block meshes use blending without writing depth", () => {
+  const chunkView = read("../src/client/chunkview.ts");
+  const blocks = read("../shared/blocks.ts");
+  const main = read("../src/client/main.ts");
+  const drops = read("../src/client/drops.ts");
+  assert.match(blocks, /render: "translucent"/);
+  assert.match(chunkView, /uOpacity: \{ value: 0\.42 \}/);
+  assert.match(chunkView, /transparent: true, depthWrite: false/);
+  assert.match(chunkView, /res\.translucent/);
+  assert.match(main, /renderer\.outputColorSpace = THREE\.SRGBColorSpace/);
+  assert.match(drops, /tex\.colorSpace = THREE\.SRGBColorSpace/);
+  assert.match(drops, /texture\.colorSpace = THREE\.SRGBColorSpace/);
+});

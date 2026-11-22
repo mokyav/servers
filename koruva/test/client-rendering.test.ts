@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { inventoryPanelVisibility } from "../src/client/inventory-ui";
+import { hotbarSlotCount } from "../src/client/ui";
+import { World } from "../src/client/world";
 import { B } from "../shared/blocks";
 import { CHUNK_SIZE, CHUNK_VOLUME, WORLD_HEIGHT } from "../shared/constants";
 import { buildChunkMesh } from "../src/client/mesher";
-import type { Chunk, World } from "../src/client/world";
+import type { Chunk } from "../src/client/world";
 
 test("creative catalogue and player inventory never overlap", () => {
   assert.deepEqual(inventoryPanelVisibility("creative"), {
@@ -15,12 +17,16 @@ test("creative catalogue and player inventory never overlap", () => {
     creativeInventory: false,
     survivalInventory: true,
   });
-  for (const mode of ["survival", "adventure", "spectator"]) {
+  for (const mode of ["survival", "adventure"]) {
     assert.deepEqual(inventoryPanelVisibility(mode), {
       creativeInventory: false,
       survivalInventory: true,
     });
   }
+  assert.deepEqual(inventoryPanelVisibility("spectator"), {
+    creativeInventory: true,
+    survivalInventory: false,
+  });
 });
 
 function makeChunk(blocks: Array<[number, number, number]>) {
@@ -60,4 +66,27 @@ test("adjacent solid blocks keep their shared face culled", () => {
   assert.ok(mesh.solid);
   assert.equal(mesh.solid.vertexCount, 40, "two adjacent cubes must emit ten outer faces");
   assert.equal(mesh.solid.indices.length, 60);
+});
+
+
+test("HUD count uses the exact hotbar stack rather than the aggregate item total", () => {
+  assert.equal(hotbarSlotCount(12, 7, true), 7);
+  assert.equal(hotbarSlotCount(12, 0, true), 0);
+  assert.equal(hotbarSlotCount(12, 64, false), null);
+  assert.equal(hotbarSlotCount(0, 7, true), null);
+});
+
+test("unloading a chunk invalidates retained neighbours so their border faces return", () => {
+  const world = new World(9876);
+  const retained = world.ensureChunk(0, 0);
+  world.ensureChunk(1, 0);
+  retained.dirty = false;
+
+  const notified: unknown[] = [];
+  world.onChunkDirty = (chunk) => notified.push(chunk);
+  world.unloadChunk(1, 0);
+
+  assert.equal(world.getChunk(1, 0), undefined);
+  assert.equal(retained.dirty, true);
+  assert.deepEqual(notified, [retained]);
 });

@@ -77,7 +77,7 @@ export type ClientMsg =
   | { t: "attack"; mobId: string; heldItemId: number; slotKey?: string };
 
 export type ServerMsg =
-  | { t: "init"; id: string; code: string; seed: number; worldgenVersion?: number; now: number; t0: number; players: PlayerInfo[]; editCount: number; mode: GameMode; host: boolean; vitals?: PlayerVitals; drops?: { eid: string; x: number; y: number; z: number; b?: number; itemId?: number; xp?: number; count?: number }[] ; counts: number[]; mobs: MobInfo[]; projectiles?: ProjectileInfo[]; armorSlots?: number[]; itemEnchantments?: Record<string, Record<string, number>>; stackData?: Record<string, unknown>; elytraDamage?: number }
+  | { t: "init"; id: string; code: string; seed: number; dimensionId?: string; p?: Vec3; r?: Rot; worldgenVersion?: number; now: number; t0: number; players: PlayerInfo[]; editCount: number; mode: GameMode; host: boolean; vitals?: PlayerVitals; drops?: { eid: string; x: number; y: number; z: number; b?: number; itemId?: number; xp?: number; count?: number }[] ; counts: number[]; mobs: MobInfo[]; projectiles?: ProjectileInfo[]; armorSlots?: number[]; itemEnchantments?: Record<string, Record<string, number>>; stackData?: Record<string, unknown>; elytraDamage?: number }
   | { t: "dimension"; dimensionId: string; seed: number; worldgenVersion?: number; p: Vec3; r: Rot; players: PlayerInfo[]; drops?: { eid: string; x: number; y: number; z: number; b?: number; itemId?: number; xp?: number; count?: number }[]; mobs?: MobInfo[]; projectiles?: ProjectileInfo[] }
   | { t: "teleport"; p: Vec3; r: Rot }
   | { t: "edits"; list: number[]; done: boolean } // [x,y,z,b, x,y,z,b, ...]

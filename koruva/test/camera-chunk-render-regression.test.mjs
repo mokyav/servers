@@ -93,3 +93,15 @@ test("fog end distance extends beyond the outer chunk ring", () => {
     assert.ok(far > rd * 16, `fog end must not stop before render distance ${rd}`);
   }
 });
+
+
+test("urgent remeshing cannot spend the frame budget on offscreen or never-meshed chunks", () => {
+  const chunkView = read("../src/client/chunkview.ts");
+  const urgentStart = chunkView.indexOf("// 2) 表示中の既存チャンクだけを緊急再メッシュ。");
+  const normalStart = chunkView.indexOf("// 3) 未メッシュ/ダーティ", urgentStart);
+  assert.ok(urgentStart >= 0 && normalStart > urgentStart);
+  const urgent = chunkView.slice(urgentStart, normalStart);
+  assert.match(urgent, /const inVisibleRing = dx \* dx \+ dz \* dz <= rd \* rd \+ rd/);
+  assert.match(urgent, /!this\.entries\.has\(key\)/);
+  assert.match(urgent, /if \(c\.dirty\)/);
+});

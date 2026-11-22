@@ -2929,9 +2929,11 @@ class Game {
     this.view.update(this.body.x, this.body.z, this.settings.chunkGenBudget, this.settings.chunkMeshBudget);
 
     if (loading && !this.ready) {
-      const r = this.view.readyRatio(this.body.x, this.body.z, 2);
+      // Do not enter the world while any chunk in the visible render ring is still absent.
+      // The old 5x5-only check plus a 10s timeout exposed the rest of the view as chunk-sized holes.
+      const r = this.view.readyRatio(this.body.x, this.body.z, this.view.renderDistance);
       $("loadbar").style.width = `${Math.round(5 + r * 95)}%`;
-      if (r >= 0.99 || performance.now() - this.loadStart > 10000) this.finishLoading();
+      if (r >= 1) this.finishLoading();
     }
 
     if (this.ready) {

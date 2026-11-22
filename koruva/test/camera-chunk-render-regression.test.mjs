@@ -57,6 +57,7 @@ test("translucent block meshes use blending without writing depth", () => {
   const blocks = read("../shared/blocks.ts");
   const main = read("../src/client/main.ts");
   const drops = read("../src/client/drops.ts");
+  const remote = read("../src/client/remote.ts");
   assert.match(blocks, /render: "translucent"/);
   assert.match(chunkView, /uOpacity: \{ value: 0\.42 \}/);
   assert.match(chunkView, /transparent: true, depthWrite: false/);
@@ -64,4 +65,6 @@ test("translucent block meshes use blending without writing depth", () => {
   assert.match(main, /renderer\.outputColorSpace = THREE\.SRGBColorSpace/);
   assert.match(drops, /tex\.colorSpace = THREE\.SRGBColorSpace/);
   assert.match(drops, /texture\.colorSpace = THREE\.SRGBColorSpace/);
+  assert.match(main, /texture\.colorSpace = THREE\.SRGBColorSpace/);
+  assert.match(remote, /t\.colorSpace = THREE\.SRGBColorSpace/);
 });

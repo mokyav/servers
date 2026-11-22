@@ -8,7 +8,7 @@ import { MINECRAFT_ITEM_RUNTIME_IDS, MINECRAFT_ITEM_TO_RUNTIME_ID } from "./mine
 import { POTION_VARIANTS } from "./potions.js";
 import { MINECRAFT_BLOCK_OCCUPANCY } from "./minecraft-block-occupancy.js";
 
-export type RenderKind = "opaque" | "cutout" | "liquid";
+export type RenderKind = "opaque" | "cutout" | "translucent" | "liquid";
 export type BlockShape = "cube" | "slab" | "stairs" | "thin" | "carpet" | "trapdoor" | "door" | "pane" | "fence";
 
 export interface BlockDef {
@@ -86,7 +86,7 @@ export const BLOCKS: BlockDef[] = [
   def(5, "log", "原木", "log_top", "log_side", "log_top"),
   def(6, "leaves", "葉", "leaves", "leaves", "leaves", { render: "cutout", cullSame: false }),
   def(7, "planks", "板材", "planks"),
-  def(8, "glass", "ガラス", "glass", "glass", "glass", { render: "cutout" }),
+  def(8, "glass", "ガラス", "glass", "glass", "glass", { render: "translucent" }),
   def(9, "cobble", "丸石", "cobble"),
   def(10, "brick", "レンガ", "brick"),
   def(11, "snow", "雪", "snow"),
@@ -200,11 +200,12 @@ function minecraftFallback(token: string): { top: string; side: string; bottom: 
   const fragile = /(?:_sapling|_flower|_tulip|_orchid|_daisy|_allium|_bush|_fern|_roots|_vine|_torch|_rail|_sign|_lever|_button|_redstone_wire|_repeater|_comparator|_coral(?:_fan)?|_seagrass|_kelp|_banner|_head|_skull|_ladder|_chain|_tripwire|_tripwire_hook|_candle|_portal|end_gateway)$/.test(low);
   const hidden = low === "barrier" || low === "structure_void" || low === "light";
   const leaves = low.includes("leaves");
-  const transparent = liquid || leaves || low.includes("glass") || low.includes("ice") || fragile || hidden || partialKind === "pane";
+  const translucent = /(?:glass|ice|slime_block|honey_block)/.test(low);
+  const transparent = translucent || leaves || fragile || hidden || partialKind === "pane";
   const shape = low.endsWith("_slab") ? "slab" as const : low.endsWith("_stairs") ? "stairs" as const : partialKind;
   const solid = !liquid && low !== "light" && low !== "structure_void" && !fragile && low !== "fire";
   return { top, side, bottom, solid,
-    render: liquid ? "liquid" as const : transparent ? "cutout" as const : "opaque" as const, cullSame: !leaves && partialKind !== "pane",
+    render: liquid ? "liquid" as const : translucent ? "translucent" as const : transparent ? "cutout" as const : "opaque" as const, cullSame: !leaves && partialKind !== "pane",
     emissive: /glowstone|sea_lantern|shroomlight|torch|lantern|magma|lava|redstone_lamp/.test(low),
     shape,
     placeable: !liquid && low !== "bedrock" && !hidden && low !== "fire" && !low.endsWith("_air") };

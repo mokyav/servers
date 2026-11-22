@@ -145,6 +145,27 @@ ok(potionInventory?.counts?.[swiftnessPotionId] === 0 && potionInventory?.counts
 await hroom.webSocketMessage(host, JSON.stringify({ t: "pos", p: [0, 40, 0], r: [0, 0], sneak: true }));
 ok(guest.inbox.some((m: any) => m.t === "pos" && m.sneak === true), "スニーク状態がマルチへ同期される");
 
+// Rejected speed-hack positions must not grant fall velocity, fall distance, or movement flags.
+const guestState = hroom.player(guest);
+guestState.verticalVelocity = -0.25;
+guestState.fallDistance = 2;
+guestState.sneak = false;
+guestState.sprint = false;
+guestState.swimming = false;
+guestState.fallFlying = false;
+guestState.elytraVelocity = [1, 2, 3];
+const guestPositionBefore = [...guestState.p];
+await hroom.webSocketMessage(guest, JSON.stringify({
+  t: "pos", p: [1000, -100, 1000], r: [0, 0], sneak: true, sprint: true, swimming: true, fallFlying: true,
+}));
+ok(
+  guestState.p.join() === guestPositionBefore.join() &&
+  guestState.verticalVelocity === -0.25 && guestState.fallDistance === 2 &&
+  guestState.sneak === false && guestState.sprint === false && guestState.swimming === false &&
+  guestState.fallFlying === false && guestState.elytraVelocity?.join() === "1,2,3",
+  "拒否された移動では落下・スニーク・飛行状態を更新しない",
+);
+
 // 偽トークン / ゲストは管理コマンド不可
 const fake = await join2(hroom, "Fake", { cid: "cid-fake-0003", hostToken: "wrong-token-123456" }, "3.3.3.3");
 ok(fake.inbox.find((m: any) => m.t === "init").host === false, "偽トークンはホストになれない");

@@ -204,8 +204,12 @@ label .hint { font-size: 11px; color: var(--muted); }
 .inventory-overlay {
   position: fixed; inset: 0; z-index: 15; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 12px; padding: 14px;
-  overflow: auto; background: rgba(0,0,0,.58); backdrop-filter: blur(2px);
+  overflow: auto; overscroll-behavior: contain; touch-action: pan-y;
+  -webkit-overflow-scrolling: touch; background: rgba(0,0,0,.58); backdrop-filter: blur(2px);
 }
+#inventory-mobile-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; width: min(100%, 1000px); min-height: 44px; }
+#inventory-mobile-toolbar strong { margin-right: auto; color: #fff; font-size: 14px; text-shadow: 0 1px 3px #000; }
+#inventory-close { min-width: 96px; min-height: 44px; padding: 8px 14px; border: 1px solid rgba(255,255,255,.42); border-radius: 10px; color: #fff; background: rgba(24,32,46,.94); touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 #inventory-layout { display: flex; align-items: flex-start; justify-content: center; gap: 14px; max-width: 100%; }
 #survival-inventory { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 #mc-inventory-window {
@@ -274,11 +278,16 @@ label .hint { font-size: 11px; color: var(--muted); }
 #craft-recipes { max-height: 24vh; }
 #craft-recipes .craft-recipe { min-height: 30px; padding: 6px 8px; font-size: 11px; }
 @media (max-width: 680px) {
-  #inventory-layout { flex-direction: column; align-items: center; gap: 8px; }
+  .inventory-overlay { justify-content: flex-start; align-items: stretch; gap: 8px; padding: max(8px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); }
+  #inventory-mobile-toolbar { position: sticky; top: 0; z-index: 3; width: 100%; padding: 2px 0 6px; background: rgba(12,17,26,.94); }
+  #inventory-layout { flex-direction: column; align-items: center; gap: 8px; width: 100%; }
   #inv-status { width: min(352px,92vw); max-height: 22vh; }
-  #mc-inventory-window { transform: scale(.88); margin: -20px -22px; }
-  #creative-inventory { max-height: 60vh; }
-  #invgrid { max-height: 30vh; }
+  #mc-inventory-window { transform: scale(min(.88, calc((100vw - 16px) / 352))); transform-origin: top center; margin: 0 0 -38px; }
+  #survival-inventory { max-width: 100%; }
+  #creative-inventory { width: 100%; max-height: min(64vh, 680px); }
+  #invgrid { max-height: min(36vh, 380px); }
+  #inv-status { max-height: none; }
+  #inventory-close { font-size: 14px; }
 }
 @media (max-height: 540px) {
   .inventory-overlay { justify-content: flex-start; }
@@ -489,4 +498,22 @@ canvas#gl { touch-action: none; }
     gap: 0;
     padding: calc(var(--hotbar-slot-size) * 0.05);
   }
+}
+
+
+/* Compact touch layouts: keep the inventory close action reachable in portrait and landscape. */
+@media (pointer: coarse) {
+  #inventory-mobile-toolbar { min-height: 48px; }
+  #inventory-close { min-height: 48px; }
+  #inventory .mc-slot, #inventory #invgrid .slot, #inventory #invhotbar .slot { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+}
+@media (orientation: landscape) and (max-height: 540px) and (pointer: coarse) {
+  .inventory-overlay { justify-content: flex-start; padding-top: max(4px, env(safe-area-inset-top, 0px)); }
+  #inventory-mobile-toolbar { min-height: 42px; }
+  #inventory-close { min-height: 40px; }
+  #inventory-layout { flex-direction: row; align-items: flex-start; justify-content: center; gap: 8px; }
+  #mc-inventory-window { transform: scale(.72); transform-origin: top center; margin: 0 -48px -88px; }
+  #inv-status { width: min(190px, 32vw); max-height: 72dvh; }
+  #creative-inventory { max-height: 76dvh; }
+  #invgrid { max-height: 44dvh; }
 }

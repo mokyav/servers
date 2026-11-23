@@ -817,10 +817,34 @@ class Game {
       button.addEventListener("lostpointercapture", up);
       button.addEventListener("contextmenu", (e) => e.preventDefault());
     };
-    const bindTap = (button: HTMLButtonElement, run: () => void) => button.addEventListener("click", (e) => {
-      e.preventDefault(); e.stopPropagation();
-      if (this.state === "playing") run();
-    });
+    // Touch browsers can suppress a synthesized click after a pointer is captured.
+    // Activate on the matching pointerup, and retain click for keyboard accessibility.
+    const bindTap = (button: HTMLButtonElement, run: () => void) => {
+      let activePointer: number | null = null;
+      button.addEventListener("pointerdown", (e) => {
+        if (this.state !== "playing" || activePointer !== null || e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        activePointer = e.pointerId;
+        try { button.setPointerCapture(e.pointerId); } catch { /* capture is optional */ }
+      });
+      button.addEventListener("pointerup", (e) => {
+        if (activePointer !== e.pointerId) return;
+        activePointer = null;
+        releaseCapture(button, e.pointerId);
+        e.preventDefault(); e.stopPropagation();
+        if (this.state === "playing") run();
+      });
+      const cancel = (e: PointerEvent) => { if (activePointer === e.pointerId) activePointer = null; };
+      button.addEventListener("pointercancel", cancel);
+      button.addEventListener("lostpointercapture", cancel);
+      button.addEventListener("click", (e) => {
+        // Pointer clicks are already handled above. detail === 0 covers keyboard activation.
+        if (e.detail !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        if (this.state === "playing") run();
+      });
+      button.addEventListener("contextmenu", (e) => e.preventDefault());
+    };
 
     let joystickPointer: number | null = null;
     const resetJoystick = () => {
@@ -1496,10 +1520,28 @@ class Game {
   }
 
   openInventory() {
+    if (this.state !== "playing" && this.state !== "inventory") return;
     this.resetMobileInputState();
     this.state = "inventory";
-    this.keys.clear(); this.mouseL = this.mouseR = false;
-    document.exitPointerLock();
+    this.keys.clear(); this.physicalKeys.clear(); this.mouseL = this.mouseR = false;
+    if (document.pointerLockElement && typeof document.exitPointerLock === "function") {
+      try { document.exitPointerLock(); } catch { /* pointer lock is not used on touch devices */ }
+    }
+    const closeButton = $<HTMLButtonElement>("inventory-close");
+    if (closeButton && closeButton.dataset.bound !== "1") {
+      closeButton.dataset.bound = "1";
+      closeButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        if (this.state === "inventory") this.closeInventory();
+      });
+    }
+    const overlay = $("inventory");
+    if (overlay.dataset.bound !== "1") {
+      overlay.dataset.bound = "1";
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay && this.state === "inventory") this.closeInventory();
+      });
+    }
     this.syncInventorySlots();
     $("workbench-panel").hidden = !this.workbenchOpen;
     $("crafting-grid-2x2").hidden = this.workbenchOpen;

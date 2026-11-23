@@ -128,7 +128,7 @@ test("piglin variants use their dedicated 26.3 PiglinModel UV rig", () => {
   assert.equal(MOB_RENDER_TEXTURES.piglin_brute, "piglin/piglin_brute");
   assert.equal(MOB_RENDER_TEXTURES.zombified_piglin, "piglin/zombified_piglin");
   assert.match(mobSource, /size:\[10,8,8\],pos:\[0,28,0\],uv:\[0,0\]/); // 26.3 piglin head
-  assert.match(mobSource, /size:\[4,4,1\],pos:\[0,30,5\.5\],uv:\[31,1\]/); // snout
+  assert.match(mobSource, /size:\[4,4,1\],pos:\[0,30,4\.5\],uv:\[31,1\]/); // snout
   assert.match(mobSource, /uv:\[51,6\],rotationZ:-Math\.PI\/6/); // left ear
   assert.match(mobSource, /uv:\[39,6\],rotationZ:Math\.PI\/6/); // right ear
 });

@@ -57,3 +57,15 @@ test("server logs websocket close codes and completes valid close handshakes", (
   assert.ok(room.includes("ws.close(code, reason)"));
   assert.ok(room.includes("webSocketError(ws: WebSocket, error?: unknown)"));
 });
+
+
+test("initial-sync disconnect and slow WebSocket messages are recoverable and diagnosable", () => {
+  assert.ok(main.includes("if (!reconnecting && this.roomHasConnected && roomSessionToken === this.roomSessionToken && !this.roomReconnectTask)"));
+  assert.ok(main.includes("await this.roomReconnectTask;"));
+  assert.ok(room.includes("async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void>"));
+  assert.ok(room.includes("private async handleWebSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void>"));
+  assert.ok(room.includes('console.warn("[Koruva DO] slow websocket message"'));
+  assert.ok(room.includes("type: messageType,"));
+  assert.ok(room.includes("elapsedMs,"));
+  assert.ok(room.includes("cachedMobChunks: this.mobChunkCache.size"));
+});

@@ -2043,6 +2043,9 @@ class Game {
         clearWatchdog();
         timer = window.setTimeout(() => {
           const error = new Error("ルームからの同期応答が60秒間ありませんでした");
+          if (!reconnecting && this.roomHasConnected && roomSessionToken === this.roomSessionToken && !this.roomReconnectTask) {
+            this.scheduleRoomReconnect(code, roomSessionToken, error.message);
+          }
           this.net.close();
           rejectOnce(error);
         }, 60_000);
@@ -2113,7 +2116,18 @@ class Game {
     // A socket that opened and sent hello is already eligible for recovery, even if its
     // first full chunk/edit synchronization is interrupted.
     this.roomHasConnected = true;
-    const roomEntry = await done;
+    let roomEntry: { position: [number, number, number] | null; rotation: [number, number] | null };
+    try {
+      roomEntry = await done;
+    } catch (error) {
+      // When a first-time join drops after WebSocket open, its retry task owns recovery.
+      // Keep the original UI action pending instead of allowing its outer catch to cancel it.
+      if (!reconnecting && roomSessionToken === this.roomSessionToken && this.roomReconnectTask) {
+        await this.roomReconnectTask;
+        return;
+      }
+      throw error;
+    }
     const serverCounts = [...this.counts];
     const serverArmorSlots = [...this.armorSlots];
     if (saved) this.applyPlayerSave(saved, true); else {

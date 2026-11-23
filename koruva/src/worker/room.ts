@@ -414,6 +414,33 @@ export class Room extends DurableObject<Env> {
   }
 
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
+    const startedAt = Date.now();
+    const messageType = typeof raw === "string"
+      ? (/^\\s*\\{\\s*"t"\\s*:\\s*"([^"]+)"/.exec(raw)?.[1] ?? "unknown")
+      : "binary";
+    try {
+      await this.handleWebSocketMessage(ws, raw);
+    } finally {
+      const elapsedMs = Date.now() - startedAt;
+      if (elapsedMs >= 100) {
+        const player = this.mem.get(ws);
+        console.warn("[Koruva DO] slow websocket message", {
+          room: this.meta?.code ?? "unknown",
+          playerId: player?.joined ? player.id : undefined,
+          type: messageType,
+          bytes: typeof raw === "string" ? raw.length : raw.byteLength,
+          elapsedMs,
+          sockets: this.ctx.getWebSockets().length,
+          mobs: this.mobs.size,
+          projectiles: this.projectiles.size,
+          drops: this.drops.size,
+          cachedMobChunks: this.mobChunkCache.size,
+        });
+      }
+    }
+  }
+
+  private async handleWebSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
     // サイズ上限は種別ごとに分ける。hello は全ブロック分の所持数配列(BLOCKS.length 件)や
     // スキンPNG(最大32,000文字)を含むため 4096 では必ず超え、黙って捨てられて接続が
     // タイムアウトしていた。まず緩い上限で弾き、パース後に種別ごとの上限を適用する。

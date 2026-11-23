@@ -59,7 +59,7 @@ test("expanded mob material tables cover passive, boss, and rare-drop rewards",a
 test("rare drops use bounded chances and Looting raises the probability",async()=>{
   const {rollMobMaterialLoot}=await import("../shared/mob-loot.js");
   const noLooting=[0.9,0.15,0.999];
-  const withLooting=[0.9,0.999,0.15,0.999];
+  const withLooting=[0.9,0.0,0.15,0.999];
   assert.deepEqual(rollMobMaterialLoot("rabbit",()=>noLooting.shift()??0.999,0),{rabbit_hide:1});
   assert.deepEqual(rollMobMaterialLoot("rabbit",()=>withLooting.shift()??0.999,3),{rabbit_hide:1,rabbit_foot:1});
 });

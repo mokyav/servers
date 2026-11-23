@@ -100,7 +100,7 @@ export const MOB_PROFILE_DIMENSIONS = Object.freeze({
   camel:[1.7,2.375], camel_husk:[1.7,2.375], cat:[0.6,0.7], cave_spider:[0.7,0.5],
   chicken:[0.4,0.7], cod:[0.5,0.3], copper_golem:[0.6,1.2], cow:[0.9,1.4],
   creaking:[0.9,2.7], creeper:[0.6,1.7], dolphin:[0.9,0.6], donkey:[1.396,1.6],
-  drowned:[0.6,1.95], elder_guardian:[1.9975,1.9975], ender_dragon:[16,8],
+  drowned:[0.6,1.95], elder_guardian:[1.9975,1.9975], ender_dragon:[16,4],
   enderman:[0.6,2.9], endermite:[0.4,0.3], evoker:[0.6,1.95], fox:[0.6,0.7],
   frog:[0.5,0.5], ghast:[4,4], glow_squid:[0.8,0.8], goat:[0.9,1.3],
   guardian:[0.85,0.85], happy_ghast:[4,4], hoglin:[1.396,1.4], horse:[1.396,1.6],

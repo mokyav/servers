@@ -275,18 +275,24 @@ test("vanilla model-backed cube emits faces on all six axes", () => {
   }
 });
 
-test("opaque cactus with a binary-alpha underside uses the alpha-tested cutout layer", () => {
+test("all binary-alpha cactus model faces use the alpha-tested cutout layer", () => {
   const cactus = MINECRAFT_BLOCK_TO_ID["minecraft:cactus"];
   assert.ok(cactus > 0);
-  assert.equal(BLOCKS[cactus].render, "opaque", "other cactus faces retain the opaque path");
-  assert.ok(MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES.has("minecraft:block/cactus_bottom"));
+  // The block retains its opaque gameplay profile, but Java 26.3's cactus
+  // side/top/bottom PNGs all contain only alpha 0/255 pixels. Route those
+  // individual model faces to cutout instead of expecting an opaque mesh.
+  assert.equal(BLOCKS[cactus].render, "opaque");
+  for (const texture of ["cactus_bottom", "cactus_side", "cactus_top"]) {
+    assert.ok(MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES.has(`minecraft:block/${texture}`));
+  }
   assert.ok(MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES.has("minecraft:block/cake_bottom"));
   assert.ok(MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES.has("minecraft:block/cauldron_bottom"));
   const { chunk, world } = makeChunk([[4, 4, 4, cactus]]);
   const mesh = buildChunkMesh(world, chunk, fullTile);
-  assert.ok(mesh.solid, "opaque cactus faces must remain in the solid mesh");
+  assert.equal(mesh.solid, null, "all cactus model faces use binary-alpha textures in the 26.3 atlas");
   assert.ok(mesh.cutout, "binary-alpha model faces must use the cutout mesh");
   assert.ok(meshHasFaceNormal(mesh.cutout, [0, -1, 0], 1, 4), "the underside must be emitted into the alpha-tested layer");
+  assert.ok(meshHasFaceNormal(mesh.cutout, [0, 1, 0], 1, 4), "the top face must retain its transparent pixels");
 });
 
 test("grass block base sides and transparent overlay share one ordered cutout mesh", () => {

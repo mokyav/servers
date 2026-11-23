@@ -30,5 +30,6 @@ test("title menu shows the build's Koruva version", async () => {
   assert.ok(workflow.includes("npm version minor --no-git-tag-version"));
   assert.ok(workflow.includes('"!koruva/package.json"'));
   assert.ok(workflow.includes('"!koruva/package-lock.json"'));
+  assert.ok(workflow.includes('"!koruva/test/**"'));
   assert.ok(!workflow.includes("    if:"));
 });

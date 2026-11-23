@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - "koruva/**"
+      # A commit that only updates the package version must not trigger another bump.
+      - "!koruva/package.json"
+      - "!koruva/package-lock.json"
 
 permissions:
   contents: write

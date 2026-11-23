@@ -4,6 +4,7 @@ import { inventoryPanelVisibility, shouldCloseInventoryFromKey } from "../src/cl
 import { hotbarSlotCount } from "../src/client/ui";
 import { World } from "../src/client/world";
 import { B, BLOCKS, MINECRAFT_BLOCK_TO_ID, blockHasPartialModelShape } from "../shared/blocks";
+import { MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES } from "../shared/minecraft-block-alpha-test-textures.js";
 import { resolveBlockTextureResource } from "../shared/legacy-texture-aliases.js";
 import { canToggleFlight, isSpectatorFlightLocked } from "../shared/flight-mode.js";
 import { itemDropTexturePath } from "../shared/drop-item-texture.js";
@@ -239,6 +240,20 @@ test("vanilla model-backed cube emits faces on all six axes", () => {
   for (const normal of [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]] as [number,number,number][]) {
     assert.ok(meshHasFaceNormal(mesh.solid, normal), `missing vanilla face ${normal.join(",")}`);
   }
+});
+
+test("opaque cactus with a binary-alpha underside uses the alpha-tested cutout layer", () => {
+  const cactus = MINECRAFT_BLOCK_TO_ID["minecraft:cactus"];
+  assert.ok(cactus > 0);
+  assert.equal(BLOCKS[cactus].render, "opaque", "other cactus faces retain the opaque path");
+  assert.ok(MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES.has("minecraft:block/cactus_bottom"));
+  assert.ok(MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES.has("minecraft:block/cake_bottom"));
+  assert.ok(MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES.has("minecraft:block/cauldron_bottom"));
+  const { chunk, world } = makeChunk([[4, 4, 4, cactus]]);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.ok(mesh.solid, "opaque cactus faces must remain in the solid mesh");
+  assert.ok(mesh.cutout, "binary-alpha model faces must use the cutout mesh");
+  assert.ok(meshHasFaceNormal(mesh.cutout, [0, -1, 0], 1, 4), "the underside must be emitted into the alpha-tested layer");
 });
 
 test("grass block base sides and transparent overlay share one ordered cutout mesh", () => {

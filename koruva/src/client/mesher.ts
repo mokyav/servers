@@ -3,6 +3,8 @@ import { B, BLOCKS, blockOccupiesSubcell } from "../../shared/blocks";
 import { CHUNK_SIZE, WORLD_HEIGHT } from "../../shared/constants";
 import { MINECRAFT_BLOCK_MODEL_REGISTRY, type MinecraftModelElement, type MinecraftModelFace, type MinecraftModelInstance } from "../../shared/minecraft-block-model-registry.js";
 import { MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID } from "../../shared/minecraft-block-runtime.js";
+import { MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES } from "../../shared/minecraft-block-alpha-test-textures.js";
+import { resolveBlockTextureResource } from "../../shared/legacy-texture-aliases.js";
 import { biomeAt, dimensionBiomeAt } from "./worldgen";
 import type { Chunk, World } from "./world";
 
@@ -65,6 +67,12 @@ class Builder {
 
 const UV_PAD = 0.0005;
 type Vec3 = [number, number, number];
+
+/** Return true only for official block textures whose PNG alpha is strictly 0/255. */
+function usesBinaryAlphaTexture(texture: string): boolean {
+  const resource = resolveBlockTextureResource(texture);
+  return resource !== null && MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES.has(resource);
+}
 
 const MODEL_FACE_INDEX: Record<string, number> = { east: 0, west: 1, up: 2, down: 3, south: 4, north: 5 };
 const MODEL_FACE_NORMAL: Record<string, Vec3> = {
@@ -319,7 +327,10 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
           // Grass side base and transparent overlay are coplanar in vanilla's model.
           // Keep them in one ordered alpha-tested mesh so overlay holes reveal the base texture.
           const grassSideLayer = /(?:^|\/)grass_block_side(?:_overlay)?$/.test(face.texture);
-          const faceTarget = grassSideLayer ? cutoutTarget : target;
+          // Opaque block models can still use binary-alpha textures on individual faces
+          // (for example cactus/cake/cauldron undersides). Alpha-test those faces only.
+          const alphaTestFace = def.render === "opaque" && usesBinaryAlphaTexture(face.texture);
+          const faceTarget = grassSideLayer || alphaTestFace ? cutoutTarget : target;
           const base = faceTarget.n, ao: number[] = [];
           const uvRect = tileUV(face.texture);
           const tint = face.tintindex >= 0 ? tintForBlock(world, id, x, z, face.texture) : [255, 255, 255];
@@ -389,7 +400,8 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
               if (nid === id && def.cullSame) continue;
               if (def.render === "liquid" && nd.render === "liquid") continue;
             }
-            emitFace(target, def, x, y, z, f, [x + 0.5, y + 0.5, z + 0.5], 0.5);
+            const faceTarget = def.render === "opaque" && usesBinaryAlphaTexture(def.tiles[f.which]) ? cutout : target;
+            emitFace(faceTarget, def, x, y, z, f, [x + 0.5, y + 0.5, z + 0.5], 0.5);
           }
           continue;
         }
@@ -415,7 +427,8 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
               }
             }
             const center: [number, number, number] = [x + 0.125 + qx * 0.25, y + 0.125 + qy * 0.25, z + 0.125 + qz * 0.25];
-            emitFace(target, def, x, y, z, f, center, 0.125, sub);
+            const faceTarget = def.render === "opaque" && usesBinaryAlphaTexture(def.tiles[f.which]) ? cutout : target;
+            emitFace(faceTarget, def, x, y, z, f, center, 0.125, sub);
           }
         }
       }

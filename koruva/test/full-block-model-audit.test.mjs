@@ -88,19 +88,34 @@ test("every generated model texture resolves to a bundled PNG", () => {
   assert.deepEqual(missing.slice(0, 20), [], missing.slice(0, 20).join("\\n"));
 });
 
-test("report registered blockstates without a generated model instead of silently hiding them", () => {
+test("every blockstate without model geometry is an explicit invisible or dynamic exception", () => {
   const missing = [];
   let total = 0;
   for (const [idText, meta] of Object.entries(MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID)) {
     const id = Number(idText);
     if (id < MINECRAFT_BLOCK_RUNTIME_ID_START) continue;
     total++;
-    if (!registry.byId[id]?.length) missing.push({ id, token: meta.token, kind: meta.kind, state: meta.state });
+    if (!registry.byId[id]?.length) {
+      const state = Object.entries(meta.state ?? {}).sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, value]) => `${key}=${String(value)}`).join(",");
+      missing.push(`${meta.token}|${state}`);
+    }
   }
-  console.log(`[Block state coverage] registered=${total}, modeled=${total - missing.length}, fallback=${missing.length}`);
-  if (missing.length) console.log(`[Block state fallback examples] ${JSON.stringify(missing.slice(0, 80))}`);
-  // Some technical/no-render blockstates are intentionally handled by the voxel fallback.
-  // Keep the list visible so new omissions are caught during review.
-  assert.ok(missing.length <= Math.max(32, Math.ceil(total * 0.01)),
-    `too many blockstates lack official model geometry: ${missing.length}/${total}`);
+
+  const intentional = new Set([
+    "barrier|",
+    "bubble_column|",
+    "lava|",
+    "light|",
+    "moving_piston|",
+    "structure_void|",
+    "water|",
+    ...Array.from({ length: 16 }, (_, level) => `light|level=${level}`),
+    ...Array.from({ length: 3 }, (_, age) => `pitcher_crop|age=${age},half=upper`),
+  ]);
+  const actual = [...missing].sort();
+  const expected = [...intentional].sort();
+  console.log(`[Block state coverage] registered=${total}, modeled=${total - missing.length}, intentional-no-model=${missing.length}`);
+  assert.deepEqual(actual, expected,
+    `unexpected blockstates without generated geometry: ${actual.filter(key => !intentional.has(key)).join(", ")}; missing expected exceptions: ${expected.filter(key => !actual.includes(key)).join(", ")}`);
 });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { inventoryPanelVisibility } from "../src/client/inventory-ui";
+import { inventoryPanelVisibility, shouldCloseInventoryFromKey } from "../src/client/inventory-ui";
 import { hotbarSlotCount } from "../src/client/ui";
 import { World } from "../src/client/world";
 import { B, BLOCKS, MINECRAFT_BLOCK_TO_ID } from "../shared/blocks";
@@ -147,4 +147,11 @@ test("an invalid runtime block ID cannot abort or hide the rest of a chunk mesh"
   assert.ok(mesh.solid);
   assert.equal(mesh.solid.vertexCount, 24, "unknown blocks use a visible placeholder cube");
   assert.equal(mesh.solid.indices.length, 36);
+});
+
+
+test("creative inventory search can type the letter E without closing the inventory", () => {
+  assert.equal(shouldCloseInventoryFromKey("KeyE", true), false);
+  assert.equal(shouldCloseInventoryFromKey("KeyE", false), true);
+  assert.equal(shouldCloseInventoryFromKey("Escape", true), true);
 });

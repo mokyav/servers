@@ -25,7 +25,7 @@ import { craftFromGrid, craftGridForRecipe, craftRecipeFitsGrid, createCraftReci
 import { addEffect, addExhaustion, applyDamage, applyFood, canAdventureEdit, clearEffect, createVitals, EFFECT_DEFS, normalizeVitals, tickVitals, type DamageCause, type Difficulty, type PlayerVitals } from "../../shared/vitals";
 import { FOOD_DEFS } from "../../shared/food";
 import { MOB_TYPES, type MobInfo, type MobType, type ProjectileInfo } from "../../shared/entities";
-import { createMob, hasClearLine, MOB_PROFILES, stepMobAI } from "../../shared/mob-ai.js";
+import { canMobOccupy, createMob, hasClearLine, MOB_PROFILES, stepMobAI } from "../../shared/mob-ai.js";
 import { applyMobFoodLoot, rollMobFoodLoot, rollMobMaterialLoot } from "../../shared/mob-loot.js";
 import { addExperience, rollMobExperience, getExperienceProgress, experienceThreshold, experienceDropOnDeath, takeExperienceFromDrop } from "../../shared/experience.js";
 import { NATURAL_MOB_DIMENSIONS, NATURAL_MOB_MAX_PER_DIMENSION, chooseNaturalMobType, daylightAtTime, findNaturalSpawnSpot, findNaturalSpawnGroup, naturalMobSpawnGroupSize, isNaturalMobSpawnDue, shouldDespawnNaturalMob } from "../../shared/natural-spawning.js";
@@ -705,41 +705,8 @@ export class Room extends DurableObject<Env> {
             await this.explodeEndCrystal(target);
           }
           this.broadcastDimension({ t: "mobgone", id: mobId }, mobDimensionId(target));
-          // Award supported food loot only after death persistence to avoid duplicate rewards on retry.
-          if (me.vitals.gameMode === "survival" || me.vitals.gameMode === "adventure") {
-            const loot = rollMobFoodLoot(target.type, Math.random, getItemEnchantment(meleeEnchants, heldItemId, "looting"));
-            const foodReward = applyMobFoodLoot(me.vitals.foodCounts, loot);
-            const previousFoodCounts = me.vitals.foodCounts;
-            const previousExperience = me.vitals.experience;
-            const experienceReward = rollMobExperience(target.type);
-            let grantedExperience = experienceReward;
-            grantedExperience = await this.repairMendingFromExperience(ws,me,grantedExperience);
-            const elytraId = MINECRAFT_ITEM_TO_RUNTIME_ID["minecraft:elytra"] ?? -1;
-            if (elytraId > 0 && me.armorSlots[1] === elytraId && me.elytraDamage > 0
-                && getItemEnchantment(withStackEnchantments(me.itemEnchantments,me.stackData,"armor:1",elytraId), elytraId, "mending") > 0) {
-              const repair = Math.min(me.elytraDamage, Math.floor(experienceReward / 2));
-              if (repair > 0) {
-                me.elytraDamage -= repair;
-                grantedExperience = Math.max(0, experienceReward - repair * 2);
-                if (me.cid) await this.ctx.storage.put("elytra:" + me.cid, me.elytraDamage);
-                this.send(ws, { t: "elytra-state", damage: me.elytraDamage, broken: false });
-              }
-            }
-            const nextExperience = addExperience(previousExperience ?? 0, grantedExperience);
-            if (foodReward.changed || nextExperience !== (previousExperience ?? 0)) {
-              if (foodReward.changed) me.vitals.foodCounts = foodReward.foodCounts;
-              me.vitals.experience = nextExperience;
-              try {
-                await this.persistVitals(me);
-                this.sendStats(me);
-              } catch (error) {
-                me.vitals.foodCounts = previousFoodCounts;
-                me.vitals.experience = previousExperience;
-                throw error;
-              }
-            }
-          }
-          if (me.vitals.gameMode === "survival" || me.vitals.gameMode === "adventure") await this.spawnMobMaterialDrops(target, me.dimensionId);
+          await this.awardMobDeathRewards(target, ws, me, getItemEnchantment(meleeEnchants, heldItemId, "looting"));
+
         } else {
           const fleeState = MOB_PROFILES[target.type]?.kind === "passive"
             ? { fleeYaw: Math.atan2(target.x - me.p[0], target.z - me.p[2]), fleeUntil: now + 4000 }
@@ -751,8 +718,9 @@ export class Room extends DurableObject<Env> {
           const pushedZ = target.z + (dz / distance) * push;
           const canPush = !BLOCKS[this.blockAt(Math.floor(pushedX), Math.floor(target.y + 0.2), Math.floor(pushedZ), me.dimensionId)]?.solid;
           const fireAspect = getItemEnchantment(meleeEnchants, heldItemId, "fire_aspect");
-          const fireImmune = ["blaze", "ghast", "magma_cube", "strider", "wither", "ender_dragon", "zombified_piglin"].includes(target.type);
+          const fireImmune = ["blaze", "ghast", "magma_cube", "strider", "wither", "wither_skeleton", "ender_dragon", "zombified_piglin", "end_crystal"].includes(target.type);
           const updated = { ...target, maxHealth, health, lastHurtAt: hurt.lastHurtAtMs, lastDamage: hurt.lastDamage,
+            lastDamagerId: me.id, lastDamagedAt: now, lastLootingLevel: getItemEnchantment(meleeEnchants, heldItemId, "looting"),
             ...(canPush && knockback > 0 ? { x: pushedX, z: pushedZ } : {}),
             ...(fireAspect > 0 && !fireImmune ? { burningUntil: Math.max(target.burningUntil ?? 0, now + fireAspect * 4000) } : {}),
             ...fleeState };
@@ -1646,8 +1614,18 @@ export class Room extends DurableObject<Env> {
         const health = Math.max(0, (nextMob.health ?? maxHealth) - 1);
         if (health <= 0) {
           this.mobs.delete(id);
+          await this.persistMobs();
           this.broadcastDimension({ t: "mobgone", id }, dimensionId);
           removed = true;
+          if (nextMob.type === "end_crystal") await this.explodeEndCrystal(nextMob);
+          const killer = online.find(({ st }) => st.id === nextMob.lastDamagerId
+            && st.dimensionId === dimensionId && !st.vitals.dead
+            && Number.isFinite(nextMob.lastDamagedAt) && now - Number(nextMob.lastDamagedAt) <= 5000);
+          if (killer && (killer.st.vitals.gameMode === "survival" || killer.st.vitals.gameMode === "adventure")) {
+            await this.awardMobDeathRewards(nextMob, killer.ws, killer.st, nextMob.lastLootingLevel ?? 0);
+          } else if (!killer) {
+            await this.spawnMobMaterialDrops(nextMob, dimensionId, 0);
+          }
           continue;
         }
         nextMob = withMobDimension({ ...nextMob, health, maxHealth, lastFireDamageAt: now }, dimensionId);
@@ -1688,9 +1666,23 @@ export class Room extends DurableObject<Env> {
         const attacker = this.mobs.get(attack.sourceMobId);
         if (attacker) {
           const hp = Math.max(0,(attacker.health ?? mobBaseHealth(attacker.type))-reflected);
-          if (hp <= 0) { this.mobs.delete(attacker.id); this.broadcastDimension({t:"mobgone",id:attacker.id},attack.dimensionId); }
-          else { const changed={...attacker,health:hp}; this.mobs.set(attacker.id,changed); this.broadcastDimension({t:"mob",mob:changed},attack.dimensionId); }
-          await this.ctx.storage.put("mobs",[...this.mobs.values()]);
+          const killed = hp <= 0;
+          if (killed) {
+            this.mobs.delete(attacker.id);
+            this.broadcastDimension({t:"mobgone",id:attacker.id},attack.dimensionId);
+          } else {
+            const changed={...attacker,health:hp};
+            this.mobs.set(attacker.id,changed);
+            this.broadcastDimension({t:"mob",mob:changed},attack.dimensionId);
+          }
+          await this.persistMobs();
+          if (killed) {
+            if (attacker.type === "ender_dragon") await this.completeEnderDragonFight(attacker,target.ws,target.st);
+            if (attacker.type === "end_crystal") await this.explodeEndCrystal(attacker);
+            if (target.st.vitals.gameMode === "survival" || target.st.vitals.gameMode === "adventure") {
+              await this.awardMobDeathRewards(attacker,target.ws,target.st,0);
+            }
+          }
         }
       }
       addExhaustion(target.st.vitals, .1);
@@ -1883,13 +1875,49 @@ export class Room extends DurableObject<Env> {
   }
 
   /** Projectile movement, collision, damage and loyalty returns are server-authoritative. */
-  private async spawnMobMaterialDrops(mob: MobInfo, dimensionId: string) {
-    const rewards = rollMobMaterialLoot(mob.type);
+  private async spawnMobMaterialDrops(mob: MobInfo, dimensionId: string, lootingLevel = 0, killedByPlayer = false) {
+    const rewards = rollMobMaterialLoot(mob.type, Math.random, lootingLevel, killedByPlayer);
     for (const [key, count] of Object.entries(rewards)) {
       const itemId = MINECRAFT_ITEM_TO_RUNTIME_ID[`minecraft:${key}`];
       if (!Number.isSafeInteger(itemId) || itemId <= 0 || itemId >= BLOCKS.length || !BLOCKS[itemId]) continue;
-      await this.spawnDrop(mob.x, mob.y, mob.z, itemId, dimensionId, count);
+      await this.spawnDrop(mob.x - 0.5, mob.y, mob.z - 0.5, itemId, dimensionId, count);
     }
+  }
+
+  /** Single reward path for all player-caused mob deaths. */
+  private async awardMobDeathRewards(mob: MobInfo, ws: WebSocket, st: PlayerState, lootingLevel = 0) {
+    const mode = st.vitals.gameMode;
+    if (mode !== "survival" && mode !== "adventure") return;
+    const foodReward = applyMobFoodLoot(st.vitals.foodCounts, rollMobFoodLoot(mob.type, Math.random, lootingLevel));
+    const previousFoodCounts = st.vitals.foodCounts;
+    const previousExperience = st.vitals.experience;
+    const experienceReward = rollMobExperience(mob.type);
+    let grantedExperience = await this.repairMendingFromExperience(ws, st, experienceReward);
+    const elytraId = MINECRAFT_ITEM_TO_RUNTIME_ID["minecraft:elytra"] ?? -1;
+    if (elytraId > 0 && st.armorSlots[1] === elytraId && st.elytraDamage > 0
+        && getItemEnchantment(withStackEnchantments(st.itemEnchantments, st.stackData, "armor:1", elytraId), elytraId, "mending") > 0) {
+      const repair = Math.min(st.elytraDamage, Math.floor(experienceReward / 2));
+      if (repair > 0) {
+        st.elytraDamage -= repair;
+        grantedExperience = Math.max(0, experienceReward - repair * 2);
+        if (st.cid) await this.ctx.storage.put("elytra:" + st.cid, st.elytraDamage);
+        this.send(ws, { t: "elytra-state", damage: st.elytraDamage, broken: false });
+      }
+    }
+    const nextExperience = addExperience(previousExperience ?? 0, grantedExperience);
+    if (foodReward.changed || nextExperience !== (previousExperience ?? 0)) {
+      if (foodReward.changed) st.vitals.foodCounts = foodReward.foodCounts;
+      st.vitals.experience = nextExperience;
+      try {
+        await this.persistVitals(st);
+        this.sendStats(st);
+      } catch (error) {
+        st.vitals.foodCounts = previousFoodCounts;
+        st.vitals.experience = previousExperience;
+        throw error;
+      }
+    }
+    await this.spawnMobMaterialDrops(mob, mobDimensionId(mob), lootingLevel, true);
   }
 
   private async tickProjectiles(dt: number, now: number, online: { ws: WebSocket; st: PlayerState }[]) {
@@ -1957,8 +1985,20 @@ export class Room extends DurableObject<Env> {
                 const attacker=this.mobs.get(projectile.ownerId);
                 if(attacker) {
                   const health=Math.max(0,(attacker.health??mobBaseHealth(attacker.type))-reflected);
-                  if(health<=0) { this.mobs.delete(attacker.id); this.broadcastDimension({t:"mobgone",id:attacker.id},projectile.dimensionId); }
-                  else { const changed={...attacker,health}; this.mobs.set(attacker.id,changed); this.broadcastDimension({t:"mob",mob:changed},projectile.dimensionId); }
+                  if(health<=0) {
+                    this.mobs.delete(attacker.id);
+                    this.broadcastDimension({t:"mobgone",id:attacker.id},projectile.dimensionId);
+                    await this.persistMobs();
+                    if (attacker.type === "ender_dragon") await this.completeEnderDragonFight(attacker,target.ws,target.st);
+                    if (attacker.type === "end_crystal") await this.explodeEndCrystal(attacker);
+                    if (target.st.vitals.gameMode === "survival" || target.st.vitals.gameMode === "adventure") {
+                      await this.awardMobDeathRewards(attacker,target.ws,target.st,0);
+                    }
+                  } else {
+                    const changed={...attacker,health};
+                    this.mobs.set(attacker.id,changed);
+                    this.broadcastDimension({t:"mob",mob:changed},projectile.dimensionId);
+                  }
                   mobsChanged=true;
                 }
               }
@@ -1974,30 +2014,32 @@ export class Room extends DurableObject<Env> {
         for (const [mobId, mob] of this.mobs) {
           if (mobId === projectile.ownerId || mobDimensionId(mob) !== projectile.dimensionId || (projectile.hitTargets??[]).includes(mobId)) continue;
           const profile = MOB_PROFILES[mob.type];
-          const height = mob.type === "ender_dragon" ? 8 : mob.type === "end_crystal" ? 2.2 : (profile?.height ?? 1.8);
-          const hitRadius=mob.type==="ender_dragon"?1.35:0.42;
-          if (Math.abs(projectile.x - mob.x) > hitRadius || Math.abs(projectile.z - mob.z) > hitRadius || projectile.y < mob.y + 0.1 || projectile.y > mob.y + height) continue;
+          const height = profile?.height ?? (mob.type === "end_crystal" ? 2.2 : 1.8);
+          const width = profile?.width ?? (mob.type === "end_crystal" ? 2 : 0.6);
+          const hitRadius = Math.min(8, width / 2 + 0.12);
+          if (Math.abs(projectile.x - mob.x) > hitRadius || Math.abs(projectile.z - mob.z) > hitRadius
+            || projectile.y < mob.y - 0.12 || projectile.y > mob.y + height + 0.12) continue;
           const maxHealth = mob.maxHealth ?? mobBaseHealth(mob.type);
           const hurt = applyDamageWithInvulnerability(projectile.damage, now, mob.lastHurtAt ?? -Infinity, mob.lastDamage ?? 0, 500);
           if (hurt.applied > 0) {
             const health = Math.max(0, (mob.health ?? maxHealth) - hurt.applied);
             if (health <= 0) {
-              this.mobs.delete(mobId); this.broadcastDimension({ t: "mobgone", id: mobId }, projectile.dimensionId);
+              this.mobs.delete(mobId);
               if(mob.type==="ender_dragon" && ownerPlayer) await this.completeEnderDragonFight(mob,ownerPlayer.ws,ownerPlayer.st);
               if(mob.type==="end_crystal") await this.explodeEndCrystal(mob);
-              if(ownerPlayer && (ownerPlayer.st.vitals.gameMode === "survival" || ownerPlayer.st.vitals.gameMode === "adventure")) {
-                await this.spawnMobMaterialDrops(mob, projectile.dimensionId);
-                const xp = rollMobExperience(mob.type);
-                let remaining = await this.repairMendingFromExperience(ownerPlayer.ws, ownerPlayer.st, xp);
-                const beforeXp = ownerPlayer.st.vitals.experience ?? 0;
-                const awarded = addExperience(beforeXp, remaining);
-                if (awarded !== beforeXp) { ownerPlayer.st.vitals.experience = awarded; await this.persistVitals(ownerPlayer.st); this.sendStats(ownerPlayer.st); }
+              await this.persistMobs();
+              this.broadcastDimension({ t: "mobgone", id: mobId }, projectile.dimensionId);
+              if (ownerPlayer && (ownerPlayer.st.vitals.gameMode === "survival" || ownerPlayer.st.vitals.gameMode === "adventure")) {
+                await this.awardMobDeathRewards(mob, ownerPlayer.ws, ownerPlayer.st, 0);
+              } else if (!ownerPlayer) {
+                await this.spawnMobMaterialDrops(mob, projectile.dimensionId, 0);
               }
             } else {
               const knock=projectile.knockback??0, dx=mob.x-projectile.x,dz=mob.z-projectile.z,len=Math.hypot(dx,dz)||1;
               const updated = { ...mob, maxHealth, health, lastHurtAt: hurt.lastHurtAtMs, lastDamage: hurt.lastDamage,
+                ...(projectile.ownerKind === "player" ? { lastDamagerId: projectile.ownerId, lastDamagedAt: now, lastLootingLevel: 0 } : {}),
                 ...(knock?{x:mob.x+dx/len*knock*0.35,z:mob.z+dz/len*knock*0.35}:{}),
-                ...(projectile.fireTicks?{burningUntil:Math.max(mob.burningUntil??0,now+projectile.fireTicks*50)}:{}) };
+                ...(projectile.fireTicks && !["blaze","ghast","magma_cube","strider","wither","wither_skeleton","ender_dragon","zombified_piglin","end_crystal"].includes(mob.type)?{burningUntil:Math.max(mob.burningUntil??0,now+projectile.fireTicks*50)}:{}) };
               this.mobs.set(mobId, updated); this.broadcastDimension({ t: "mob", mob: updated }, projectile.dimensionId);
             }
             mobsChanged = true;
@@ -2084,10 +2126,14 @@ export class Room extends DurableObject<Env> {
       if ([...this.mobs.values()].some(mob => mobDimensionId(mob) === dimensionId && (mob.x - spot.x) ** 2 + (mob.z - spot.z) ** 2 < 64)) continue;
       const requestedGroupSize = naturalMobSpawnGroupSize(type);
       if (requestedGroupSize === null) continue;
+      const profile = MOB_PROFILES[type];
+      if (!profile) continue;
+      const spawnHeadroom = Math.min(8, Math.max(1, Math.ceil(profile.height)));
       const positions = findNaturalSpawnGroup({
         center: spot,
         size: Math.min(spawnCapacity, requestedGroupSize),
-        headroom: 3,
+        headroom: spawnHeadroom,
+        width: profile.width,
         getSurfaceY: (x, z) => {
           for (let y = 62; y >= 1; y--) {
             const block = this.mobBlockAt(x, y, z, dimensionId);
@@ -2823,10 +2869,15 @@ export class Room extends DurableObject<Env> {
       const kind = (args[0] ?? "").toLowerCase().replace(/^minecraft:/, "") as MobType;
       if (!MOB_TYPES.some((candidate) => candidate === kind) && kind !== "end_crystal") { this.sys(ws, "使い方: /summon <mobId> [x y z] (例: pig, minecraft:allay)"); return; }
       if (this.mobs.size >= MAX_MOBS) { this.sys(ws, `Mob上限(${MAX_MOBS})に達しています`); return; }
-      let x = Math.floor(me.p[0] + 2), y = Math.floor(me.p[1]), z = Math.floor(me.p[2]);
+      const yaw = Number.isFinite(me.r?.[0]) ? me.r[0] : 0;
+      const profile = MOB_PROFILES[kind];
+      const forwardDistance = Math.max(2.2, (profile?.width ?? 0.6) / 2 + 1.2);
+      let x = me.p[0] + Math.sin(yaw) * forwardDistance, y = me.p[1], z = me.p[2] + Math.cos(yaw) * forwardDistance;
       if (args.length >= 4) { x = Number(args[1]); y = Number(args[2]); z = Number(args[3]); }
       if (![x,y,z].every(Number.isFinite) || Math.abs(x) > 100000 || Math.abs(z) > 100000 || y < 1 || y >= WORLD_HEIGHT) { this.sys(ws, "座標が範囲外です"); return; }
-      const mob: MobInfo = withMobDimension(createMob(kind, crypto.randomUUID().slice(0,12), x, y, z, 0), me.dimensionId);
+      const isSolidAt = (bx:number,by:number,bz:number) => BLOCKS[this.mobBlockAt(bx,by,bz,me.dimensionId)]?.solid === true;
+      if (!canMobOccupy(kind,x,y,z,isSolidAt)) { this.sys(ws, "その位置にはMobの全身が入る空間がありません"); return; }
+      const mob: MobInfo = withMobDimension(createMob(kind, crypto.randomUUID().slice(0,12), x, y, z, yaw), me.dimensionId);
       this.mobs.set(mob.id,mob); await this.persistMobs(); this.broadcastDimension({t:"mob",mob}, me.dimensionId); this.sys(ws, `${kind} を召喚しました (${mob.id})`); return;
     }
     if (cmd === "kill") {

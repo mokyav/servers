@@ -54,7 +54,20 @@ export const PIGLIN_RIG_TYPES = Object.freeze(["piglin", "piglin_brute", "zombif
 // Java 26.3 uses VillagerModel for both villagers and wandering traders.
 export const VILLAGER_RIG_TYPES = Object.freeze(["villager", "wandering_trader"]);
 
-/** Height in blocks of the lightweight model before scaling to the server profile. */
+/** Base dimensions in blocks of the lightweight model before fitting the server hitbox. */
+export const MOB_MODEL_BASE_WIDTHS = Object.freeze({
+  pig: 10 / 16,
+  cow: 12 / 16,
+  chicken: 8 / 16,
+  creeper: 8 / 16,
+  zombie: 14 / 16,
+  skeleton: 10 / 16,
+  villager: 12 / 16,
+  piglin: 12 / 16,
+  wither: 32 / 16,
+  warden: 32 / 16,
+});
+
 export const MOB_MODEL_BASE_HEIGHTS = Object.freeze({
   pig: 1,
   cow: 25 / 16,

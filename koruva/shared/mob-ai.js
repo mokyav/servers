@@ -88,18 +88,97 @@ const MOB_PROFILE_TABLE={
   "zombie_villager": Object.freeze({maxHealth:20, speed:1.0, kind:"melee", height:1.2, visual:"zombie", damage:4, attackRange:1.6}),
   "zombified_piglin": Object.freeze({maxHealth:10, speed:0.9, kind:"passive", height:1.2, visual:"pig"}),
 };
-const END_CRYSTAL_PROFILE=Object.freeze({maxHealth:5,speed:0,kind:"passive",height:2.2,visual:"cow"});
+const END_CRYSTAL_PROFILE=Object.freeze({maxHealth:5,speed:0,kind:"passive",width:2,height:2.2,movement:"stationary",visual:"cow"});
 Object.defineProperty(MOB_PROFILE_TABLE,"end_crystal",{value:END_CRYSTAL_PROFILE,enumerable:false});
-export const MOB_PROFILES=Object.freeze(MOB_PROFILE_TABLE);
+/**
+ * Baseline mob collision-box dimensions in world blocks (width, height). The server,
+ * natural spawner and client renderer use this one table as the common origin.
+ */
+export const MOB_PROFILE_DIMENSIONS = Object.freeze({
+  allay:[0.35,0.6], armadillo:[0.7,0.65], axolotl:[0.75,0.42], bat:[0.5,0.9],
+  bee:[0.7,0.6], blaze:[0.6,1.8], bogged:[0.6,1.99], breeze:[0.6,1.77],
+  camel:[1.7,2.375], camel_husk:[1.7,2.375], cat:[0.6,0.7], cave_spider:[0.7,0.5],
+  chicken:[0.4,0.7], cod:[0.5,0.3], copper_golem:[0.6,1.2], cow:[0.9,1.4],
+  creaking:[0.9,2.7], creeper:[0.6,1.7], dolphin:[0.9,0.6], donkey:[1.396,1.6],
+  drowned:[0.6,1.95], elder_guardian:[1.9975,1.9975], ender_dragon:[16,8],
+  enderman:[0.6,2.9], endermite:[0.4,0.3], evoker:[0.6,1.95], fox:[0.6,0.7],
+  frog:[0.5,0.5], ghast:[4,4], glow_squid:[0.8,0.8], goat:[0.9,1.3],
+  guardian:[0.85,0.85], happy_ghast:[4,4], hoglin:[1.396,1.4], horse:[1.396,1.6],
+  husk:[0.6,1.95], iron_golem:[1.4,2.7], llama:[0.9,1.87], magma_cube:[1.02,1.02],
+  mooshroom:[0.9,1.4], mule:[1.396,1.6], nautilus:[1.4,0.9], ocelot:[0.6,0.7],
+  panda:[1.3,1.25], parched:[0.6,1.99], parrot:[0.5,0.9], phantom:[0.9,0.5],
+  pig:[0.9,0.9], piglin:[0.6,1.95], piglin_brute:[0.6,1.95], pillager:[0.6,1.95],
+  polar_bear:[1.4,1.4], pufferfish:[0.7,0.7], rabbit:[0.4,0.5], ravager:[1.95,2.2],
+  salmon:[0.7,0.4], sheep:[0.9,1.3], shulker:[1,1], silverfish:[0.4,0.3],
+  skeleton:[0.6,1.99], skeleton_horse:[1.396,1.6], slime:[1.02,1.02],
+  sniffer:[1.9,1.75], snow_golem:[0.7,1.9], spider:[1.4,0.9], squid:[0.8,0.8],
+  stray:[0.6,1.99], strider:[0.9,1.7], sulfur_cube:[0.9,0.9], tadpole:[0.4,0.3],
+  trader_llama:[0.9,1.87], tropical_fish:[0.5,0.4], turtle:[1.2,0.4], vex:[0.4,0.8],
+  villager:[0.6,1.95], vindicator:[0.6,1.95], wandering_trader:[0.6,1.95],
+  warden:[0.9,2.9], witch:[0.6,1.95], wither:[0.9,3.5],
+  wither_skeleton:[0.7,2.4], wolf:[0.6,0.85], zoglin:[1.396,1.4],
+  zombie:[0.6,1.95], zombie_horse:[1.396,1.6], zombie_nautilus:[1.4,0.9],
+  zombie_villager:[0.6,1.95], zombified_piglin:[0.6,1.95],
+});
+const FLYING_MOB_TYPES = new Set(["allay","bat","bee","blaze","ender_dragon","ghast","happy_ghast","parrot","phantom","vex"]);
+const AQUATIC_MOB_TYPES = new Set(["axolotl","cod","dolphin","glow_squid","guardian","nautilus","pufferfish","salmon","squid","tadpole","tropical_fish","turtle"]);
+const MOB_PROFILE_VALUES=Object.fromEntries(Object.entries(MOB_PROFILE_TABLE).map(([type,profile])=>{
+  const [width,height]=MOB_PROFILE_DIMENSIONS[type]??[0.6,profile.height??1.8];
+  const movement=FLYING_MOB_TYPES.has(type)?"flying":AQUATIC_MOB_TYPES.has(type)?"aquatic":"ground";
+  return [type,Object.freeze({...profile,width,height,movement})];
+}));
+Object.defineProperty(MOB_PROFILE_VALUES,"end_crystal",{value:END_CRYSTAL_PROFILE,enumerable:false});
+export const MOB_PROFILES=Object.freeze(MOB_PROFILE_VALUES);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),finite=(v,d=0)=>Number.isFinite(v)?v:d;
 function hash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
 function dist2(m,p){const x=p.p[0]-m.x,z=p.p[2]-m.z;return x*x+z*z;}
 export function createMob(type,id,x,y,z,yaw=0){const d=type==="end_crystal"?END_CRYSTAL_PROFILE:MOB_PROFILES[type];if(!d)throw new TypeError("unknown mob type");return{id:String(id).slice(0,64),type,x:finite(x),y:finite(y,1),z:finite(z),yaw:finite(yaw),health:d.maxHealth,maxHealth:d.maxHealth,state:"idle",attackAt:0,wanderYaw:finite(yaw),nextThinkAt:0,fuse:0};}
 function validPlayers(ps){return ps.filter(p=>p&&typeof p.id==="string"&&Array.isArray(p.p)&&p.p.length>=3&&p.p.every(Number.isFinite)&&!p.dead&&p.gameMode!=="creative"&&p.gameMode!=="spectator");}
-const solid=(fn,x,y,z)=>typeof fn==="function"&&!!fn(Math.floor(x),Math.floor(y),Math.floor(z));
-function canOccupy(fn,x,y,z,h){return!solid(fn,x,y+.05,z)&&!solid(fn,x,y+Math.max(.2,h-.15),z);}
-function move(m,yaw,distance,height,solidAt){if(distance<=0)return;const dx=Math.sin(yaw)*distance,dz=Math.cos(yaw)*distance,nx=m.x+dx,nz=m.z+dz;if(canOccupy(solidAt,nx,m.y,nz,height)){m.x=nx;m.z=nz;return;}const up=Math.floor(m.y+.05)+1;if(canOccupy(solidAt,nx,up,nz,height)&&solid(solidAt,nx,up-.05,nz)){m.x=nx;m.z=nz;m.y=up;return;}if(canOccupy(solidAt,nx,m.y,m.z,height))m.x=nx;if(canOccupy(solidAt,m.x,m.y,nz,height))m.z=nz;}
-function settle(m,dt,solidAt){if(m.y<=1){m.y=1;return;}if(!solid(solidAt,m.x,Math.floor(m.y-.03),m.z))m.y=Math.max(1,m.y-3.8*dt);}
+function cellRange(center,half){const epsilon=1e-6;return[Math.floor(center-half+epsilon),Math.floor(center+half-epsilon)];}
+function canOccupy(fn,x,y,z,h,width=.6){
+  if(typeof fn!=="function")return true;
+  if(![x,y,z,h,width].every(Number.isFinite)||h<=0||width<=0)return false;
+  const half=Math.max(.05,width/2),[minX,maxX]=cellRange(x,half),[minZ,maxZ]=cellRange(z,half);
+  const minY=Math.floor(y+1e-6),maxY=Math.floor(y+h-1e-6);
+  for(let bx=minX;bx<=maxX;bx++)for(let bz=minZ;bz<=maxZ;bz++)for(let by=minY;by<=maxY;by++)if(fn(bx,by,bz))return false;
+  return true;
+}
+export function canMobOccupy(type,x,y,z,solidAt){
+  const d=type==="end_crystal"?END_CRYSTAL_PROFILE:MOB_PROFILES[type];
+  return !!d&&canOccupy(solidAt,x,y,z,d.height,d.width);
+}
+function supported(fn,x,y,z,width){
+  if(typeof fn!=="function")return true;
+  const half=Math.max(.05,width/2),[minX,maxX]=cellRange(x,half),[minZ,maxZ]=cellRange(z,half);
+  const floorY=Math.floor(y-.001);
+  for(let bx=minX;bx<=maxX;bx++)for(let bz=minZ;bz<=maxZ;bz++)if(fn(bx,floorY,bz))return true;
+  return false;
+}
+function move(m,yaw,distance,height,solidAt,width=.6){
+  if(distance<=0)return;
+  const dx=Math.sin(yaw)*distance,dz=Math.cos(yaw)*distance,nx=m.x+dx,nz=m.z+dz;
+  if(canOccupy(solidAt,nx,m.y,nz,height,width)){m.x=nx;m.z=nz;return;}
+  const stepY=Math.floor(m.y+1e-6)+1;
+  if(stepY>m.y&&stepY-m.y<=1.001&&canOccupy(solidAt,nx,stepY,nz,height,width)&&supported(solidAt,nx,stepY,nz,width)){
+    m.x=nx;m.z=nz;m.y=stepY;return;
+  }
+  if(canOccupy(solidAt,nx,m.y,m.z,height,width))m.x=nx;
+  if(canOccupy(solidAt,m.x,m.y,nz,height,width))m.z=nz;
+}
+function moveVertical(m,dy,height,solidAt,width){
+  if(!Number.isFinite(dy)||Math.abs(dy)<1e-7)return;
+  const nextY=m.y+dy;
+  if(canOccupy(solidAt,m.x,nextY,m.z,height,width)){m.y=nextY;return;}
+  if(dy>=0)return;
+  let safe=m.y,blocked=nextY;
+  for(let i=0;i<12;i++){const mid=(safe+blocked)/2;if(canOccupy(solidAt,m.x,mid,m.z,height,width))safe=mid;else blocked=mid;}
+  m.y=Math.max(nextY,safe+1e-4);
+}
+function settle(m,dt,solidAt,height,width){
+  if(m.y<=1){m.y=1;return;}
+  if(supported(solidAt,m.x,m.y,m.z,width))return;
+  moveVertical(m,-3.8*dt,height,solidAt,width);
+}
 function nearest(m,players,range){let best=null,bestD=range*range;for(const p of players){const d=dist2(m,p);if(d<bestD){best=p;bestD=d;}}return best;}
 export function hasClearLine(from, to, solidAt) {
   if (!Array.isArray(from) || !Array.isArray(to) || from.length < 3 || to.length < 3 || typeof solidAt !== "function") return false;
@@ -127,8 +206,8 @@ export function stepMobAI(input,players,dtSeconds,nowMs,solidAt=()=>false){const
  const target=d.kind==="passive"?null:nearest(m,actors,m.type==="ender_dragon"?128:24);m.targetId=target?.id;
  const fleeing=d.kind==="passive"&&m.fleeUntil>now;
  if(d.kind==="passive"&&m.fleeUntil>0&&!fleeing){m.fleeUntil=0;m.state="idle";m.nextThinkAt=now;}
- if(fleeing){m.state="flee";m.yaw=m.fleeYaw;move(m,m.yaw,d.speed*1.6*dt,d.height,solidAt);}
- else if(d.kind==="passive"||!target){if(now>=m.nextThinkAt){const roll=hash(`${m.id}:${Math.floor(now/2400)}`)/4294967296;m.wanderYaw=roll*Math.PI*2;m.state=roll<.28?"idle":"wander";m.nextThinkAt=now+1200+Math.floor(roll*2200);}if(m.state==="wander"){m.yaw=m.wanderYaw;move(m,m.yaw,d.speed*dt,d.height,solidAt);}}
+ if(fleeing){m.state="flee";m.yaw=m.fleeYaw;move(m,m.yaw,d.speed*1.6*dt,d.height,solidAt,d.width);}
+ else if(d.kind==="passive"||!target){if(now>=m.nextThinkAt){const roll=hash(`${m.id}:${Math.floor(now/2400)}`)/4294967296;m.wanderYaw=roll*Math.PI*2;m.state=roll<.28?"idle":"wander";m.nextThinkAt=now+1200+Math.floor(roll*2200);}if(m.state==="wander"){m.yaw=m.wanderYaw;move(m,m.yaw,d.speed*dt,d.height,solidAt,d.width);}}
  else{const dx=target.p[0]-m.x,dz=target.p[2]-m.z,dist=Math.hypot(dx,dz),yaw=Math.atan2(dx,dz),visible=hasLineOfSight(m,target,d.height,solidAt);m.yaw=yaw;
   if(m.type==="ender_dragon"){
     // Aerial End boss controller: orbit, strafe with dragon fireballs, then swoop through the target.
@@ -158,8 +237,8 @@ export function stepMobAI(input,players,dtSeconds,nowMs,solidAt=()=>false){const
       m.attackAt=now+4200;
     }
   }
-  else if(d.kind==="melee"){const inRange=dist<=d.attackRange&&visible;m.state=inRange?"attack":"chase";if(inRange){if(now>=m.attackAt){attacks.push({targetId:target.id,damage:d.damage,kind:"melee"});m.attackAt=now+1200;}}else move(m,yaw,d.speed*dt,d.height,solidAt);}
-  else if(d.kind==="ranged"){if(dist>12||!visible){m.state="chase";move(m,yaw,d.speed*dt,d.height,solidAt);}else if(dist<4){m.state="retreat";move(m,yaw+Math.PI,d.speed*dt,d.height,solidAt);}else{m.state="attack";if(now>=m.attackAt){
+  else if(d.kind==="melee"){const inRange=dist<=d.attackRange&&visible;m.state=inRange?"attack":"chase";if(inRange){if(now>=m.attackAt){attacks.push({targetId:target.id,damage:d.damage,kind:"melee"});m.attackAt=now+1200;}}else move(m,yaw,d.speed*dt,d.height,solidAt,d.width);}
+  else if(d.kind==="ranged"){if(dist>12||!visible){m.state="chase";move(m,yaw,d.speed*dt,d.height,solidAt,d.width);}else if(dist<4){m.state="retreat";move(m,yaw+Math.PI,d.speed*dt,d.height,solidAt,d.width);}else{m.state="attack";if(now>=m.attackAt){
     if(m.type==="skeleton"||m.type==="stray"){
       const sx=m.x, sy=m.y+Math.max(.45,d.height*.78), sz=m.z;
       const tx=target.p[0], ty=target.p[1]+1.05, tz=target.p[2];
@@ -175,5 +254,10 @@ export function stepMobAI(input,players,dtSeconds,nowMs,solidAt=()=>false){const
     m.attackAt=now+(m.type==="skeleton"||m.type==="stray"?1700:1800);
   }}}
   else if(dist<=d.attackRange&&visible){m.state="fuse";if(m.fuse<=0)m.fuse=1.5;else m.fuse=Math.max(0,m.fuse-dt);if(m.fuse===0){for(const p of actors){const r=Math.hypot(p.p[0]-m.x,p.p[2]-m.z);if(r<4.5&&hasLineOfSight(m,p,d.height,solidAt))attacks.push({targetId:p.id,damage:Math.max(0,Math.ceil(d.damage*(1-r/4.5))),kind:"explosion"});}remove=true;}}
-  else{m.state="chase";m.fuse=0;move(m,yaw,d.speed*dt,d.height,solidAt);}}
- if(m.type!=="ender_dragon") settle(m,dt,solidAt);const after=[m.x,m.y,m.z,m.yaw,m.state,m.attackAt,m.wanderYaw,m.nextThinkAt,m.fuse,m.targetId,m.dragonPhase,m.dragonOrbit];return{mob:m,attacks,projectiles,remove,changed:before.some((v,i)=>v!==after[i])};}
+  else{m.state="chase";m.fuse=0;move(m,yaw,d.speed*dt,d.height,solidAt,d.width);}}
+ if(d.movement==="flying"&&target&&m.type!=="ender_dragon"){
+   const desiredY=target.p[1]+Math.max(.4,Math.min(d.height*.6,1.25));
+   const maxVerticalStep=Math.max(.025,d.speed*dt*.65);
+   moveVertical(m,clamp(desiredY-m.y,-maxVerticalStep,maxVerticalStep),d.height,solidAt,d.width);
+ }
+ if(m.type!=="ender_dragon"&&d.movement!=="flying"&&d.movement!=="stationary") settle(m,dt,solidAt,d.height,d.width);const after=[m.x,m.y,m.z,m.yaw,m.state,m.attackAt,m.wanderYaw,m.nextThinkAt,m.fuse,m.targetId,m.dragonPhase,m.dragonOrbit];return{mob:m,attacks,projectiles,remove,changed:before.some((v,i)=>v!==after[i])};}

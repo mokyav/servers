@@ -137,10 +137,24 @@ function isEligiblePlayer(player) {
  * a solid floor-block Y; `isClear` must reject solids and liquids. Headroom is
  * configurable so taller Mob profiles are not placed into ceilings.
  */
-export function findNaturalSpawnSpot({ players, random = Math.random, getSurfaceY, isClear, attempts = 10, minDistance = 16, maxDistance = 32, headroom = 2 } = {}) {
+function hasMobClearance(isClear, blockX, floorY, blockZ, width, headroom) {
+  if (typeof isClear !== "function" || ![blockX,floorY,blockZ,width].every(Number.isFinite)
+    || width <= 0 || width > 16 || !Number.isInteger(headroom) || headroom < 1 || headroom > 8) return false;
+  const half = width / 2;
+  const minX = Math.floor(blockX + 0.5 - half + 1e-6);
+  const maxX = Math.floor(blockX + 0.5 + half - 1e-6);
+  const minZ = Math.floor(blockZ + 0.5 - half + 1e-6);
+  const maxZ = Math.floor(blockZ + 0.5 + half - 1e-6);
+  for (let x=minX; x<=maxX; x++) for (let z=minZ; z<=maxZ; z++) {
+    for (let dy=1; dy<=headroom; dy++) if (!isClear(x,floorY+dy,z)) return false;
+  }
+  return true;
+}
+
+export function findNaturalSpawnSpot({ players, random = Math.random, getSurfaceY, isClear, attempts = 10, minDistance = 16, maxDistance = 32, headroom = 2, width = 0.6 } = {}) {
   if (!Array.isArray(players) || typeof random !== "function" || typeof getSurfaceY !== "function" || typeof isClear !== "function") return null;
   if (!Number.isFinite(attempts) || attempts < 1 || !Number.isFinite(minDistance) || !Number.isFinite(maxDistance) || minDistance < 0 || maxDistance <= minDistance) return null;
-  if (!Number.isInteger(headroom) || headroom < 1 || headroom > 8) return null;
+  if (!Number.isInteger(headroom) || headroom < 1 || headroom > 8 || !Number.isFinite(width) || width <= 0 || width > 16) return null;
   const eligible = players.filter(isEligiblePlayer);
   if (!eligible.length) return null;
   const playerRoll = random();
@@ -156,11 +170,7 @@ export function findNaturalSpawnSpot({ players, random = Math.random, getSurface
     const z = Math.floor(player.p[2] + Math.sin(angle) * distance);
     const floorY = getSurfaceY(x, z);
     if (!Number.isFinite(floorY) || floorY < 1 || floorY > 61) continue;
-    let clear = true;
-    for (let dy = 1; dy <= headroom; dy++) {
-      if (!isClear(x, floorY + dy, z)) { clear = false; break; }
-    }
-    if (!clear) continue;
+    if (!hasMobClearance(isClear, x, floorY, z, width, headroom)) continue;
     return { x: x + 0.5, y: floorY + 1, z: z + 0.5 };
   }
   return null;
@@ -182,7 +192,7 @@ export function naturalMobSpawnGroupSize(type, random = Math.random) {
  * member gets its own solid floor, clear headroom, and non-overlapping block.
  * The group can be smaller than requested if nearby terrain is unsuitable.
  */
-export function findNaturalSpawnGroup({ center, size = 1, random = Math.random, getSurfaceY, isClear, headroom = 2, radius = 4, minSeparation = 1.5, attempts = 24 } = {}) {
+export function findNaturalSpawnGroup({ center, size = 1, random = Math.random, getSurfaceY, isClear, headroom = 2, radius = 4, minSeparation = 1.5, attempts = 24, width = 0.6 } = {}) {
   if (!center || ![center.x, center.y, center.z].every(Number.isFinite)
     || !Number.isInteger(size) || size < 1 || size > 4
     || typeof random !== "function" || typeof getSurfaceY !== "function" || typeof isClear !== "function"
@@ -190,6 +200,8 @@ export function findNaturalSpawnGroup({ center, size = 1, random = Math.random, 
     || !Number.isFinite(radius) || radius < 1 || radius > 8
     || !Number.isFinite(minSeparation) || minSeparation < 1 || minSeparation > radius
     || !Number.isFinite(attempts) || attempts < 1) return [];
+  const centerFloorY = Math.floor(center.y) - 1;
+  if (!hasMobClearance(isClear, Math.floor(center.x), centerFloorY, Math.floor(center.z), width, headroom)) return [];
   const group = [{ x: center.x, y: center.y, z: center.z }];
   if (size === 1) return group;
   const occupied = new Set([`${Math.floor(center.x)},${Math.floor(center.z)}`]);
@@ -205,11 +217,7 @@ export function findNaturalSpawnGroup({ center, size = 1, random = Math.random, 
     if (occupied.has(cell)) continue;
     const floorY = getSurfaceY(blockX, blockZ);
     if (!Number.isFinite(floorY) || floorY < 1 || floorY > 61 || Math.abs(floorY + 1 - center.y) > 2) continue;
-    let clear = true;
-    for (let dy = 1; dy <= headroom; dy++) {
-      if (!isClear(blockX, floorY + dy, blockZ)) { clear = false; break; }
-    }
-    if (!clear) continue;
+    if (!hasMobClearance(isClear, blockX, floorY, blockZ, width, headroom)) continue;
     const position = { x: blockX + 0.5, y: floorY + 1, z: blockZ + 0.5 };
     if (group.some(member => Math.hypot(member.x - position.x, member.z - position.z) < minSeparation)) continue;
     occupied.add(cell);

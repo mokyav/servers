@@ -7,9 +7,9 @@ export function applyMobFoodLoot(foodCounts: Record<string, number>, loot: MobFo
 
 export const MOB_MATERIAL_NAMES: Readonly<Record<string, string>>;
 export const MOB_MATERIAL_ITEM_IDS: readonly string[];
-export const MOB_MATERIAL_LOOT: Readonly<Record<string, readonly { itemId: string; min: number; max: number }[]>>;
+export const MOB_MATERIAL_LOOT: Readonly<Record<string, readonly { itemId: string; min: number; max: number; chance?: number; lootingChance?: number; lootingCount?: boolean; killedByPlayer?: boolean; choiceGroup?: string; weight?: number }[]>>;
 
-export function rollMobMaterialLoot(type: string, random?: () => number): MobMaterialLoot;
+export function rollMobMaterialLoot(type: string, random?: () => number, lootingLevel?: number, killedByPlayer?: boolean): MobMaterialLoot;
 export function normalizeMobMaterialCounts(raw: unknown, maxCount?: number): Record<string, number>;
 export function applyMobMaterialLoot(
   materialCounts: Record<string, number>,

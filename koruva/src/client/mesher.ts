@@ -139,9 +139,10 @@ function lockModelUv(u: number, v: number, direction: string, instance: Minecraf
 }
 
 /**
- * Rotate normalized face UVs using Minecraft's per-face convention.
- * U grows right and V grows down in the model's texture coordinate space.
- * All faces rotate clockwise, except "down", which rotates counter-clockwise.
+ * Rotate face-local UV coordinates using Minecraft's per-face convention.
+ * These coordinates are relative to the selected UV rectangle, not the whole
+ * 16×16 texture. U grows right and V grows down; all faces rotate clockwise,
+ * except "down", which rotates counter-clockwise.
  */
 export function rotateMinecraftFaceUv(
   u: number,
@@ -149,7 +150,7 @@ export function rotateMinecraftFaceUv(
   rotation: number,
   direction: string,
 ): [number, number] {
-  const turn = ((Math.round(rotation / 90) * 90) % 360 + 360) % 360;
+  const turn = ((rotation % 360) + 360) % 360;
   const down = direction === "down";
   switch (turn) {
     case 90:
@@ -161,21 +162,6 @@ export function rotateMinecraftFaceUv(
     default:
       return [u, v];
   }
-}
-
-/**
- * Convert 0..16 model UVs to normalized atlas UVs. Face rotation is resolved
- * in model space first, then optional blockstate UV-lock maps it into world space.
- */
-export function mapMinecraftModelFaceUv(
-  pixelU: number,
-  pixelV: number,
-  direction: string,
-  rotation: number,
-  instance: MinecraftModelInstance,
-): [number, number] {
-  const [u, v] = rotateMinecraftFaceUv(pixelU / 16, pixelV / 16, rotation, direction);
-  return lockModelUv(u, v, direction, instance);
 }
 const GRASS_TINT: Record<string, [number, number, number]> = {
   // Sampled from vanilla textures/colormap/grass.png at representative climate coordinates.
@@ -241,8 +227,25 @@ function faceUvPixels(direction: string, point: Vec3, from: number[], to: number
   const defaults = defaultUvBounds(direction, from, to);
   const normU = Math.max(0, Math.min(1, (u - defaults[0]) / Math.max(0.0001, defaults[2] - defaults[0])));
   const normV = Math.max(0, Math.min(1, (v - defaults[1]) / Math.max(0.0001, defaults[3] - defaults[1])));
+  // Face rotation permutes the four corners of the selected UV rectangle.
+  // Rotate normalized face-local coordinates before expanding back into its
+  // explicit/default UV bounds; rotating absolute 0..1 atlas coordinates would
+  // move narrow UV strips (doors, trapdoors, piston sides) to unrelated pixels.
+  const [rotatedU, rotatedV] = rotateMinecraftFaceUv(normU, normV, face.rotation, direction);
   const uv = face.uv ?? defaults;
-  return [uv[0] + (uv[2] - uv[0]) * normU, uv[1] + (uv[3] - uv[1]) * normV];
+  return [uv[0] + (uv[2] - uv[0]) * rotatedU, uv[1] + (uv[3] - uv[1]) * rotatedV];
+}
+
+export function mapMinecraftModelFaceUv(
+  direction: string,
+  point: Vec3,
+  from: number[],
+  to: number[],
+  face: MinecraftModelFace,
+  instance: MinecraftModelInstance,
+): [number, number] {
+  const [pixelU, pixelV] = faceUvPixels(direction, point, from, to, face);
+  return lockModelUv(pixelU / 16, pixelV / 16, direction, instance);
 }
 
 function biomeTintForTexture(texture: string, biome: string, dimension: string): [number, number, number] {
@@ -436,11 +439,8 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
             // Keep model-backed vertices in the same chunk-local coordinate space as cube faces.
             faceTarget.pos.push(x - ox + transformed[0] / 16, y + transformed[1] / 16, z - oz + transformed[2] / 16);
             emittedFace = true;
-            const [pixelU, pixelV] = faceUvPixels(direction, local, from, to, face);
-            // Minecraft rotates the face's UV corners clockwise, except for the
-            // down face, which is counter-clockwise. Apply that model-space rotation
-            // before the blockstate UV lock, matching FaceBakery's bake order.
-            const [tu, tv] = mapMinecraftModelFaceUv(pixelU, pixelV, direction, face.rotation, instance);
+            // Resolve the face's own UV rectangle and rotation first, then apply blockstate UV-lock.
+            const [tu, tv] = mapMinecraftModelFaceUv(direction, local, from, to, face, instance);
             faceTarget.uv.push(uvRect[0] + (uvRect[2] - uvRect[0]) * tu, uvRect[3] - (uvRect[3] - uvRect[1]) * tv);
             const light = shade * aoValue;
             faceTarget.col.push(light * tint[0] / 255, light * tint[1] / 255, light * tint[2] / 255, def.emissive ? 1 : 0);

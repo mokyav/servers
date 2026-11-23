@@ -366,25 +366,45 @@ test("all binary-alpha cactus model faces use the alpha-tested cutout layer", ()
   }
 });
 
-test("binary-alpha full-cube models keep cutout faces and neighbour faces on all sides", () => {
+test("binary-alpha full-cube models keep cutout faces and neighbour faces on all six sides", () => {
   const spawner = MINECRAFT_BLOCK_TO_ID["minecraft:spawner"];
   assert.ok(spawner > 0);
   assert.equal(BLOCKS[spawner].render, "opaque");
   assert.ok(MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES.has("minecraft:block/spawner"));
   // Spawner uses a full-cube model with cullface on all six faces, but its PNG
-  // contains transparent holes. Adjacent opaque faces must survive behind them.
+  // contains transparent holes. Both its cutout face and the coplanar opaque
+  // neighbour face must survive on every axis.
   const { chunk, world } = makeChunk([
     [4, 4, 4, spawner],
-    [3, 4, 4, B.STONE],
-    [4, 3, 4, B.STONE],
+    [5, 4, 4, B.STONE], // +X
+    [3, 4, 4, B.STONE], // -X
+    [4, 5, 4, B.STONE], // +Y
+    [4, 3, 4, B.STONE], // -Y
+    [4, 4, 5, B.STONE], // +Z
+    [4, 4, 3, B.STONE], // -Z
   ]);
   const mesh = buildChunkMesh(world, chunk, fullTile);
   assert.ok(mesh.cutout, "alpha-textured spawner faces must use the cutout layer");
   assert.ok(mesh.solid, "neighbouring stone faces must remain in the opaque layer");
-  assert.ok(meshHasFaceNormal(mesh.cutout, [-1,0,0], 0, 4), "spawner's -X cutout face must survive adjacent stone");
-  assert.ok(meshHasFaceNormal(mesh.cutout, [0,-1,0], 1, 4), "spawner's -Y cutout face must survive stone below");
-  assert.ok(meshHasFaceNormal(mesh.solid, [1,0,0], 0, 4), "stone's +X face must show through spawner holes");
-  assert.ok(meshHasFaceNormal(mesh.solid, [0,1,0], 1, 4), "stone's +Y face must show through spawner holes");
+
+  const directions = [
+    { name: "+X", modelNormal: [1,0,0], modelAxis: 0, modelPlane: 5, stoneNormal: [-1,0,0], stonePlane: 5 },
+    { name: "-X", modelNormal: [-1,0,0], modelAxis: 0, modelPlane: 4, stoneNormal: [1,0,0], stonePlane: 4 },
+    { name: "+Y", modelNormal: [0,1,0], modelAxis: 1, modelPlane: 5, stoneNormal: [0,-1,0], stonePlane: 5 },
+    { name: "-Y", modelNormal: [0,-1,0], modelAxis: 1, modelPlane: 4, stoneNormal: [0,1,0], stonePlane: 4 },
+    { name: "+Z", modelNormal: [0,0,1], modelAxis: 2, modelPlane: 5, stoneNormal: [0,0,-1], stonePlane: 5 },
+    { name: "-Z", modelNormal: [0,0,-1], modelAxis: 2, modelPlane: 4, stoneNormal: [0,0,1], stonePlane: 4 },
+  ] as const;
+  for (const direction of directions) {
+    assert.ok(
+      meshHasFaceNormal(mesh.cutout, direction.modelNormal, direction.modelAxis, direction.modelPlane),
+      `spawner's ${direction.name} alpha-cutout face must survive adjacent stone`,
+    );
+    assert.ok(
+      meshHasFaceNormal(mesh.solid, direction.stoneNormal, direction.modelAxis, direction.stonePlane),
+      `stone's face behind spawner's ${direction.name} transparent texels must remain visible`,
+    );
+  }
 });
 
 test("grass block base sides and transparent overlay share one ordered cutout mesh", () => {

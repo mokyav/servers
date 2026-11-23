@@ -200,8 +200,6 @@ export function findNaturalSpawnGroup({ center, size = 1, random = Math.random, 
     || !Number.isFinite(radius) || radius < 1 || radius > 8
     || !Number.isFinite(minSeparation) || minSeparation < 1 || minSeparation > radius
     || !Number.isFinite(attempts) || attempts < 1) return [];
-  const centerFloorY = Math.floor(center.y) - 1;
-  if (!hasMobClearance(isClear, Math.floor(center.x), centerFloorY, Math.floor(center.z), width, headroom)) return [];
   const group = [{ x: center.x, y: center.y, z: center.z }];
   if (size === 1) return group;
   const occupied = new Set([`${Math.floor(center.x)},${Math.floor(center.z)}`]);

@@ -180,6 +180,8 @@ function settle(m,dt,solidAt,height,width){
   moveVertical(m,-3.8*dt,height,solidAt,width);
 }
 function nearest(m,players,range){let best=null,bestD=range*range;for(const p of players){const d=dist2(m,p);if(d<bestD){best=p;bestD=d;}}return best;}
+const solid=(fn,x,y,z)=>typeof fn==="function"&&!!fn(Math.floor(x),Math.floor(y),Math.floor(z));
+
 export function hasClearLine(from, to, solidAt) {
   if (!Array.isArray(from) || !Array.isArray(to) || from.length < 3 || to.length < 3 || typeof solidAt !== "function") return false;
   const [x0, y0, z0] = from, [x1, y1, z1] = to;

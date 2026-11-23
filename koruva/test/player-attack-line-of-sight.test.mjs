@@ -24,7 +24,7 @@ test("invalid ray input fails closed", () => {
 
 test("Worker mob attacks consult server world blocks before applying damage", () => {
   const room = readFileSync(new URL("../src/worker/room.ts", import.meta.url), "utf8");
-  assert.match(room, /import \{ createMob, hasClearLine, MOB_PROFILES, stepMobAI \}/);
+  assert.match(room, /import \{ canMobOccupy, createMob, hasClearLine, MOB_PROFILES, stepMobAI \}/);
   assert.match(room, /hasClearLine\(attackerEye, mobBody, solidAt\)/);
   assert.match(room, /this\.blockAt\(x, y, z, me\.dimensionId\)/);
 });

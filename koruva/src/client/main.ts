@@ -1965,12 +1965,27 @@ class Game {
     let gotInit = false;
     let roomEntryPosition: [number, number, number] | null = null;
     let roomEntryRotation: [number, number] | null = null;
+    let cancelSyncWatchdog = () => {};
+    let rejectSyncWait: ((error: Error) => void) | null = null;
     const done = new Promise<{
       position: [number, number, number] | null;
       rotation: [number, number] | null;
     }>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("ルームの読み込みがタイムアウトしました")), 20000);
+      // Use an inactivity watchdog: a large world can legitimately stream many edit batches.
+      let timer = window.setTimeout(() => reject(new Error("ルームからの同期応答が45秒間ありませんでした")), 45000);
+      cancelSyncWatchdog = () => window.clearTimeout(timer);
+      rejectSyncWait = (error) => { window.clearTimeout(timer); reject(error); };
+      const refreshSyncWatchdog = () => {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => {
+          const error = new Error("ルームからの同期応答が45秒間ありませんでした");
+          this.net.close();
+          reject(error);
+        }, 45000);
+        cancelSyncWatchdog = () => window.clearTimeout(timer);
+      };
       this.net.onMessage = (m) => {
+        refreshSyncWatchdog();
         if (m.t === "init") {
           gotInit = true;
           this.myId = m.id;
@@ -2002,15 +2017,17 @@ class Game {
         } else if (m.t === "edits" && gotInit) {
           this.world.importEdits(m.list);
           if (m.done) {
-            clearTimeout(timer);
+            window.clearTimeout(timer);
             resolve({ position: roomEntryPosition, rotation: roomEntryRotation });
           }
-        } else if (m.t === "error") { this.kickMsg = m.message; clearTimeout(timer); reject(new Error(m.message)); }
-        else if (m.t === "kicked") { this.kickMsg = m.reason; clearTimeout(timer); reject(new Error(m.reason)); }
+        } else if (m.t === "error") { this.kickMsg = m.message; window.clearTimeout(timer); reject(new Error(m.message)); }
+        else if (m.t === "kicked") { this.kickMsg = m.reason; window.clearTimeout(timer); reject(new Error(m.reason)); }
         else this.onServerMsg(m);
       };
     });
     this.net.onClose = (reason) => {
+      cancelSyncWatchdog();
+      rejectSyncWait?.(new Error(reason));
       if (this.state !== "title") { this.backToTitle(this.kickMsg || reason); }
     };
     await this.net.connect(code, {

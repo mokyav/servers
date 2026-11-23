@@ -7,7 +7,8 @@ const BASE_LAYER = [
 
 /** Read a modern 64x64 or classic 64x32 Minecraft PNG skin and normalize it to 64x64.
  * Classic skins have no second layer or left-limb textures, so their right limbs are
- * copied into the modern left-limb UV slots. Base-layer transparent pixels become black. */
+ * copied into the modern left-limb UV slots. Base-layer transparent pixels become black;
+ * semi-transparent PNG pixels are retained and composited by the skin renderer. */
 export async function readMinecraftSkin(file: File): Promise<string> {
   if (file.size > 24_000) throw new Error("PNGファイルは24KB以下にしてください");
   const signature = new Uint8Array(await file.slice(0, 8).arrayBuffer());
@@ -33,7 +34,6 @@ export async function readMinecraftSkin(file: File): Promise<string> {
     for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) {
       const i = (y * 64 + x) * 4;
       const a = image.data[i + 3];
-      if (a !== 0 && a !== 255) throw new Error("半透明ピクセルは使えません。透明か不透明にしてください");
       const base = BASE_LAYER.some(([bx, by, bw, bh]) => x >= bx && x < bx + bw && y >= by && y < by + bh);
       if (base && a === 0) {
         image.data[i] = image.data[i + 1] = image.data[i + 2] = 0;

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { MINECRAFT_BLOCK_MODEL_REGISTRY as registry } from "../shared/minecraft-block-model-registry.js";
 import {
   MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID,
-  MINECRAFT_BLOCK_STATE_RUNTIME_ID_START,
+  MINECRAFT_BLOCK_RUNTIME_ID_START,
 } from "../shared/minecraft-block-runtime.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -93,7 +93,7 @@ test("report registered blockstates without a generated model instead of silentl
   let total = 0;
   for (const [idText, meta] of Object.entries(MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID)) {
     const id = Number(idText);
-    if (id < MINECRAFT_BLOCK_STATE_RUNTIME_ID_START) continue;
+    if (id < MINECRAFT_BLOCK_RUNTIME_ID_START) continue;
     total++;
     if (!registry.byId[id]?.length) missing.push({ id, token: meta.token, kind: meta.kind, state: meta.state });
   }

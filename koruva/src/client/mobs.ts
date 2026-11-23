@@ -80,9 +80,9 @@ const MODELS:Record<CoreMobType,Part[]>={
  // Java 26.3 AdultPiglinModel: wider head, dedicated snout and two separately mapped ears.
  piglin:[
   {size:[10,8,8],pos:[0,28,0],uv:[0,0]},
-  {size:[4,4,1],pos:[0,30,5.5],uv:[31,1]},
-  {size:[1,2,1],pos:[2.5,31,5.5],uv:[2,4]},
-  {size:[1,2,1],pos:[-2.5,31,5.5],uv:[2,0]},
+  {size:[4,4,1],pos:[0,30,4.5],uv:[31,1]},
+  {size:[1,2,1],pos:[2.5,31,4.5],uv:[2,4]},
+  {size:[1,2,1],pos:[-2.5,31,4.5],uv:[2,0]},
   {size:[1,5,4],pos:[5,35.5,0],uv:[51,6],rotationZ:-Math.PI/6},
   {size:[1,5,4],pos:[-5,35.5,0],uv:[39,6],rotationZ:Math.PI/6},
   {size:[8,12,4],pos:[0,18,0],uv:[16,16]},

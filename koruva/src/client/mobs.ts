@@ -311,9 +311,16 @@ export class MobModels {
    const overlayMaterials=overlayResources.map(path=>this.materialForResource(path));
    for(const p of MODELS[key]){
     const inflate=p.inflate??0;
-   const g=new THREE.BoxGeometry((p.size[0]+inflate*2)/16,(p.size[1]+inflate*2)/16,(p.size[2]+inflate*2)/16);applyUV(g,key,p);
+    const g=new THREE.BoxGeometry((p.size[0]+inflate*2)/16,(p.size[1]+inflate*2)/16,(p.size[2]+inflate*2)/16);applyUV(g,key,p);
     const m=new THREE.Mesh(g,mat);m.position.set(p.pos[0]/16,p.pos[1]/16,p.pos[2]/16);m.rotation.set(p.rotationX??0,p.rotationY??0,p.rotationZ??0);root.add(m);if(p.leg)legs.push(m);
     for(const overlayMaterial of overlayMaterials){const overlay=new THREE.Mesh(g.clone(),overlayMaterial);overlay.position.copy(m.position);overlay.rotation.copy(m.rotation);overlay.scale.copy(m.scale);root.add(overlay);}
+   }
+   if(VILLAGER_RIG_TYPES.includes(info.type as string)){
+    const brimGeometry=new THREE.PlaneGeometry(1,1);
+    brimGeometry.rotateX(-Math.PI/2);
+    applyPlaneAtlasUV(brimGeometry,[30,47,16,1],[64,64]);
+    const brim=new THREE.Mesh(brimGeometry,mat);
+    brim.position.set(0,24/16,0);root.add(brim);
    }
   }
   const profile=MOB_PROFILES[info.type];

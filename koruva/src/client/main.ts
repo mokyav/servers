@@ -1,4 +1,5 @@
 import { attackDelayTicks, damageMultiplier, attackChargeProgress } from "../../shared/combat.js";
+import { canToggleFlight, isSpectatorFlightLocked } from "../../shared/flight-mode.js";
 import * as THREE from "three";
 import { B, BLOCK_COUNT, BLOCKS, INVENTORY_ITEMS, MINECRAFT_ITEM_TO_RUNTIME_ID, blockItemId, blockPlacementId, blockStateVariantId, resolveBlockStateChanges } from "../../shared/blocks";
 import { craftFromGrid, craftGridForRecipe, craftRecipeFitsGrid, createCraftRecipes, getBlockDrops, miningTimeSeconds } from "../../shared/gameplay.js";
@@ -692,7 +693,10 @@ class Game {
         } else {
           const now = performance.now();
           if (now - this.lastSpace < 300) {
-            if (this.survival) toast("サバイバルでは飛べません");
+            if (isSpectatorFlightLocked(this.gameMode)) {
+              this.fly = true; this.fallFlying = false; this.body.vy = 0;
+              toast("スペクテイターは常に飛行状態です");
+            } else if (!canToggleFlight(this.gameMode)) toast("サバイバルでは飛べません");
             else { this.fly = !this.fly; this.fallFlying = false; this.body.vy = 0; toast(this.fly ? "飛行モード ON" : "飛行モード OFF"); }
           }
           this.lastSpace = now;
@@ -867,7 +871,10 @@ class Game {
     bindHold(jump, () => {
       const now = performance.now();
       if (now - this.lastSpace < 300) {
-        if (this.survival) toast("サバイバルでは飛べません");
+        if (isSpectatorFlightLocked(this.gameMode)) {
+          this.fly = true; this.fallFlying = false; this.body.vy = 0;
+          toast("スペクテイターは常に飛行状態です");
+        } else if (!canToggleFlight(this.gameMode)) toast("サバイバルでは飛べません");
         else { this.fly = !this.fly; this.body.vy = 0; toast(this.fly ? "飛行モード ON" : "飛行モード OFF"); }
       }
       this.lastSpace = now;
@@ -1925,7 +1932,7 @@ class Game {
           this.myId = m.id;
           this.gameMode = m.mode;
           this.isHost = m.host;
-          this.fly = m.mode === "creative" || m.mode === "spectator";
+          this.fly = m.mode === "creative" || isSpectatorFlightLocked(m.mode);
           if (m.vitals) this.applyVitals(m.vitals);
           // The server owns the player's saved dimension and transform. Do not inherit the
           // previous local World.dimensionId when joining a different room or re-entering.
@@ -1965,7 +1972,7 @@ class Game {
     await this.net.connect(code, {
       t: "hello", name: this.profile.name, skin: this.profile.skin,
       p: saved?.pos, r: saved ? [saved.yaw, saved.pitch] : undefined,
-      cid: clientId(), hostToken: loadHostToken(code) || undefined, counts: saved?.counts, armorSlots: saved?.armorSlots, stackData: saved?.stackData,
+      cid: clientId(), dimensionId: saved?.dimensionId, hostToken: loadHostToken(code) || undefined, counts: saved?.counts, armorSlots: saved?.armorSlots, stackData: saved?.stackData,
     });
     const roomEntry = await done;
     const serverCounts = [...this.counts];
@@ -2101,6 +2108,7 @@ class Game {
         this.target = null; this.digKey = ""; this.digT = 0; this.digReady = false;
         this.keys.clear(); this.mouseL = this.mouseR = false;
         this.net.send({ t: "pos", p: [pos.x, pos.y, pos.z], r: [this.yaw, this.pitch] });
+        this.autosave(true);
         this.chat.add(`ディメンションを切り替えました: ${m.dimensionId}`);
         break;
       }
@@ -2386,7 +2394,7 @@ class Game {
     if (this.gameMode === mode) return;
     this.gameMode = mode;
     this.vitals.gameMode = mode;
-    this.fly = mode === "creative" || mode === "spectator";
+    this.fly = mode === "creative" || isSpectatorFlightLocked(mode);
     this.stopDig();
     if (this.survival) {
       this.pruneHotbar();
@@ -2867,7 +2875,7 @@ class Game {
 
   // ------------------------------------------------------------ save
   playerSave(): PlayerSave {
-    const base: PlayerSave = { pos: [this.body.x, this.body.y, this.body.z], yaw: this.yaw, pitch: this.pitch, hotbar: [...this.hotbar], sel: this.sel };
+    const base: PlayerSave = { pos: [this.body.x, this.body.y, this.body.z], yaw: this.yaw, pitch: this.pitch, hotbar: [...this.hotbar], sel: this.sel, dimensionId: this.world.dimensionId };
     base.counts = [...this.counts]; base.health = this.health; base.hunger = this.hunger;
     base.mainInventory = [...this.mainInventory]; base.hotbarAmounts = [...this.hotbarAmounts]; base.mainInventoryAmounts = [...this.mainInventoryAmounts];
     base.armorSlots = [...this.armorSlots]; base.armorAmounts = [...this.armorAmounts]; base.offhand = this.offhand; base.offhandAmount = this.offhandAmount;
@@ -3018,6 +3026,10 @@ class Game {
 
   updatePlayer(dt: number, now: number) {
     const b = this.body;
+    if (isSpectatorFlightLocked(this.gameMode)) {
+      this.fly = true;
+      this.fallFlying = false;
+    }
     const active = this.state === "playing";
     const k = this.keys;
     if (!this.world.hasChunkAt(b.x, b.z)) return;

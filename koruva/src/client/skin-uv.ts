@@ -3,7 +3,7 @@
  * Model space: the character's FRONT faces +Z, so the character's RIGHT-hand side is -X
  * and the LEFT-hand side is +X. BoxGeometry face order is +X, -X, +Y, -Y, +Z, -Z, i.e.
  * [skin "left" face, skin "right" face, top, bottom, front, back]. */
-export type SkinFace = { x: number; y: number; w: number; h: number };
+export type SkinFace = { x: number; y: number; w: number; h: number; flipX?: boolean; flipY?: boolean };
 export type SkinModel = "classic" | "slim";
 export interface PartFaces { base: SkinFace[]; outer: SkinFace[] }
 export interface SkinFaces { head: PartFaces; body: PartFaces; armR: PartFaces; armL: PartFaces; legR: PartFaces; legL: PartFaces }
@@ -16,10 +16,26 @@ export function boxFaces(ox: number, oy: number, w: number, h: number, d: number
   const left: SkinFace = { x: ox + d + w, y: oy + d, w: d, h };
   const right: SkinFace = { x: ox, y: oy + d, w: d, h };
   const top: SkinFace = { x: ox + d, y: oy, w, h: d };
-  const bottom: SkinFace = { x: ox + d + w, y: oy, w, h: d };
+  // Java's unfolded skin atlas stores every bottom face rotated 180 degrees.
+  const bottom: SkinFace = { x: ox + d + w, y: oy, w, h: d, flipX: true, flipY: true };
   const front: SkinFace = { x: ox + d, y: oy + d, w, h };
   const back: SkinFace = { x: ox + d + w + d, y: oy + d, w, h };
   return [left, right, top, bottom, front, back];
+}
+
+/** Draw one skin-atlas face into its own canvas, applying Java's per-face UV orientation. */
+export function drawSkinFaceTexture(
+  ctx: CanvasRenderingContext2D,
+  image: CanvasImageSource,
+  rect: SkinFace,
+): void {
+  ctx.save();
+  if (rect.flipX || rect.flipY) {
+    ctx.translate(rect.flipX ? rect.w : 0, rect.flipY ? rect.h : 0);
+    ctx.scale(rect.flipX ? -1 : 1, rect.flipY ? -1 : 1);
+  }
+  ctx.drawImage(image, rect.x, rect.y, rect.w, rect.h, 0, 0, rect.w, rect.h);
+  ctx.restore();
 }
 
 export function skinFaces(model: SkinModel = "classic"): SkinFaces {

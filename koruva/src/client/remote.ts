@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { PlayerInfo, Rot, Skin, Vec3 } from "../../shared/protocol";
 import { MINECRAFT_ITEM_TO_RUNTIME_ID } from "../../shared/blocks";
 import { DEFAULT_SKIN_IMAGE } from "./default-skin";
-import { RIGHT_SIDE, skinFaces, type SkinFace } from "./skin-uv";
+import { drawSkinFaceTexture, RIGHT_SIDE, skinFaces, type SkinFace } from "./skin-uv";
 
 function px(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, c: string) {
   ctx.fillStyle = c;
@@ -36,7 +36,7 @@ function minecraftPart(imageData: string, baseFaces: SkinFace[], outerFaces: Ski
     const texture = new THREE.CanvasTexture(cv);
     texture.magFilter = THREE.NearestFilter; texture.minFilter = THREE.NearestFilter; texture.generateMipmaps = false;
     texture.colorSpace = THREE.SRGBColorSpace;
-    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: outer, alphaTest: outer ? 0.01 : 0, depthWrite: !outer, toneMapped: false });
+    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: outer, depthWrite: !outer, toneMapped: false });
     return { cv, texture, material, rect: r };
   });
   const base = make(baseFaces, false), outer = make(outerFaces, true);
@@ -45,7 +45,7 @@ function minecraftPart(imageData: string, baseFaces: SkinFace[], outerFaces: Ski
     for (const item of base) {
       const c = item.cv.getContext("2d")!;
       c.fillStyle = "#000"; c.fillRect(0, 0, item.cv.width, item.cv.height);
-      c.drawImage(image, item.rect.x, item.rect.y, item.rect.w, item.rect.h, 0, 0, item.cv.width, item.cv.height);
+      drawSkinFaceTexture(c, image, item.rect);
       item.texture.needsUpdate = true;
     }
     for (const item of outer) {
@@ -149,17 +149,20 @@ export class PlayerModel {
       this.disposables = m.all;
       this.mats = m.materials;
       const U = 0.05625; // 1 skin pixel in blocks (32px = 1.8 blocks)
-      const CT = 0.035;  // overlay layer inflation
+      // Java 26.3 model inflation: hat = 0.5 model units per side (1 skin px total);
+      // jacket/sleeves/trousers = 0.25 per side (0.5 skin px total).
+      const HEAD_OUTER_INFLATE = U;
+      const BODY_OUTER_INFLATE = U * 0.5;
       const head = box(8 * U, 8 * U, 8 * U, m.head.base); head.position.y = 16 * U;
-      const headOuter = box(8 * U + CT, 8 * U + CT, 8 * U + CT, m.head.outer); headOuter.position.y = 16 * U; headOuter.renderOrder = 1;
+      const headOuter = box(8 * U + HEAD_OUTER_INFLATE, 8 * U + HEAD_OUTER_INFLATE, 8 * U + HEAD_OUTER_INFLATE, m.head.outer); headOuter.position.y = 16 * U; headOuter.renderOrder = 1;
       const torso = box(8 * U, 12 * U, 4 * U, m.body.base); torso.position.y = 6 * U;
-      const torsoOuter = box(8 * U + CT, 12 * U + CT, 4 * U + CT, m.body.outer); torsoOuter.position.y = 6 * U; torsoOuter.renderOrder = 1;
+      const torsoOuter = box(8 * U + BODY_OUTER_INFLATE, 12 * U + BODY_OUTER_INFLATE, 4 * U + BODY_OUTER_INFLATE, m.body.outer); torsoOuter.position.y = 6 * U; torsoOuter.renderOrder = 1;
       this.upper.position.y = 12 * U;
       this.upper.add(head, headOuter, torso, torsoOuter);
       const limb = (x: number, y: number, w: number, h: number, base: THREE.Material[], outer: THREE.Material[], depth = w, parent: THREE.Object3D = this.root) => {
         const grp = new THREE.Group(); grp.position.set(x, y, 0);
         const mesh = box(w, h, depth, base); mesh.position.y = -h / 2; grp.add(mesh);
-        const coat = box(w + CT, h + CT, depth + CT, outer); coat.position.y = -(h + CT) / 2; coat.renderOrder = 1; grp.add(coat);
+        const coat = box(w + BODY_OUTER_INFLATE, h + BODY_OUTER_INFLATE, depth + BODY_OUTER_INFLATE, outer); coat.position.y = -(h + BODY_OUTER_INFLATE) / 2; coat.renderOrder = 1; grp.add(coat);
         parent.add(grp); return grp;
       };
       const slim = skin.model === "slim";

@@ -7,8 +7,9 @@ const BASE_LAYER = [
 
 /** Read a modern 64x64 or classic 64x32 Minecraft PNG skin and normalize it to 64x64.
  * Classic skins have no second layer or left-limb textures, so their right limbs are
- * copied into the modern left-limb UV slots. Base-layer transparent pixels become black;
- * semi-transparent PNG pixels are retained and composited by the skin renderer. */
+ * copied into the modern left-limb UV slots. Java's base layer is always opaque:
+ * fully transparent base pixels become black, while partially transparent base pixels
+ * keep their RGB color and become opaque. The outer layer retains its full alpha channel. */
 export async function readMinecraftSkin(file: File): Promise<string> {
   if (file.size > 24_000) throw new Error("PNGファイルは24KB以下にしてください");
   const signature = new Uint8Array(await file.slice(0, 8).arrayBuffer());
@@ -35,8 +36,11 @@ export async function readMinecraftSkin(file: File): Promise<string> {
       const i = (y * 64 + x) * 4;
       const a = image.data[i + 3];
       const base = BASE_LAYER.some(([bx, by, bw, bh]) => x >= bx && x < bx + bw && y >= by && y < by + bh);
-      if (base && a === 0) {
-        image.data[i] = image.data[i + 1] = image.data[i + 2] = 0;
+      if (base) {
+        if (a === 0) {
+          image.data[i] = image.data[i + 1] = image.data[i + 2] = 0;
+        }
+        // Java draws the inner/base skin layer as fully opaque, unlike the outer layer.
         image.data[i + 3] = 255;
       }
     }

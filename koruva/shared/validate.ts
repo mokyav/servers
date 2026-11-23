@@ -15,7 +15,7 @@ export function validateName(v: unknown): string | null {
 /** 名前の重複判定用(大文字小文字を区別しない) */
 export const nameKey = (n: string) => n.toLowerCase();
 const SKIN_PNG_DATA_URL = /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/;
-const SKIN_IMAGE_MAX_CHARS = 32_000;
+const SKIN_IMAGE_MAX_CHARS = 32_128; // 24,000-byte PNG as base64, including the data-URL prefix
 function validSkinImage(v: unknown): v is string {
   if (typeof v !== "string" || v.length > SKIN_IMAGE_MAX_CHARS) return false;
   const match = SKIN_PNG_DATA_URL.exec(v);

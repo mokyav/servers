@@ -36,7 +36,7 @@ import { PersistentChunkEdits, normalizeChunkRecord } from "../../shared/chunk-e
 import { evaluateRedstoneWorld, nextRepeaterDelayBlockId } from "../../shared/redstone-world.js";
 import { createRepeaterDelayController } from "../../shared/repeater-delay.js";
 import { biomeAt, dimensionBiomeAt, generateChunk, generateDimensionChunk, LEGACY_WORLDGEN_VERSION, WORLDGEN_VERSION } from "../client/worldgen";
-import { DIMENSION_IDS, normalizeDimensionId, mapDimensionCoordinates, resolveDimensionAlias, findSafeSpawn } from "../../shared/dimensions.js";
+import { DIMENSION_IDS, isDimensionId, normalizeDimensionId, mapDimensionCoordinates, resolveDimensionAlias, findSafeSpawn } from "../../shared/dimensions.js";
 import { MINECRAFT_BLOCK_TO_RUNTIME_ID, MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID } from "../../shared/minecraft-block-runtime.js";
 import { findPortalAt } from "../../shared/dimension-portals.js";
 import { PORTAL_BLOCK_IDS, PORTAL_DELAY_CREATIVE_MS, PORTAL_DELAY_SURVIVAL_MS, buildPortalEdits, findNearestPortal, findPortalBuildSite, portalCollapseEdits, tryLightPortal } from "../../shared/portal.js";
@@ -96,6 +96,8 @@ interface PlayerState {
   chatB: Bucket;
   vitals: PlayerVitals;
   lastPosAt: number;
+  /** Last durable player location checkpoint timestamp. */
+  lastLocationPersistAt?: number;
   lastJumpAt: number;
   lastDamageAt: number;
   lastAttackAt?: number;
@@ -480,6 +482,8 @@ export class Room extends DurableObject<Env> {
       me.skin = sanitizeSkin(msg.skin);
       me.sneak = false;
       if (!restoredLocation) {
+        // Local save is only a fallback; valid server-side location remains authoritative.
+        me.dimensionId = isDimensionId(msg.dimensionId) ? normalizeDimensionId(msg.dimensionId) : DIMENSION_IDS.OVERWORLD;
         me.p = sanitizeVec3(msg.p, [0, 40, 0]);
         me.r = sanitizeRot(msg.r, [0, 0]);
       }
@@ -602,6 +606,8 @@ export class Room extends DurableObject<Env> {
         }
         me.lastPosAt = now;
         me.r = sanitizeRot(msg.r, me.r); this.serializePlayer(ws,me);
+        // Keep the current room dimension durable during play, not only on socket close.
+        await this.persistPlayerLocation(me, 2000);
         await this.updateFrostWalker(ws, me, now);
         this.broadcastDimension({ t: "pos", id: me.id, p: me.p, r: me.r, sneak: me.sneak || undefined, fallFlying: me.fallFlying || undefined }, me.dimensionId, ws);
         if (me.dimensionId === DIMENSION_IDS.END && this.endBossDefeated) {
@@ -2128,12 +2134,16 @@ export class Room extends DurableObject<Env> {
     return this.persistPlayerSnapshot(st);
   }
 
-  private async persistPlayerLocation(st: PlayerState): Promise<void> {
+  private async persistPlayerLocation(st: PlayerState, minimumIntervalMs = 0): Promise<void> {
     if (!st.cid) return;
+    const now = Date.now();
+    if (minimumIntervalMs > 0 && now - (st.lastLocationPersistAt ?? 0) < minimumIntervalMs) return;
     const location = normalizePlayerLocation({ version: 1, dimensionId: st.dimensionId, p: st.p, r: st.r });
     if (!location) return;
-    try { await updatePlayerSave(this.ctx.storage, st.cid, { location }); }
-    catch (error) { console.warn("failed to persist player location", error); }
+    try {
+      await updatePlayerSave(this.ctx.storage, st.cid, { location });
+      st.lastLocationPersistAt = now;
+    } catch (error) { console.warn("failed to persist player location", error); }
   }
 
   private async persistVitals(st: PlayerState) {

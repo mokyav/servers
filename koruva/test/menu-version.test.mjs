@@ -5,25 +5,31 @@ import { readFile } from "node:fs/promises";
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
 test("title menu shows the build's Koruva version", async () => {
-  const [pkgText, lockText, html, css, main, vite] = await Promise.all([
+  const [pkgText, lockText, html, css, main, vite, workflow] = await Promise.all([
     read("../package.json"),
     read("../package-lock.json"),
     read("../src/client/index.html"),
     read("../src/client/style.css"),
     read("../src/client/main.ts"),
     read("../vite.config.ts"),
+    read("../../.github/workflows/koruva-version-bump.yml"),
   ]);
   const pkg = JSON.parse(pkgText);
   const lock = JSON.parse(lockText);
 
-  assert.equal(pkg.version, "1.1.0");
+  assert.equal(pkg.version, "1.2.0");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
-  assert.equal(pkg.version.split(".").slice(0, 2).join("."), "1.1");
+  assert.equal(pkg.version.split(".").slice(0, 2).join("."), "1.2");
   assert.ok(html.includes('id="game-version" class="game-version">Version 1.0</p>'));
   assert.ok(css.includes("#game-version.game-version {"));
   assert.ok(vite.includes('define: { __KORUVA_VERSION__: JSON.stringify(displayVersion) }'));
   assert.ok(vite.includes('packageJson.version.replace(/\\.0$/, "")'));
   assert.ok(main.includes("declare const __KORUVA_VERSION__: string;"));
   assert.ok(main.includes('$("game-version").textContent = `Version ${__KORUVA_VERSION__}`;'));
+  assert.ok(workflow.includes("npm version minor --no-git-tag-version"));
+  assert.ok(workflow.includes('"!koruva/package.json"'));
+  assert.ok(workflow.includes('"!koruva/package-lock.json"'));
+  assert.ok(workflow.includes('"!koruva/test/**"'));
+  assert.ok(!workflow.includes("    if:"));
 });

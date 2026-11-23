@@ -26,7 +26,7 @@ test("unexpected room disconnects retry with backoff and preserve the session", 
   assert.ok(main.includes("this.autosave(true)"));
   assert.ok(main.includes("this.resetMobileInputState()"));
   const connected = main.indexOf("this.roomHasConnected = true;");
-  const syncWait = main.indexOf("const roomEntry = await done;");
+  const syncWait = main.indexOf("roomEntry = await done;");
   assert.ok(connected >= 0 && connected < syncWait, "recovery must cover interrupted initial synchronization too");
   assert.ok(main.includes("sessionToken !== this.roomSessionToken"), "leaving or starting a new room must cancel stale retries");
   assert.ok(main.includes("this.backToTitle(this.kickMsg || reason)"), "explicit server refusal or kick must not loop forever");
@@ -63,7 +63,7 @@ test("initial-sync disconnect and slow WebSocket messages are recoverable and di
   assert.ok(main.includes("if (!reconnecting && this.roomHasConnected && roomSessionToken === this.roomSessionToken && !this.roomReconnectTask)"));
   assert.ok(main.includes("await this.roomReconnectTask;"));
   assert.ok(room.includes("async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void>"));
-  assert.ok(room.includes("private async handleWebSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void>"));
+  assert.ok(room.includes("private async handleWebSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void>"));\n  assert.ok(room.includes(String.raw`/^\\s*\\{\\s*"t"\\s*:\\s*"([^"]+)"/`), "slow-message diagnostics should extract message type without reparsing JSON");
   assert.ok(room.includes('console.warn("[Koruva DO] slow websocket message"'));
   assert.ok(room.includes("type: messageType,"));
   assert.ok(room.includes("elapsedMs,"));

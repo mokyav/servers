@@ -416,7 +416,7 @@ export class Room extends DurableObject<Env> {
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
     const startedAt = Date.now();
     const messageType = typeof raw === "string"
-      ? (/^\\s*\\{\\s*"t"\\s*:\\s*"([^"]+)"/.exec(raw)?.[1] ?? "unknown")
+      ? (/^\s*\{\s*"t"\s*:\s*"([^"]+)"/.exec(raw)?.[1] ?? "unknown")
       : "binary";
     try {
       await this.handleWebSocketMessage(ws, raw);

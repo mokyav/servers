@@ -254,6 +254,74 @@ test("negative-X chunk boundary emits the west-facing outer face with correct wi
 });
 
 
+function quadBaseForNormal(mesh: NonNullable<ReturnType<typeof buildChunkMesh>["solid"]>, expected: [number, number, number]) {
+  for (let base = 0; base < mesh.vertexCount; base += 4) {
+    const p = [0, 1, 2].map(i => [
+      mesh.positions[(base + i) * 3],
+      mesh.positions[(base + i) * 3 + 1],
+      mesh.positions[(base + i) * 3 + 2],
+    ]);
+    const a = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]];
+    const b = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]];
+    const n = [
+      a[1] * b[2] - a[2] * b[1],
+      a[2] * b[0] - a[0] * b[2],
+      a[0] * b[1] - a[1] * b[0],
+    ];
+    const length = Math.hypot(...n) || 1;
+    const dot = n[0] / length * expected[0] + n[1] / length * expected[1] + n[2] / length * expected[2];
+    if (dot > 0.99) return base;
+  }
+  return -1;
+}
+
+function assertVanillaCubeFaceUv(mesh: NonNullable<ReturnType<typeof buildChunkMesh>["solid"]>, label: string) {
+  const faces: Array<{
+    name: string;
+    normal: [number, number, number];
+    uv: (x: number, y: number, z: number) => [number, number];
+  }> = [
+    { name: "east", normal: [1, 0, 0], uv: (x, y, z) => [1 - z, y] },
+    { name: "west", normal: [-1, 0, 0], uv: (x, y, z) => [z, y] },
+    { name: "up", normal: [0, 1, 0], uv: (x, y, z) => [x, 1 - z] },
+    { name: "down", normal: [0, -1, 0], uv: (x, y, z) => [x, z] },
+    { name: "south", normal: [0, 0, 1], uv: (x, y, z) => [x, y] },
+    { name: "north", normal: [0, 0, -1], uv: (x, y, z) => [1 - x, y] },
+  ];
+  const pad = 0.0005;
+  for (const face of faces) {
+    const base = quadBaseForNormal(mesh, face.normal);
+    assert.ok(base >= 0, `${label}: missing ${face.name} face`);
+    for (let vertex = 0; vertex < 4; vertex++) {
+      const index = base + vertex;
+      const x = mesh.positions[index * 3] - 4;
+      const y = mesh.positions[index * 3 + 1] - 4;
+      const z = mesh.positions[index * 3 + 2] - 4;
+      const [u, v] = face.uv(x, y, z);
+      const expectedU = pad + (1 - 2 * pad) * u;
+      const expectedV = pad + (1 - 2 * pad) * v;
+      assert.ok(Math.abs(mesh.uvs[index * 2] - expectedU) < 1e-5,
+        `${label} ${face.name} vertex ${vertex}: expected U ${expectedU}, got ${mesh.uvs[index * 2]}`);
+      assert.ok(Math.abs(mesh.uvs[index * 2 + 1] - expectedV) < 1e-5,
+        `${label} ${face.name} vertex ${vertex}: expected V ${expectedV}, got ${mesh.uvs[index * 2 + 1]}`);
+    }
+  }
+}
+
+test("legacy and vanilla model cubes map all six face UVs to Java 26.3 directions", () => {
+  const legacy = makeChunk([[4, 4, 4, B.STONE]]);
+  const legacyMesh = buildChunkMesh(legacy.world, legacy.chunk, fullTile).solid;
+  assert.ok(legacyMesh, "legacy stone mesh must exist");
+  assertVanillaCubeFaceUv(legacyMesh, "legacy stone");
+
+  const vanillaStone = MINECRAFT_BLOCK_TO_ID["minecraft:stone"];
+  assert.ok(vanillaStone > 0);
+  const vanilla = makeChunk([[4, 4, 4, vanillaStone]]);
+  const vanillaMesh = buildChunkMesh(vanilla.world, vanilla.chunk, fullTile).solid;
+  assert.ok(vanillaMesh, "vanilla stone mesh must exist");
+  assertVanillaCubeFaceUv(vanillaMesh, "vanilla stone");
+});
+
 test("all six isolated solid cube faces have outward normals", () => {
   const { chunk, world } = makeChunk([[4, 4, 4, B.STONE]]);
   const mesh = buildChunkMesh(world, chunk, fullTile);

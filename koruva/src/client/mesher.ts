@@ -32,17 +32,20 @@ interface FaceDef {
   a: [number, number, number];
   b: [number, number, number];
   swap: boolean;
+  /** Correct vanilla atlas orientation for the selected face. */
+  flipU?: boolean;
+  flipV?: boolean;
   shade: number;
   which: "top" | "side" | "bottom";
 }
 
 const FACES: FaceDef[] = [
-  { n: [1, 0, 0], a: [0, 1, 0], b: [0, 0, 1], swap: true, shade: 0.82, which: "side" },
-  { n: [-1, 0, 0], a: [0, 0, 1], b: [0, 1, 0], swap: false, shade: 0.82, which: "side" },
-  { n: [0, 1, 0], a: [0, 0, 1], b: [1, 0, 0], swap: false, shade: 1.0, which: "top" },
-  { n: [0, -1, 0], a: [1, 0, 0], b: [0, 0, 1], swap: false, shade: 0.5, which: "bottom" },
-  { n: [0, 0, 1], a: [1, 0, 0], b: [0, 1, 0], swap: false, shade: 0.68, which: "side" },
-  { n: [0, 0, -1], a: [0, 1, 0], b: [1, 0, 0], swap: true, shade: 0.68, which: "side" },
+  { n: [1, 0, 0], a: [0, 1, 0], b: [0, 0, 1], swap: true, flipU: true, shade: 0.82, which: "side" }, // east: U=16-Z
+  { n: [-1, 0, 0], a: [0, 0, 1], b: [0, 1, 0], swap: false, shade: 0.82, which: "side" }, // west: U=Z
+  { n: [0, 1, 0], a: [0, 0, 1], b: [1, 0, 0], swap: true, flipV: true, shade: 1.0, which: "top" }, // up: V=Z (top-origin)
+  { n: [0, -1, 0], a: [1, 0, 0], b: [0, 0, 1], swap: false, shade: 0.5, which: "bottom" }, // down: V=16-Z
+  { n: [0, 0, 1], a: [1, 0, 0], b: [0, 1, 0], swap: false, shade: 0.68, which: "side" }, // south: U=X, V=16-Y
+  { n: [0, 0, -1], a: [0, 1, 0], b: [1, 0, 0], swap: true, flipU: true, shade: 0.68, which: "side" }, // north: U=16-X
 ];
 const CORNERS: [number, number][] = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
 const AO_LEVEL = [0.5, 0.68, 0.84, 1.0];
@@ -297,7 +300,10 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
         };
         ua = tangent(f.a, sa); ub = tangent(f.b, sb);
       }
-      const tu = f.swap ? ub : ua, tv = f.swap ? ua : ub;
+      let tu = f.swap ? ub : ua;
+      let tv = f.swap ? ua : ub;
+      if (f.flipU) tu = 1 - tu;
+      if (f.flipV) tv = 1 - tv;
       target.uv.push(u0 + UV_PAD + (u1 - u0 - 2 * UV_PAD) * tu, v0 + UV_PAD + (v1 - v0 - 2 * UV_PAD) * tv);
     }
     if (ao[0] + ao[2] >= ao[1] + ao[3]) target.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);

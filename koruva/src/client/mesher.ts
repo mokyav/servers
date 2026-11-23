@@ -194,8 +194,12 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
   const liquid = new Builder();
   const ox = chunk.cx * CHUNK_SIZE, oz = chunk.cz * CHUNK_SIZE;
   const topY = Math.min(WORLD_HEIGHT - 1, chunk.maxY);
+  // Physics treats the void below the world as bedrock. Rendering must treat it as
+  // empty space so the underside of the bottom layer keeps its visible -Y face.
+  const meshNeighbourAt = (x: number, y: number, z: number): number =>
+    y < 0 || y >= WORLD_HEIGHT ? B.AIR : world.get(x, y, z);
   const opaqueAt = (x: number, y: number, z: number): boolean => {
-    const b = world.get(x, y, z);
+    const b = meshNeighbourAt(x, y, z);
     // An unloaded neighbour is temporary empty space. It is remeshed when loaded.
     return b > 0 && BLOCKS[b]?.render === "opaque";
   };
@@ -264,7 +268,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
             const cullNormal = rotateBlockVector(MODEL_FACE_NORMAL[face.cullface] ?? f.n, instance);
             const cdx = Math.round(cullNormal[0]), cdy = Math.round(cullNormal[1]), cdz = Math.round(cullNormal[2]);
             if (Math.abs(cdx) + Math.abs(cdy) + Math.abs(cdz) === 1) {
-              const neighbourId = world.get(x + cdx, y + cdy, z + cdz);
+              const neighbourId = meshNeighbourAt(x + cdx, y + cdy, z + cdz);
               if (neighbourId > 0 && BLOCKS[neighbourId]?.render === "opaque" && BLOCKS[neighbourId]?.shape === "cube") continue;
             }
           }
@@ -283,7 +287,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
           const normalLength = Math.hypot(...normal) || 1;
           normal = normal.map((v) => v / normalLength) as Vec3;
           const shade = element.shade === false || def.emissive ? 1 : normal[1] > 0.5 ? 1 : normal[1] < -0.5 ? 0.5 : Math.abs(normal[0]) > 0.5 ? 0.82 : 0.68;
-          const neighbour = world.get(x + Math.round(normal[0]), y + Math.round(normal[1]), z + Math.round(normal[2]));
+          const neighbour = meshNeighbourAt(x + Math.round(normal[0]), y + Math.round(normal[1]), z + Math.round(normal[2]));
           const aoValue = neighbour > 0 && BLOCKS[neighbour]?.render === "opaque" ? 0.84 : 1;
           for (const [sa, sb] of CORNERS) {
             const local: Vec3 = [
@@ -335,7 +339,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
         if (def.shape === "cube") {
           for (const f of FACES) {
             const nx = x + f.n[0], ny = y + f.n[1], nz = z + f.n[2];
-            const nid = world.get(nx, ny, nz);
+            const nid = meshNeighbourAt(nx, ny, nz);
             if (nid > 0) {
               const nd = BLOCKS[nid];
               // 隣が部分ブロックなら面を残す。接する部分での同一平面重なりは視覚上不可視。
@@ -356,7 +360,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
               if (blockOccupiesSubcell(id, aqx, aqy, aqz)) continue;
             } else {
               const nx = x + f.n[0], ny = y + f.n[1], nz = z + f.n[2];
-              const nid = world.get(nx, ny, nz);
+              const nid = meshNeighbourAt(nx, ny, nz);
               if (nid > 0) {
                 const nd = BLOCKS[nid];
                 if (nd.render === "opaque") {

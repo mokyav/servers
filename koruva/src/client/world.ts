@@ -108,22 +108,30 @@ export class World {
     }
     ed.set(i, b);
     if (!c) return true;
+
     c.data[i] = b;
-    if (b !== 0 && y > c.maxY) c.maxY = y;
+    if (b !== 0 && y > c.maxY) {
+      c.maxY = y;
+    } else if (b === 0 && y === c.maxY) {
+      // Keep the mesher's vertical scan bound tight after removing the highest block.
+      c.maxY = computeMaxY(c.data);
+    }
+
+    // Always invalidate the edited chunk itself. Only face-adjacent chunks need
+    // invalidation at a boundary; a diagonal chunk shares no rendered face.
+    c.dirty = true;
+    this.onChunkDirty?.(c);
     const lx = localCoord(x), lz = localCoord(z);
-    const xs = [0], zs = [0];
-    if (lx === 0) xs.push(-1);
-    if (lx === CHUNK_SIZE - 1) xs.push(1);
-    if (lz === 0) zs.push(-1);
-    if (lz === CHUNK_SIZE - 1) zs.push(1);
-    for (const dx of xs) {
-      for (const dz of zs) {
-        const n = this.chunks.get(chunkKey(cx + dx, cz + dz));
-        if (n) {
-          n.dirty = true;
-          this.onChunkDirty?.(n);
-        }
-      }
+    const neighbors: Array<[number, number]> = [];
+    if (lx === 0) neighbors.push([-1, 0]);
+    if (lx === CHUNK_SIZE - 1) neighbors.push([1, 0]);
+    if (lz === 0) neighbors.push([0, -1]);
+    if (lz === CHUNK_SIZE - 1) neighbors.push([0, 1]);
+    for (const [dx, dz] of neighbors) {
+      const neighbor = this.chunks.get(chunkKey(cx + dx, cz + dz));
+      if (!neighbor) continue;
+      neighbor.dirty = true;
+      this.onChunkDirty?.(neighbor);
     }
     return true;
   }

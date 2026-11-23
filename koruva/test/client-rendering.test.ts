@@ -57,6 +57,39 @@ function makeChunk(blocks: Array<[number, number, number, number?]>, cx = 0, cz 
 
 const fullTile = () => [0, 0, 1, 1] as [number, number, number, number];
 
+test("block edits invalidate their own chunk and only face-adjacent chunks", () => {
+  const world = new World(123);
+  const current = world.ensureChunk(0, 0);
+  const west = world.ensureChunk(-1, 0);
+  const north = world.ensureChunk(0, -1);
+  const diagonal = world.ensureChunk(-1, -1);
+  for (const chunk of [current, west, north, diagonal]) {
+    chunk.dirty = false;
+  }
+  const notified: Chunk[] = [];
+  world.onChunkDirty = (chunk) => notified.push(chunk);
+
+  assert.equal(world.setBlock(0, 8, 0, B.STONE), true);
+  assert.equal(current.dirty, true, "the edited chunk must be rebuilt");
+  assert.equal(west.dirty, true, "the west face neighbour must be rebuilt");
+  assert.equal(north.dirty, true, "the north face neighbour must be rebuilt");
+  assert.equal(diagonal.dirty, false, "a diagonal chunk shares no face with the edit");
+  assert.deepEqual(notified, [current, west, north]);
+});
+
+test("removing a chunk's highest block recalculates its vertical mesh bound", () => {
+  const world = new World(124);
+  const chunk = world.ensureChunk(0, 0);
+  chunk.data.fill(B.AIR);
+  chunk.data[(4 * CHUNK_SIZE + 4) * CHUNK_SIZE + 4] = B.STONE;
+  chunk.data[(12 * CHUNK_SIZE + 4) * CHUNK_SIZE + 4] = B.STONE;
+  chunk.maxY = 12;
+
+  assert.equal(world.setBlock(4, 12, 4, B.AIR), true);
+  assert.equal(chunk.maxY, 4);
+  assert.equal(world.get(4, 4, 4), B.STONE);
+});
+
 test("a chunk border beside an unloaded chunk still emits its visible terrain face", () => {
   const { chunk, world } = makeChunk([[0, 2, 8]]);
   const mesh = buildChunkMesh(world, chunk, fullTile);

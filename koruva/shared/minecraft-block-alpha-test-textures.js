@@ -15,7 +15,7 @@ const BED_ALPHA_TEXTURES = BED_COLORS.flatMap((color) => [
   `minecraft:block/${color}_bed_head_west`,
 ]);
 
-export const MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES: ReadonlySet<string> = new Set([
+export const MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES = new Set([
   ...BED_ALPHA_TEXTURES,
   "minecraft:block/acacia_door_bottom",
   "minecraft:block/bed_head_north",

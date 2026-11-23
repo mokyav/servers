@@ -1,4 +1,5 @@
 import { attackDelayTicks, damageMultiplier, attackChargeProgress } from "../../shared/combat.js";
+import { getDropCount } from "../../shared/item-drop.js";
 import { canToggleFlight, isSpectatorFlightLocked } from "../../shared/flight-mode.js";
 import * as THREE from "three";
 import { B, BLOCK_COUNT, BLOCKS, INVENTORY_ITEMS, MINECRAFT_ITEM_TO_RUNTIME_ID, blockItemId, blockPlacementId, blockStateVariantId, resolveBlockStateChanges } from "../../shared/blocks";
@@ -669,6 +670,7 @@ class Game {
       this.physicalKeys.add(e.code); this.keys.add(e.code);
       if (/^Digit[1-9]$/.test(e.code)) { this.sel = +e.code.slice(5) - 1; this.hotbarUI.refresh(); this.showHeld(); }
       else if (e.code === "KeyE") { e.preventDefault(); this.openInventory(); }
+      else if (e.code === "KeyQ") { e.preventDefault(); this.dropSelectedItem(e.ctrlKey); }
       else if (e.code === "KeyT" || e.code === "Enter" || e.code === "NumpadEnter") { e.preventDefault(); this.openChat(); }
       else if (e.code === "KeyV") {
         if (!this.thirdPerson) {
@@ -2155,6 +2157,18 @@ class Game {
         break;
       }
       case "drop": if (m.xp !== undefined) this.drops.addExperience(m.eid, m.x, m.y, m.z, m.xp); else this.drops.add(m.eid, m.x, m.y, m.z, m.itemId ?? m.b ?? 0, m.count ?? 1); break;
+      case "drop-item-result": {
+        const match = /^hotbar:([0-8])$/.exec(m.slotKey);
+        if (m.accepted && match) {
+          const index = Number(match[1]);
+          this.setSlotStack({ type: "hotbar", index }, m.remaining > 0 ? m.itemId : 0, m.remaining);
+          this.hotbarUI.refresh();
+          if (this.state === "inventory") this.renderInventorySlots();
+          this.autosave(true);
+          toast(`${BLOCKS[m.itemId]?.name ?? "アイテム"} を捨てました`, 700);
+        } else if (!m.accepted) toast("そのアイテムは捨てられません");
+        break;
+      }
       case "dig-ready": if (this.digKey === `${m.x},${m.y},${m.z}` && this.mouseL) this.digReady = true; break;
       case "furnace": {
         this.receiveFurnace(m);
@@ -2853,6 +2867,19 @@ class Game {
       if (b.x + hw > x && b.x - hw < x + 1 && b.y + PLAYER_H > y && b.y < y + 1 && b.z + hw > z && b.z - hw < z + 1) return;
     }
     if (this.setLocal(x, y, z, id) && this.gameMode === "survival" && this.mode === "solo") this.useItem(itemId);
+  }
+
+
+  /** Q drops one item from the selected hotbar stack; Ctrl+Q drops that stack. */
+  private dropSelectedItem(wholeStack = false) {
+    if (!this.survival || this.mode !== "room") return;
+    const slotIndex = this.sel;
+    const itemId = this.hotbar[slotIndex] ?? 0;
+    const stackAmount = this.hotbarAmounts[slotIndex] ?? 0;
+    const count = getDropCount(stackAmount, wholeStack);
+    if (itemId <= 0 || count <= 0 || (this.counts[itemId] ?? 0) <= 0) return;
+    if (!this.net.connected) { toast("サーバーに接続されていません"); return; }
+    this.net.send({ t: "drop-item", slotKey: `hotbar:${slotIndex}`, itemId, count });
   }
 
   doPick() {

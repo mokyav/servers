@@ -264,7 +264,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
     target.n += 4;
   };
 
-  const emitMinecraftModel = (target: Builder, def: typeof BLOCKS[number], id: number, x: number, y: number, z: number) => {
+  const emitMinecraftModel = (target: Builder, cutoutTarget: Builder, def: typeof BLOCKS[number], id: number, x: number, y: number, z: number) => {
     const instances = MINECRAFT_BLOCK_MODEL_REGISTRY.byId[id];
     if (!instances?.length) return false;
     const token = MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID[id]?.token ?? def.key;
@@ -281,13 +281,33 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
         for (const [direction, face] of Object.entries(element.faces) as Array<[string, MinecraftModelFace]>) {
           const f = getFaceDef(direction);
           if (!f) continue;
-          // Vanilla cullface is tested after the blockstate rotation, against opaque full-cube neighbours.
+          // Cull only when the transformed face itself is flush with a block boundary.
+          // A stale local cullface axis must not remove rotated or partial model faces.
           if (face.cullface) {
-            const cullNormal = rotateBlockVector(MODEL_FACE_NORMAL[face.cullface] ?? f.n, instance);
-            const cdx = Math.round(cullNormal[0]), cdy = Math.round(cullNormal[1]), cdz = Math.round(cullNormal[2]);
-            if (Math.abs(cdx) + Math.abs(cdy) + Math.abs(cdz) === 1) {
-              const neighbourId = meshNeighbourAt(x + cdx, y + cdy, z + cdz);
-              if (neighbourId > 0 && isFullOpaqueCube(neighbourId)) continue;
+            const cullCenter: Vec3 = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2, (from[2] + to[2]) / 2];
+            const cullAxis = f.n.findIndex((v) => v !== 0);
+            cullCenter[cullAxis] = f.n[cullAxis] > 0 ? to[cullAxis] : from[cullAxis];
+            let cullNormal: Vec3 = [...f.n];
+            if (element.rotation?.angle) {
+              cullNormal = rotateModelPoint(cullNormal, element.rotation.axis, element.rotation.angle, [0, 0, 0]);
+              const rotatedCenter = rotateModelPoint(cullCenter, element.rotation.axis, element.rotation.angle,
+                element.rotation.origin as Vec3, element.rotation.rescale === true);
+              cullCenter[0] = rotatedCenter[0];
+              cullCenter[1] = rotatedCenter[1];
+              cullCenter[2] = rotatedCenter[2];
+            }
+            cullNormal = rotateBlockVector(cullNormal, instance);
+            const axis = cullNormal.findIndex((v) => Math.abs(v) > 0.999);
+            if (axis >= 0) {
+              const transformedCenter = rotateBlockPoint(cullCenter, instance);
+              const sign = cullNormal[axis] > 0 ? 1 : -1;
+              const boundary = sign > 0 ? 16 : 0;
+              if (Math.abs(transformedCenter[axis] - boundary) < 0.001) {
+                const offset: [number, number, number] = [0, 0, 0];
+                offset[axis] = sign;
+                const neighbourId = meshNeighbourAt(x + offset[0], y + offset[1], z + offset[2]);
+                if (neighbourId > 0 && isFullOpaqueCube(neighbourId)) continue;
+              }
             }
           }
           const center: Vec3 = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2, (from[2] + to[2]) / 2];
@@ -296,7 +316,11 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
           const axisExtent = (axis: Vec3) => axis.findIndex((v) => v !== 0);
           const aAxis = axisExtent(f.a), bAxis = axisExtent(f.b);
           const halfA = (to[aAxis] - from[aAxis]) / 2, halfB = (to[bAxis] - from[bAxis]) / 2;
-          const base = target.n, ao: number[] = [];
+          // Grass side base and transparent overlay are coplanar in vanilla's model.
+          // Keep them in one ordered alpha-tested mesh so overlay holes reveal the base texture.
+          const grassSideLayer = /(?:^|\/)grass_block_side(?:_overlay)?$/.test(face.texture);
+          const faceTarget = grassSideLayer ? cutoutTarget : target;
+          const base = faceTarget.n, ao: number[] = [];
           const uvRect = tileUV(face.texture);
           const tint = face.tintindex >= 0 ? tintForBlock(world, id, x, z, face.texture) : [255, 255, 255];
           let normal: Vec3 = [...f.n];
@@ -317,7 +341,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
             if (element.rotation?.angle) transformed = rotateModelPoint(transformed, element.rotation.axis, element.rotation.angle, element.rotation.origin as Vec3, element.rotation.rescale === true);
             transformed = rotateBlockPoint(transformed, instance);
             // Keep model-backed vertices in the same chunk-local coordinate space as cube faces.
-            target.pos.push(x - ox + transformed[0] / 16, y + transformed[1] / 16, z - oz + transformed[2] / 16);
+            faceTarget.pos.push(x - ox + transformed[0] / 16, y + transformed[1] / 16, z - oz + transformed[2] / 16);
             emittedFace = true;
             const [pixelU, pixelV] = faceUvPixels(direction, local, from, to, face);
             let [tu, tv] = lockModelUv(pixelU / 16, pixelV / 16, direction, instance);
@@ -325,14 +349,14 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
             if (uvTurn === 90) [tu, tv] = [tv, 1 - tu];
             else if (uvTurn === 180) [tu, tv] = [1 - tu, 1 - tv];
             else if (uvTurn === 270) [tu, tv] = [1 - tv, tu];
-            target.uv.push(uvRect[0] + (uvRect[2] - uvRect[0]) * tu, uvRect[3] - (uvRect[3] - uvRect[1]) * tv);
+            faceTarget.uv.push(uvRect[0] + (uvRect[2] - uvRect[0]) * tu, uvRect[3] - (uvRect[3] - uvRect[1]) * tv);
             const light = shade * aoValue;
-            target.col.push(light * tint[0] / 255, light * tint[1] / 255, light * tint[2] / 255, def.emissive ? 1 : 0);
+            faceTarget.col.push(light * tint[0] / 255, light * tint[1] / 255, light * tint[2] / 255, def.emissive ? 1 : 0);
             ao.push(aoValue > 0.9 ? 3 : 2);
           }
-          if (ao[0] + ao[2] >= ao[1] + ao[3]) target.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
-          else target.idx.push(base + 1, base + 2, base + 3, base + 1, base + 3, base);
-          target.n += 4;
+          if (ao[0] + ao[2] >= ao[1] + ao[3]) faceTarget.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+          else faceTarget.idx.push(base + 1, base + 2, base + 3, base + 1, base + 3, base);
+          faceTarget.n += 4;
         }
       }
     }
@@ -353,7 +377,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
           : def.render === "translucent" ? translucent
             : def.render === "cutout" ? cutout
               : solid;
-        if (id >= 92 && emitMinecraftModel(target, def, id, x, y, z)) continue;
+        if (id >= 92 && emitMinecraftModel(target, cutout, def, id, x, y, z)) continue;
         if (def.shape === "cube") {
           for (const f of FACES) {
             const nx = x + f.n[0], ny = y + f.n[1], nz = z + f.n[2];

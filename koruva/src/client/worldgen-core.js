@@ -1,6 +1,63 @@
 import { MINECRAFT_BIOME_IDS } from "../../shared/minecraft-worldgen-catalog.js";
+import { minecraftBlockVariantId } from "../../shared/minecraft-block-runtime.js";
 
 const LEGACY_WORLDGEN_VERSION = 1, WORLDGEN_VERSION = 3;
+
+/** Twelve End Portal Frames arranged around a 3×3 opening, all facing inward. */
+export function strongholdPortalFramePlacements(cx, cz, y, frameForFacing) {
+  const placements = [];
+  for (let offset = -1; offset <= 1; offset++) {
+    placements.push([cx + offset, y, cz - 2, frameForFacing("south")]);
+    placements.push([cx + offset, y, cz + 2, frameForFacing("north")]);
+    placements.push([cx - 2, y, cz + offset, frameForFacing("east")]);
+    placements.push([cx + 2, y, cz + offset, frameForFacing("west")]);
+  }
+  return placements;
+}
+
+/** Floor, carved interior, walls, roof, entrance corridor, and portal frame ring. */
+export function strongholdPortalRoomPlacements(cx, cz, floorY, brick, frameForFacing) {
+  const edits = [];
+  const set = (x, y, z, id) => edits.push([x, y, z, id]);
+
+  for (let z = -5; z <= 5; z++) for (let x = -7; x <= 7; x++) set(cx + x, floorY, cz + z, brick);
+
+  // Explicitly carve the entire interior out of the pre-existing terrain.
+  for (let y = 1; y <= 4; y++) {
+    for (let z = -4; z <= 4; z++) for (let x = -6; x <= 6; x++) set(cx + x, floorY + y, cz + z, 0);
+  }
+
+  for (let y = 1; y <= 4; y++) {
+    for (let z = -5; z <= 5; z++) {
+      set(cx - 7, floorY + y, cz + z, brick);
+      set(cx + 7, floorY + y, cz + z, brick);
+    }
+    for (let x = -7; x <= 7; x++) {
+      set(cx + x, floorY + y, cz - 5, brick);
+      set(cx + x, floorY + y, cz + 5, brick);
+    }
+  }
+  for (let z = -5; z <= 5; z++) for (let x = -7; x <= 7; x++) set(cx + x, floorY + 5, cz + z, brick);
+
+  // Open a three-wide doorway and a short corridor on the north side.
+  for (let y = 1; y <= 3; y++) {
+    for (let x = -1; x <= 1; x++) set(cx + x, floorY + y, cz - 5, 0);
+    for (let z = -12; z <= -6; z++) {
+      set(cx - 2, floorY + y, cz + z, brick);
+      set(cx + 2, floorY + y, cz + z, brick);
+      for (let x = -1; x <= 1; x++) set(cx + x, floorY + y, cz + z, 0);
+    }
+  }
+  for (let z = -12; z <= -6; z++) {
+    for (let x = -2; x <= 2; x++) {
+      set(cx + x, floorY, cz + z, brick);
+      set(cx + x, floorY + 4, cz + z, brick);
+    }
+  }
+
+  for (const frame of strongholdPortalFramePlacements(cx, cz, floorY + 1, frameForFacing)) edits.push(frame);
+  return edits;
+}
 const hash2 = (s, x, z) => {
   let h = (s | 0) ^ Math.imul(x | 0, 374761393) ^ Math.imul(z | 0, 668265263);
   h = Math.imul(h ^ (h >>> 13), 1274126177); h = Math.imul(h ^ (h >>> 16), 2246822519);
@@ -276,13 +333,25 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
       const beam = block("oak_fence", log), rail = block("rail", planks);
       for(let x=-7;x<=7;x++) { set(cx+x,baseY+3,cz-2,log); set(cx+x,baseY+3,cz+2,log); set(cx+x,baseY+4,cz-2,beam); set(cx+x,baseY+4,cz+2,beam); if(x%3===0) set(cx+x,baseY+5,cz,log); }
       for(let x=-7;x<=7;x++) set(cx+x,baseY,cz,rail);
-    } else if (kind === "stronghold" || kind === "trial_chambers" || kind === "ancient_city") {
-      const deepBrick = kind === "ancient_city" ? block("deepslate_bricks", bricks) : kind === "trial_chambers" ? block("tuff_bricks", bricks) : bricks;
-      const accent = kind === "ancient_city" ? block("sculk", B.BLACKSTONE) : kind === "trial_chambers" ? block("copper_block", smooth) : block("iron_bars", glass);
-      const y0=baseY-(kind === "ancient_city"?18:kind === "trial_chambers"?12:16);
-      for(let z=-5;z<=5;z++) for(let x=-7;x<=7;x++) { set(cx+x,y0,cz+z,deepBrick); if(Math.abs(x)===7||Math.abs(z)===5) for(let y=1;y<=4;y++) set(cx+x,y0+y,cz+z,deepBrick); }
-      for(let x=-2;x<=2;x++) { set(cx+x,y0+1,cz-5,B.AIR); set(cx+x,y0+2,cz-5,B.AIR); }
-      for(let x=-5;x<=5;x+=5) for(let z=-3;z<=3;z+=3) set(cx+x,y0+4,cz+z,accent);
+    } else if (kind === "stronghold") {
+      const strongholdBrick = block("stone_bricks", B.BRICK);
+      const y0 = baseY - 16;
+      const frameForFacing = (facing) =>
+        minecraftBlockVariantId("minecraft:end_portal_frame", { eye: "false", facing })
+        ?? block("end_portal_frame", strongholdBrick);
+      for (const [x, y, z, id] of strongholdPortalRoomPlacements(cx, cz, y0, strongholdBrick, frameForFacing)) {
+        set(x, y, z, id);
+      }
+    } else if (kind === "trial_chambers" || kind === "ancient_city") {
+      const deepBrick = kind === "ancient_city" ? block("deepslate_bricks", bricks) : block("tuff_bricks", bricks);
+      const accent = kind === "ancient_city" ? block("sculk", B.BLACKSTONE) : block("copper_block", smooth);
+      const y0 = baseY - (kind === "ancient_city" ? 18 : 12);
+      for (let z = -5; z <= 5; z++) for (let x = -7; x <= 7; x++) {
+        set(cx + x, y0, cz + z, deepBrick);
+        if (Math.abs(x) === 7 || Math.abs(z) === 5) for (let y = 1; y <= 4; y++) set(cx + x, y0 + y, cz + z, deepBrick);
+      }
+      for (let x = -2; x <= 2; x++) { set(cx + x, y0 + 1, cz - 5, B.AIR); set(cx + x, y0 + 2, cz - 5, B.AIR); }
+      for (let x = -5; x <= 5; x += 5) for (let z = -3; z <= 3; z += 3) set(cx + x, y0 + 4, cz + z, accent);
     } else if (kind === "monument") {
       const prism = block("prismarine", bricks), dark = block("dark_prismarine", mossy), seaLantern = block("sea_lantern", glass);
       floor(cx-6,cz-6,13,13,prism);

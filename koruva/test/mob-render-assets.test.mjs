@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   MOB_RENDER_TEXTURES,
   MOB_RENDER_OVERLAYS,
+  PIGLIN_RIG_TYPES,
   atlasBoxFaceRects,
   mapAtlasFaceUV,
   mapAtlasPlaneUV,
@@ -47,8 +48,8 @@ test("boss texture atlases have the expected 26.3 dimensions", () => {
 
 test("the core MobModels cuboid UV rectangles all fit their texture atlases", () => {
   const modelSection = mobSource.slice(mobSource.indexOf("const MODELS:"), mobSource.indexOf("function applyBoxAtlasUV"));
-  const dimensions = { pig: [64, 64], cow: [64, 64], chicken: [64, 32], creeper: [64, 32], zombie: [64, 64], skeleton: [64, 32], villager: [64, 64] };
-  const starts = [...modelSection.matchAll(/^\s*(pig|cow|chicken|creeper|zombie|skeleton|villager):\[/gm)];
+  const dimensions = { pig: [64, 64], cow: [64, 64], chicken: [64, 32], creeper: [64, 32], zombie: [64, 64], skeleton: [64, 32], villager: [64, 64], piglin: [64, 64] };
+  const starts = [...modelSection.matchAll(/^\s*(pig|cow|chicken|creeper|zombie|skeleton|villager|piglin):\[/gm)];
   let count = 0;
   for (let i = 0; i < starts.length; i++) {
     const type = starts[i][1];
@@ -107,6 +108,7 @@ test("vanilla core rigs keep entity feet on the ground and preserve mirrored lim
   assert.match(mobSource, /pos:\[0,22,0\],uv:\[0,0\]/); // creeper head
   assert.match(mobSource, /pos:\[0,28,0\],uv:\[0,0\]/); // humanoid head
   assert.match(mobSource, /VILLAGER_RIG_TYPES\.includes\(type as string\)\)return "villager"/);
+  assert.match(mobSource, /PIGLIN_RIG_TYPES\.includes\(type as string\)\)return "piglin"/);
   assert.match(mobSource, /pos:\[0,29,0\],uv:\[0,0\]/); // Java 26.3 villager head
   assert.match(mobSource, /pos:\[-6,19,1\],uv:\[44,22\]/); // folded villager arm
   assert.match(mobSource, /inflate:\.5/); // robe and hat layer separation
@@ -118,6 +120,17 @@ test("dragon wings remain parented to the torso pivot instead of being detached 
   assert.match(mobSource, /const wing=makePart\(body,\[side\*12,-15,-6\]\)/);
   assert.doesNotMatch(mobSource, /root\.add\(wing\)/);
   assert.match(mobSource, /wings\.push\(wing\);wingTips\.push\(tip\)/);
+});
+
+test("piglin variants use their dedicated 26.3 PiglinModel UV rig", () => {
+  assert.deepEqual(PIGLIN_RIG_TYPES, ["piglin", "piglin_brute", "zombified_piglin"]);
+  assert.equal(MOB_RENDER_TEXTURES.piglin, "piglin/piglin");
+  assert.equal(MOB_RENDER_TEXTURES.piglin_brute, "piglin/piglin_brute");
+  assert.equal(MOB_RENDER_TEXTURES.zombified_piglin, "piglin/zombified_piglin");
+  assert.match(mobSource, /size:\[10,8,8\],pos:\[0,28,0\],uv:\[0,0\]/); // 26.3 piglin head
+  assert.match(mobSource, /size:\[4,4,1\],pos:\[0,30,5\.5\],uv:\[31,1\]/); // snout
+  assert.match(mobSource, /uv:\[51,6\],rotationZ:-Math\.PI\/6/); // left ear
+  assert.match(mobSource, /uv:\[39,6\],rotationZ:Math\.PI\/6/); // right ear
 });
 
 test("villager and wandering trader use their matching 26.3 entity atlases", () => {

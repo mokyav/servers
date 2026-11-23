@@ -1972,7 +1972,7 @@ class Game {
 
     const task = (async () => {
       let attempt = 0;
-      while (sessionToken === this.roomSessionToken && this.mode === "room" && this.roomCode === code && this.state !== "title") {
+      while (sessionToken === this.roomSessionToken && this.mode === "room" && this.roomCode === code) {
         const delayMs = Math.min(15_000, 1_000 * (2 ** Math.min(attempt, 4)));
         this.showLoading(`接続が切れました。再接続を試みています… (${attempt + 1}回目 / ${Math.ceil(delayMs / 1000)}秒後)`);
         await new Promise<void>((resolve) => window.setTimeout(resolve, delayMs));
@@ -2016,7 +2016,7 @@ class Game {
     let gotInit = false;
     let roomEntryPosition: [number, number, number] | null = null;
     let roomEntryRotation: [number, number] | null = null;
-    let rejectSyncWait: ((error: Error) => void) | null = null;
+    const syncWait: { reject: ((error: Error) => void) | null } = { reject: null };
     let cancelSyncWatchdog = () => {};
     const done = new Promise<{
       position: [number, number, number] | null;
@@ -2038,7 +2038,7 @@ class Game {
         cancelSyncWatchdog = () => {};
         resolve({ position: roomEntryPosition, rotation: roomEntryRotation });
       };
-      rejectSyncWait = rejectOnce;
+      syncWait.reject = rejectOnce;
       const refreshSyncWatchdog = () => {
         clearWatchdog();
         timer = window.setTimeout(() => {
@@ -2089,7 +2089,7 @@ class Game {
     });
     this.net.onClose = (reason, info) => {
       cancelSyncWatchdog();
-      rejectSyncWait?.(new Error(reason));
+      syncWait.reject?.(new Error(reason));
       if (roomSessionToken !== this.roomSessionToken || this.state === "title" || this.mode !== "room") return;
       if (this.kickMsg || (info?.code !== undefined && info.code >= 4000 && info.code < 5000 && info.code !== 4005)) {
         this.backToTitle(this.kickMsg || reason);
@@ -2107,11 +2107,13 @@ class Game {
       });
     } catch (error) {
       cancelSyncWatchdog();
-      rejectSyncWait?.(error instanceof Error ? error : new Error(String(error)));
+      syncWait.reject?.(error instanceof Error ? error : new Error(String(error)));
       throw error;
     }
-    const roomEntry = await done;
+    // A socket that opened and sent hello is already eligible for recovery, even if its
+    // first full chunk/edit synchronization is interrupted.
     this.roomHasConnected = true;
+    const roomEntry = await done;
     const serverCounts = [...this.counts];
     const serverArmorSlots = [...this.armorSlots];
     if (saved) this.applyPlayerSave(saved, true); else {

@@ -187,6 +187,7 @@ export class Net {
       const now = Date.now();
       if (this.ws === ws) {
         this.ws = null;
+        this.clearTimers(this.connectTimer, this.pingTimer, this.heartbeatTimer);
         this.onClose("サーバーへの送信に失敗しました", {
           code: 4005, reason: "send-failed", wasClean: false, ageMs: 0, lastPongAgeMs: 0,
         });

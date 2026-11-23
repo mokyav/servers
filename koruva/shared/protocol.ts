@@ -64,6 +64,7 @@ export type ClientMsg =
   | { t: "enchant"; x: number; y: number; z: number; itemId: number; enchantmentId: string; level: number; costLevel?: number; slotKey?: string }
   | { t: "dig-cancel" }
   | { t: "pickup"; eid: string }
+  | { t: "drop-item"; slotKey: string; itemId: number; count: number }
   | { t: "jump" }
   | { t: "hurt"; cause: DamageCause; amount: number }
   | { t: "eat"; foodId: string }
@@ -90,6 +91,7 @@ export type ServerMsg =
   | { t: "reject"; x: number; y: number; z: number }
   | { t: "drop"; eid: string; x: number; y: number; z: number; b?: number; itemId?: number; xp?: number; count?: number }
   | { t: "gone"; eid: string; by: string } // by = 回収したプレイヤーID(期限切れ等は空)
+  | { t: "drop-item-result"; slotKey: string; itemId: number; count: number; remaining: number; accepted: boolean }
   | { t: "mode"; mode: GameMode }
   | { t: "stats"; id: string; vitals: PlayerVitals; event?: "death" | "respawn" }
   | { t: "kicked"; reason: string }

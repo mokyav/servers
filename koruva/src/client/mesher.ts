@@ -198,10 +198,28 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
   // empty space so the underside of the bottom layer keeps its visible -Y face.
   const meshNeighbourAt = (x: number, y: number, z: number): number =>
     y < 0 || y >= WORLD_HEIGHT ? B.AIR : world.get(x, y, z);
+  const fullOpaqueCubeCache = new Map<number, boolean>();
+  const isFullOpaqueCube = (id: number): boolean => {
+    const cached = fullOpaqueCubeCache.get(id);
+    if (cached !== undefined) return cached;
+    const def = BLOCKS[id];
+    if (!def || def.render !== "opaque" || !def.solid) {
+      fullOpaqueCubeCache.set(id, false);
+      return false;
+    }
+    // "shape === cube" is a fallback category, not proof that an official model
+    // occupies all of its voxel. Check the shared 4×4×4 occupancy mask instead.
+    let full = true;
+    for (let qy = 0; qy < 4 && full; qy++) for (let qz = 0; qz < 4 && full; qz++) {
+      for (let qx = 0; qx < 4; qx++) if (!blockOccupiesSubcell(id, qx, qy, qz)) { full = false; break; }
+    }
+    fullOpaqueCubeCache.set(id, full);
+    return full;
+  };
   const opaqueAt = (x: number, y: number, z: number): boolean => {
     const b = meshNeighbourAt(x, y, z);
-    // An unloaded neighbour is temporary empty space. It is remeshed when loaded.
-    return b > 0 && BLOCKS[b]?.render === "opaque";
+    // AO only treats completely filled opaque blocks as full occluders.
+    return b > 0 && isFullOpaqueCube(b);
   };
 
   const emitFace = (target: Builder, def: typeof BLOCKS[number], x: number, y: number, z: number,
@@ -269,7 +287,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
             const cdx = Math.round(cullNormal[0]), cdy = Math.round(cullNormal[1]), cdz = Math.round(cullNormal[2]);
             if (Math.abs(cdx) + Math.abs(cdy) + Math.abs(cdz) === 1) {
               const neighbourId = meshNeighbourAt(x + cdx, y + cdy, z + cdz);
-              if (neighbourId > 0 && BLOCKS[neighbourId]?.render === "opaque" && BLOCKS[neighbourId]?.shape === "cube") continue;
+              if (neighbourId > 0 && isFullOpaqueCube(neighbourId)) continue;
             }
           }
           const center: Vec3 = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2, (from[2] + to[2]) / 2];
@@ -343,7 +361,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
             if (nid > 0) {
               const nd = BLOCKS[nid];
               // 隣が部分ブロックなら面を残す。接する部分での同一平面重なりは視覚上不可視。
-              if (nd.render === "opaque" && nd.shape === "cube") continue;
+              if (isFullOpaqueCube(nid)) continue;
               if (nid === id && def.cullSame) continue;
               if (def.render === "liquid" && nd.render === "liquid") continue;
             }
@@ -364,7 +382,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
               if (nid > 0) {
                 const nd = BLOCKS[nid];
                 if (nd.render === "opaque") {
-                  if (nd.shape === "cube") continue;
+                  if (isFullOpaqueCube(nid)) continue;
                   const nq: [number, number, number] = [aqx < 0 ? 3 : aqx > 3 ? 0 : qx, aqy < 0 ? 3 : aqy > 3 ? 0 : qy, aqz < 0 ? 3 : aqz > 3 ? 0 : qz];
                   if (blockOccupiesSubcell(nid, nq[0], nq[1], nq[2])) continue;
                 }

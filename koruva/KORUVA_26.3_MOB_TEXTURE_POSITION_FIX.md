@@ -8,6 +8,7 @@
 - Added a dedicated folded-arm VillagerModel rig from the 26.3 client definition, including independent hat/robe geometry inflation and the correct 64×64 UV atlas.
 - Composited the vanilla villager and zombie-villager biome, profession and profession-level layers. The renderer currently uses plains/nitwit/stone defaults because the network MobInfo does not yet carry the villager's actual biome/profession/level.
 - Routed wandering traders through the villager-style model rather than the generic zombie humanoid rig.
+- Added a dedicated PiglinModel-compatible rig for piglin, piglin brute and zombified piglin, using the 26.3 humanoid atlas offsets plus the wider head, snout and mirrored ears. These types no longer sample their textures through the generic zombie head UVs.
 - Fixed an Ender Dragon hierarchy bug: both wings were being detached from their torso pivot and re-added to the root. They now remain children of the torso, so the wing hinge and flap animation stay aligned.
 - Kept the dragon's 256x256 body/eyes atlases, the Wither's three-head 64x64 atlas rig, and the Warden's 128x128 body/glow atlases. The UV tests now check all statically declared dragon cuboids and the key Wither/Warden cuboids, plus all cuboids in the lightweight core rigs.
 - Overlay layers copy the base mesh rotation and scale so overlay geometry does not drift away from the underlying body part.

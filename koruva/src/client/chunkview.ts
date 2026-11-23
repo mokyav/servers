@@ -23,16 +23,19 @@ uniform vec3 uFog;
 uniform float uNear;
 uniform float uFar;
 uniform float uOpacity;
+uniform float uAlphaMode;
 varying vec2 vUv;
 varying vec4 vCol;
 varying float vDist;
 void main() {
   vec4 t = texture2D(map, vUv);
-  if (t.a < 0.5) discard;
+  // 0=opaque (ignore source alpha), 1=cutout (alpha test), 2=blended (preserve alpha).
+  if (uAlphaMode > 0.5 && uAlphaMode < 1.5 && t.a < 0.5) discard;
   vec3 c = t.rgb * vCol.rgb * mix(uLight, vec3(1.0), vCol.a);
   float f = smoothstep(uNear, uFar, vDist);
   c = mix(c, uFog, f);
-  gl_FragColor = vec4(c, t.a * uOpacity);
+  float outAlpha = uAlphaMode < 1.5 ? 1.0 : t.a * uOpacity;
+  gl_FragColor = vec4(c, outAlpha);
   #include <colorspace_fragment>
 }`;
 
@@ -80,22 +83,24 @@ export class ChunkView {
     // Minecraft blockstate rotations and model faces can produce mixed winding in a
     // merged chunk mesh. Keep exposed solid faces visible from either winding; the
     // mesher still removes shared faces that are fully hidden by neighbouring cubes.
+    const solidUniforms = { ...this.uniforms, uAlphaMode: { value: 0 } };
     this.solidMat = new THREE.ShaderMaterial({
-      uniforms: this.uniforms, vertexShader: VERT, fragmentShader: FRAG,
-      side: THREE.DoubleSide,
+      uniforms: solidUniforms, vertexShader: VERT, fragmentShader: FRAG,
+      side: THREE.DoubleSide, transparent: false, depthWrite: true,
     });
     // Plants and other cutout models use alpha discard, not blended transparency.
     // DoubleSide is required for vanilla crossed quads to remain visible from every angle.
+    const cutoutUniforms = { ...this.uniforms, uAlphaMode: { value: 1 } };
     this.cutoutMat = new THREE.ShaderMaterial({
-      uniforms: this.uniforms, vertexShader: VERT, fragmentShader: FRAG,
-      side: THREE.DoubleSide,
+      uniforms: cutoutUniforms, vertexShader: VERT, fragmentShader: FRAG,
+      side: THREE.DoubleSide, transparent: false, depthWrite: true,
     });
-    const translucentU = { ...this.uniforms, uOpacity: { value: 0.42 } };
+    const translucentU = { ...this.uniforms, uOpacity: { value: 0.42 }, uAlphaMode: { value: 2 } };
     this.translucentMat = new THREE.ShaderMaterial({
       uniforms: translucentU, vertexShader: VERT, fragmentShader: FRAG,
       transparent: true, depthWrite: false, side: THREE.DoubleSide,
     });
-    const liquidU = { ...this.uniforms, uOpacity: { value: 0.68 } };
+    const liquidU = { ...this.uniforms, uOpacity: { value: 0.68 }, uAlphaMode: { value: 2 } };
     this.liquidMat = new THREE.ShaderMaterial({
       uniforms: liquidU, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     });

@@ -19,7 +19,6 @@ concurrency:
 
 jobs:
   bump:
-    if: ${{ github.actor != 'github-actions[bot]' && !startsWith(github.event.head_commit.message, 'chore(koruva): bump game version to ') }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out main

@@ -11,8 +11,7 @@
     "deploy": "npm run build && wrangler deploy",
     "typecheck": "tsc -p src/client && tsc -p src/worker",
     "test": "node --test test/*.test.mjs && tsx test/stage3-features.test.ts && tsx test/vitals.test.ts && tsx test/client-rendering.test.ts && tsx test/core.test.ts && tsx test/physics.test.ts && tsx --tsconfig test/tsconfig.json test/room.test.ts && tsx test/skin-uv.test.ts && tsx test/commands-stage.test.ts",
-    "test:combat": "node --test test/combat.test.mjs",
-    "version:bump": "npm version minor --no-git-tag-version"
+    "test:combat": "node --test test/combat.test.mjs"
   },
   "dependencies": {
     "three": "^0.170.0"

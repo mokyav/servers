@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readMinecraftSkin } from "../src/client/skin-upload";
 import { LEGACY_MIRROR_COPIES, RIGHT_SIDE, skinFaces, type PartFaces, type SkinFace } from "../src/client/skin-uv";
 
 // Atlas regions from the 64x64 guide: [x, y, w, h]
@@ -43,4 +44,48 @@ for (const [sx, sy, dx, dy, w, h] of LEGACY_MIRROR_COPIES) {
 // right outer face (src) must become left outer face (dst) of the left limb
 assert.ok(LEGACY_MIRROR_COPIES.some(([sx, sy, dx, dy]) => sx === 40 && sy === 20 && dx === c.armL.base[0].x && dy === 52));
 assert.ok(LEGACY_MIRROR_COPIES.some(([sx, sy, dx, dy]) => sx === 0 && sy === 20 && dx === c.legL.base[0].x && dy === 52));
-console.log("skin-uv tests passed");
+// Semi-transparent RGBA pixels must load unchanged; only transparent base-layer pixels
+// are made opaque black because the base skin layer is drawn over a black canvas.
+const originalDocument = (globalThis as any).document;
+const originalCreateImageBitmap = (globalThis as any).createImageBitmap;
+const rgba = new Uint8ClampedArray(64 * 64 * 4);
+const putPixel = (x: number, y: number, color: [number, number, number, number]) => {
+  rgba.set(color, (y * 64 + x) * 4);
+};
+putPixel(3, 3, [255, 255, 255, 70]); // partially transparent pixel in the base head region
+putPixel(40, 40, [255, 255, 255, 70]); // partially transparent pixel in the outer body layer
+let written: ImageData | null = null;
+const mockContext = {
+  imageSmoothingEnabled: true,
+  clearRect() {},
+  drawImage() {},
+  getImageData() { return { data: rgba, width: 64, height: 64 } as ImageData; },
+  putImageData(image: ImageData) { written = image; },
+};
+const mockCanvas = {
+  width: 0,
+  height: 0,
+  getContext() { return mockContext; },
+  toDataURL() { return "data:image/png;base64,AA=="; },
+};
+(globalThis as any).document = { createElement: () => mockCanvas };
+(globalThis as any).createImageBitmap = async () => ({ width: 64, height: 64, close() {} });
+try {
+  const signature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  const pngLikeFile = new Blob([signature]) as File;
+  const normalized = await readMinecraftSkin(pngLikeFile);
+  assert.equal(normalized, "data:image/png;base64,AA==");
+  assert.ok(written, "normalized pixel data must be written to the canvas");
+  const data = (written as ImageData).data;
+  assert.equal(data[(3 * 64 + 3) * 4 + 3], 70, "base-layer partial alpha must be preserved for black compositing");
+  assert.equal(data[(40 * 64 + 40) * 4 + 3], 70, "outer-layer partial alpha must be preserved for blending");
+  assert.deepEqual(Array.from(data.slice(3, 4)), [255], "partial alpha does not cause upload rejection");
+  assert.deepEqual(Array.from(data.slice(3, 3)), []);
+  assert.deepEqual(Array.from(data.slice(0, 4)), [0, 0, 0, 255], "transparent base pixels remain opaque black");
+} finally {
+  if (originalDocument === undefined) delete (globalThis as any).document;
+  else (globalThis as any).document = originalDocument;
+  if (originalCreateImageBitmap === undefined) delete (globalThis as any).createImageBitmap;
+  else (globalThis as any).createImageBitmap = originalCreateImageBitmap;
+}
+console.log("skin-uv and alpha-upload tests passed");

@@ -28,3 +28,13 @@ test("mobile inventory remains within narrow portrait viewports without invalid 
   assert.ok(css.includes("@media (max-width: 380px) and (pointer: coarse)"), "narrow phones need a smaller inventory layout");
   assert.ok(!css.includes("calc((100vw - 16px) / 352)"), "scale() must not receive a length-valued calc expression");
 });
+
+
+test("mobile players can open in-game chat and summon the software keyboard", () => {
+  assert.ok(main.includes('const chat = makeButton("チャット", "ゲーム内チャットを開く", "chat")'), "mobile controls need a chat button");
+  assert.ok(main.includes('bindTap(chat, () => this.openChat())'), "chat button must open the shared chat UI");
+  assert.ok(main.includes("ci.focus();"), "chat input must receive focus synchronously for mobile keyboard activation");
+  assert.ok(!main.includes("setTimeout(() => ci.focus()"), "delayed focus can lose mobile user activation");
+  assert.ok(html.includes('enterkeyhint="send"'), "mobile keyboard should show a send action");
+  assert.ok(css.includes("#mobile-actions .chat"), "chat button should be visually distinguishable");
+});

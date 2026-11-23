@@ -398,7 +398,10 @@ canvas#gl { touch-action: none; }
 #mobile-actions .primary { border-color: rgba(255,180,120,.78); }
 #mobile-actions .secondary { border-color: rgba(120,220,170,.78); }
 #mobile-actions .jump { border-color: rgba(120,190,255,.78); }
+#mobile-actions .chat { border-color: rgba(56,189,248,.9); background: rgba(8,47,73,.88); }
 @media (max-width: 760px) and (pointer: coarse) {
+  /* Keep the chat field comfortably tappable and full-width on phones. */
+  #chatinput { left: 8px; width: calc(100vw - 16px); max-width: 460px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); font-size: 16px; }
   #hotbar { gap: 2px; padding: 3px; bottom: calc(4px + env(safe-area-inset-bottom, 0px)); }
   #hotbar .slot { width: clamp(28px, 8.6vw, 40px); height: clamp(28px, 8.6vw, 40px); border-width: 1px; }
   #attack-charge { bottom: calc(52px + env(safe-area-inset-bottom, 0px)); }

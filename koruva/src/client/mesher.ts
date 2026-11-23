@@ -74,6 +74,37 @@ function usesBinaryAlphaTexture(texture: string): boolean {
   return resource !== null && MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES.has(resource);
 }
 
+const blockAlphaTextureCache = new Map<number, boolean>();
+
+/** True when any visible face of this block can reveal geometry through binary-alpha pixels. */
+function blockHasBinaryAlphaTexture(id: number): boolean {
+  const cached = blockAlphaTextureCache.get(id);
+  if (cached !== undefined) return cached;
+  const def = BLOCKS[id];
+  if (!def) {
+    blockAlphaTextureCache.set(id, false);
+    return false;
+  }
+
+  let found = [def.tiles.top, def.tiles.side, def.tiles.bottom].some(usesBinaryAlphaTexture);
+  if (!found) {
+    const instances = MINECRAFT_BLOCK_MODEL_REGISTRY.byId[id] ?? [];
+    for (const instance of instances) {
+      const model = MINECRAFT_BLOCK_MODEL_REGISTRY.models[instance.m];
+      if (!model) continue;
+      for (const element of model.elements as MinecraftModelElement[]) {
+        if (Object.values(element.faces).some((face) => usesBinaryAlphaTexture(face.texture))) {
+          found = true;
+          break;
+        }
+      }
+      if (found) break;
+    }
+  }
+  blockAlphaTextureCache.set(id, found);
+  return found;
+}
+
 const MODEL_FACE_INDEX: Record<string, number> = { east: 0, west: 1, up: 2, down: 3, south: 4, north: 5 };
 const MODEL_FACE_NORMAL: Record<string, Vec3> = {
   east: [1, 0, 0], west: [-1, 0, 0], up: [0, 1, 0], down: [0, -1, 0], south: [0, 0, 1], north: [0, 0, -1],
@@ -211,7 +242,9 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
     const cached = fullOpaqueCubeCache.get(id);
     if (cached !== undefined) return cached;
     const def = BLOCKS[id];
-    if (!def || def.render !== "opaque" || !def.solid) {
+    if (!def || def.render !== "opaque" || !def.solid || blockHasBinaryAlphaTexture(id)) {
+      // A full collision/model cube is not a full visual occluder when its
+      // texture has transparent pixels. Neighbour faces must remain behind the holes.
       fullOpaqueCubeCache.set(id, false);
       return false;
     }
@@ -291,7 +324,10 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
           if (!f) continue;
           // Cull only when the transformed face itself is flush with a block boundary.
           // A stale local cullface axis must not remove rotated or partial model faces.
-          if (face.cullface) {
+          const faceHasBinaryAlpha = usesBinaryAlphaTexture(face.texture);
+          // Keep cutout faces even when an opaque neighbour touches their cullface.
+          // The transparent texels must reveal the neighbour's coplanar face.
+          if (face.cullface && !faceHasBinaryAlpha) {
             const cullCenter: Vec3 = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2, (from[2] + to[2]) / 2];
             const cullAxis = f.n.findIndex((v) => v !== 0);
             cullCenter[cullAxis] = f.n[cullAxis] > 0 ? to[cullAxis] : from[cullAxis];
@@ -329,7 +365,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
           const grassSideLayer = /(?:^|\/)grass_block_side(?:_overlay)?$/.test(face.texture);
           // Opaque block models can still use binary-alpha textures on individual faces
           // (for example cactus/cake/cauldron undersides). Alpha-test those faces only.
-          const alphaTestFace = def.render === "opaque" && usesBinaryAlphaTexture(face.texture);
+          const alphaTestFace = def.render === "opaque" && faceHasBinaryAlpha;
           const faceTarget = grassSideLayer || alphaTestFace ? cutoutTarget : target;
           const base = faceTarget.n, ao: number[] = [];
           const uvRect = tileUV(face.texture);
@@ -396,8 +432,9 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
             if (nid > 0) {
               const nd = BLOCKS[nid];
               // 隣が部分ブロックなら面を残す。接する部分での同一平面重なりは視覚上不可視。
-              if (isFullOpaqueCube(nid)) continue;
-              if (nid === id && def.cullSame) continue;
+              const faceHasBinaryAlpha = usesBinaryAlphaTexture(def.tiles[f.which]);
+              if (isFullOpaqueCube(nid) && !faceHasBinaryAlpha) continue;
+              if (nid === id && def.cullSame && !faceHasBinaryAlpha) continue;
               if (def.render === "liquid" && nd.render === "liquid") continue;
             }
             const faceTarget = def.render === "opaque" && usesBinaryAlphaTexture(def.tiles[f.which]) ? cutout : target;
@@ -417,12 +454,14 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
               const nid = meshNeighbourAt(nx, ny, nz);
               if (nid > 0) {
                 const nd = BLOCKS[nid];
+                const faceHasBinaryAlpha = usesBinaryAlphaTexture(def.tiles[f.which]);
                 if (nd.render === "opaque") {
-                  if (isFullOpaqueCube(nid)) continue;
+                  if (isFullOpaqueCube(nid) && !faceHasBinaryAlpha) continue;
                   const nq: [number, number, number] = [aqx < 0 ? 3 : aqx > 3 ? 0 : qx, aqy < 0 ? 3 : aqy > 3 ? 0 : qy, aqz < 0 ? 3 : aqz > 3 ? 0 : qz];
-                  if (blockOccupiesSubcell(nid, nq[0], nq[1], nq[2])) continue;
+                  // Do not let collision occupancy erase a face behind an alpha-cutout model.
+                  if (!faceHasBinaryAlpha && !blockHasBinaryAlphaTexture(nid) && blockOccupiesSubcell(nid, nq[0], nq[1], nq[2])) continue;
                 }
-                if (nid === id && def.cullSame) continue;
+                if (nid === id && def.cullSame && !faceHasBinaryAlpha) continue;
                 if (def.render === "liquid" && nd.render === "liquid") continue;
               }
             }

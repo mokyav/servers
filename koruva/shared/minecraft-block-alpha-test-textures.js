@@ -1,71 +1,9 @@
-// Derived from the supplied Minecraft Java 26.3 block PNG assets.
-// Every entry below has both alpha=0 and alpha=255 pixels, with no intermediate alpha.
-// These are the bottom/underside model texture families used by transparent block faces.
-// Semi-transparent glass, water, and other blended textures are intentionally excluded.
-const BED_COLORS = [
-  "black", "blue", "brown", "cyan", "gray", "green", "light_blue", "light_gray",
-  "lime", "magenta", "orange", "pink", "purple", "red", "white", "yellow",
-];
+// Generated from the supplied Minecraft Java 26.3 block PNG assets.
+// Exact binary-alpha set: each listed texture contains both alpha=0 and alpha=255
+// pixels and contains no intermediate alpha values. Semi-transparent textures
+// (stained glass, water, portal effects, etc.) are deliberately excluded.
+const BINARY_ALPHA_BLOCK_TEXTURES = `acacia_door_bottom acacia_door_top acacia_hanging_sign acacia_leaves acacia_sapling acacia_sign acacia_trapdoor activator_rail activator_rail_on allium amethyst_cluster anvil_top attached_melon_stem attached_pumpkin_stem azalea_leaves azalea_plant azalea_side azure_bluet bamboo_door_top bamboo_fence bamboo_fence_gate bamboo_hanging_sign bamboo_large_leaves bamboo_sign bamboo_singleleaf bamboo_small_leaves bamboo_stage0 bamboo_trapdoor bed_head_north beetroots_stage0 beetroots_stage1 beetroots_stage2 beetroots_stage3 bell_bottom bell_side bell_top big_dripleaf_side big_dripleaf_stem big_dripleaf_tip big_dripleaf_top birch_hanging_sign birch_leaves birch_sapling birch_sign black_bed_foot_east black_bed_foot_south black_bed_foot_west black_bed_head_east black_bed_head_west black_candle black_candle_lit blue_bed_foot_east blue_bed_foot_south blue_bed_foot_west blue_bed_head_east blue_bed_head_west blue_candle blue_candle_lit blue_orchid brain_coral brain_coral_fan brewing_stand brown_bed_foot_east brown_bed_foot_south brown_bed_foot_west brown_bed_head_east brown_bed_head_west brown_candle brown_candle_lit brown_mushroom bubble_coral bubble_coral_fan bush cactus_bottom cactus_flower cactus_side cactus_top cake_bottom cake_inner cake_side cake_top calibrated_sculk_sensor_amethyst calibrated_sculk_sensor_input_side campfire_fire campfire_log candle candle_lit carrots_stage0 carrots_stage1 carrots_stage2 carrots_stage3 cauldron_bottom cauldron_top cave_vines cave_vines_lit cave_vines_plant cave_vines_plant_lit cherry_door_bottom cherry_door_top cherry_hanging_sign cherry_leaves cherry_sapling cherry_sign cherry_trapdoor chipped_anvil_top closed_eyeblossom cobweb cocoa_stage0 cocoa_stage1 cocoa_stage2 composter_compost composter_ready composter_top conduit copper_bars copper_chain copper_door_top copper_grate copper_lantern copper_torch copper_trapdoor cornflower crimson_fungus crimson_hanging_sign crimson_roots crimson_roots_pot crimson_sign crimson_trapdoor cyan_bed_foot_east cyan_bed_foot_south cyan_bed_foot_west cyan_bed_head_east cyan_bed_head_west cyan_candle cyan_candle_lit damaged_anvil_top dandelion dark_oak_hanging_sign dark_oak_leaves dark_oak_sapling dark_oak_sign dead_brain_coral dead_brain_coral_fan dead_bubble_coral dead_bubble_coral_fan dead_bush dead_fire_coral dead_fire_coral_fan dead_horn_coral dead_horn_coral_fan dead_tube_coral dead_tube_coral_fan detector_rail detector_rail_on dirt_path_side enchanting_table_side end_portal_frame_eye end_portal_frame_side end_rod exposed_copper_bars exposed_copper_chain exposed_copper_door_top exposed_copper_grate exposed_copper_lantern exposed_copper_trapdoor exposed_lightning_rod fern fire_0 fire_1 fire_coral fire_coral_fan firefly_bush firefly_bush_emissive flower_pot flowering_azalea_leaves flowering_azalea_side frogspawn glass glass_pane_top glow_lichen golden_dandelion grass_block_side_overlay gray_bed_foot_east gray_bed_foot_south gray_bed_foot_west gray_bed_head_east gray_bed_head_west gray_candle gray_candle_lit green_bed_foot_east green_bed_foot_south green_bed_foot_west green_bed_head_east green_bed_head_west green_candle green_candle_lit grindstone_pivot grindstone_round grindstone_side hanging_roots heavy_core hopper_top horn_coral horn_coral_fan iron_bars iron_chain iron_door_top iron_trapdoor jungle_door_top jungle_hanging_sign jungle_leaves jungle_sapling jungle_sign jungle_trapdoor kelp kelp_plant ladder lantern large_amethyst_bud large_fern_bottom large_fern_top leaf_litter lever light_blue_bed_foot_east light_blue_bed_foot_south light_blue_bed_foot_west light_blue_bed_head_east light_blue_bed_head_west light_blue_candle light_blue_candle_lit light_gray_bed_foot_east light_gray_bed_foot_south light_gray_bed_foot_west light_gray_bed_head_east light_gray_bed_head_west light_gray_candle light_gray_candle_lit lightning_rod lilac_bottom lilac_top lily_of_the_valley lily_pad lime_bed_foot_east lime_bed_foot_south lime_bed_foot_west lime_bed_head_east lime_bed_head_west lime_candle lime_candle_lit magenta_bed_foot_east magenta_bed_foot_south magenta_bed_foot_west magenta_bed_head_east magenta_bed_head_west magenta_candle magenta_candle_lit mangrove_hanging_sign mangrove_leaves mangrove_propagule mangrove_propagule_hanging mangrove_roots_side mangrove_roots_top mangrove_sign mangrove_trapdoor medium_amethyst_bud melon_stem nether_sprouts nether_wart_stage0 nether_wart_stage1 nether_wart_stage2 oak_door_top oak_hanging_sign oak_leaves oak_sapling oak_sign oak_trapdoor open_eyeblossom open_eyeblossom_emissive orange_bed_foot_east orange_bed_foot_south orange_bed_foot_west orange_bed_head_east orange_bed_head_west orange_candle orange_candle_lit orange_poplar_leaves orange_tulip oxeye_daisy oxidized_copper_bars oxidized_copper_chain oxidized_copper_door_top oxidized_copper_grate oxidized_copper_lantern oxidized_copper_trapdoor oxidized_lightning_rod pale_hanging_moss pale_hanging_moss_tip pale_moss_carpet_side_small pale_moss_carpet_side_tall pale_oak_hanging_sign pale_oak_leaves pale_oak_sapling pale_oak_sign peony_bottom peony_top pink_bed_foot_east pink_bed_foot_south pink_bed_foot_west pink_bed_head_east pink_bed_head_west pink_candle pink_candle_lit pink_petals pink_petals_stem pink_tulip pitcher_crop_bottom pitcher_crop_bottom_stage_1 pitcher_crop_bottom_stage_2 pitcher_crop_bottom_stage_3 pitcher_crop_bottom_stage_4 pitcher_crop_side pitcher_crop_top pitcher_crop_top_stage_3 pitcher_crop_top_stage_4 pointed_dripstone_down_base pointed_dripstone_down_frustum pointed_dripstone_down_middle pointed_dripstone_down_tip pointed_dripstone_down_tip_merge pointed_dripstone_up_base pointed_dripstone_up_frustum pointed_dripstone_up_middle pointed_dripstone_up_tip pointed_dripstone_up_tip_merge poplar_door_top poplar_hanging_sign poplar_sapling poplar_sign poplar_trapdoor poppy potatoes_stage0 potatoes_stage1 potatoes_stage2 potatoes_stage3 potted_azalea_bush_plant potted_azalea_bush_side potted_azalea_bush_top potted_flowering_azalea_bush_plant potted_flowering_azalea_bush_side potted_flowering_azalea_bush_top powered_rail powered_rail_on pumpkin_stem purple_bed_foot_east purple_bed_foot_south purple_bed_foot_west purple_bed_head_east purple_bed_head_west purple_candle purple_candle_lit rail rail_corner red_bed_foot_east red_bed_foot_south red_bed_foot_west red_bed_head_east red_bed_head_west red_candle red_candle_lit red_mushroom red_poplar_leaves red_shrub red_tulip redstone_dust_dot redstone_dust_line0 redstone_dust_line1 redstone_torch redstone_torch_off resin_clump rose_bush_bottom rose_bush_top scaffolding_bottom scaffolding_side scaffolding_top sculk_sensor_side sculk_sensor_tendril_active sculk_sensor_tendril_inactive sculk_shrieker_side sculk_shrieker_top sculk_vein sea_pickle seagrass short_dry_grass short_grass small_amethyst_bud small_dripleaf_side small_dripleaf_stem_bottom small_dripleaf_stem_top small_dripleaf_top sniffer_egg_not_cracked_bottom sniffer_egg_not_cracked_east sniffer_egg_not_cracked_north sniffer_egg_not_cracked_south sniffer_egg_not_cracked_top sniffer_egg_not_cracked_west sniffer_egg_slightly_cracked_bottom sniffer_egg_slightly_cracked_east sniffer_egg_slightly_cracked_north sniffer_egg_slightly_cracked_south sniffer_egg_slightly_cracked_top sniffer_egg_slightly_cracked_west sniffer_egg_very_cracked_bottom sniffer_egg_very_cracked_east sniffer_egg_very_cracked_north sniffer_egg_very_cracked_south sniffer_egg_very_cracked_top sniffer_egg_very_cracked_west soul_campfire_fire soul_fire_0 soul_fire_1 soul_lantern soul_torch spawner spore_blossom spore_blossom_base spruce_hanging_sign spruce_leaves spruce_sapling spruce_sign stonecutter_saw stonecutter_side straw_bed sugar_cane sulfur_spike_down_base sulfur_spike_down_frustum sulfur_spike_down_middle sulfur_spike_down_tip sulfur_spike_down_tip_merge sulfur_spike_up_base sulfur_spike_up_frustum sulfur_spike_up_middle sulfur_spike_up_tip sulfur_spike_up_tip_merge sunflower_back sunflower_bottom sunflower_front sunflower_top sweet_berry_bush_stage0 sweet_berry_bush_stage1 sweet_berry_bush_stage2 sweet_berry_bush_stage3 tall_dry_grass tall_grass_bottom tall_grass_top tall_seagrass_bottom tall_seagrass_top torch torchflower torchflower_crop_stage0 torchflower_crop_stage1 trial_spawner_bottom trial_spawner_side_active trial_spawner_side_active_ominous trial_spawner_side_inactive trial_spawner_side_inactive_ominous tripwire_hook tube_coral tube_coral_fan turtle_egg turtle_egg_slightly_cracked turtle_egg_very_cracked twisting_vines twisting_vines_plant vault_front_ejecting vault_front_ejecting_ominous vault_front_off vault_front_off_ominous vault_front_on vault_front_on_ominous vault_side_off vault_side_off_ominous vault_side_on vault_side_on_ominous vine warped_fungus warped_hanging_sign warped_roots warped_roots_pot warped_sign warped_trapdoor weathered_copper_bars weathered_copper_chain weathered_copper_door_top weathered_copper_grate weathered_copper_lantern weathered_copper_trapdoor weathered_lightning_rod weeping_vines weeping_vines_plant wheat_stage0 wheat_stage1 wheat_stage2 wheat_stage3 wheat_stage4 wheat_stage5 wheat_stage6 wheat_stage7 white_bed_foot_east white_bed_foot_south white_bed_foot_west white_bed_head_east white_bed_head_west white_candle white_candle_lit white_tulip wildflowers wildflowers_stem wither_rose yellow_bed_foot_east yellow_bed_foot_south yellow_bed_foot_west yellow_bed_head_east yellow_bed_head_west yellow_candle yellow_candle_lit yellow_poplar_leaves`.split(/\s+/);
 
-const BED_ALPHA_TEXTURES = BED_COLORS.flatMap((color) => [
-  `minecraft:block/${color}_bed_foot_east`,
-  `minecraft:block/${color}_bed_foot_south`,
-  `minecraft:block/${color}_bed_foot_west`,
-  `minecraft:block/${color}_bed_head_east`,
-  `minecraft:block/${color}_bed_head_west`,
-]);
-
-export const MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES = new Set([
-  ...BED_ALPHA_TEXTURES,
-  "minecraft:block/acacia_door_bottom",
-  "minecraft:block/bed_head_north",
-  "minecraft:block/bell_bottom",
-  "minecraft:block/bell_side",
-  "minecraft:block/bell_top",
-  "minecraft:block/cactus_bottom",
-  "minecraft:block/cactus_flower",
-  "minecraft:block/cactus_side",
-  "minecraft:block/cactus_top",
-  "minecraft:block/cake_bottom",
-  "minecraft:block/cake_inner",
-  "minecraft:block/cake_side",
-  "minecraft:block/cake_top",
-  "minecraft:block/cauldron_bottom",
-  "minecraft:block/cauldron_top",
-  "minecraft:block/cherry_door_bottom",
-  "minecraft:block/flower_pot",
-  "minecraft:block/large_fern_bottom",
-  "minecraft:block/lilac_bottom",
-  "minecraft:block/peony_bottom",
-  "minecraft:block/pitcher_crop_bottom",
-  "minecraft:block/rose_bush_bottom",
-  "minecraft:block/scaffolding_bottom",
-  "minecraft:block/scaffolding_side",
-  "minecraft:block/scaffolding_top",
-  "minecraft:block/small_dripleaf_stem_bottom",
-  "minecraft:block/sunflower_bottom",
-  "minecraft:block/tall_grass_bottom",
-  "minecraft:block/tall_seagrass_bottom",
-  "minecraft:block/trial_spawner_bottom",
-  "minecraft:block/turtle_egg",
-  "minecraft:block/turtle_egg_slightly_cracked",
-  "minecraft:block/turtle_egg_very_cracked",
-  "minecraft:block/sniffer_egg_not_cracked_bottom",
-  "minecraft:block/sniffer_egg_not_cracked_east",
-  "minecraft:block/sniffer_egg_not_cracked_north",
-  "minecraft:block/sniffer_egg_not_cracked_south",
-  "minecraft:block/sniffer_egg_not_cracked_top",
-  "minecraft:block/sniffer_egg_not_cracked_west",
-  "minecraft:block/sniffer_egg_slightly_cracked_bottom",
-  "minecraft:block/sniffer_egg_slightly_cracked_east",
-  "minecraft:block/sniffer_egg_slightly_cracked_north",
-  "minecraft:block/sniffer_egg_slightly_cracked_south",
-  "minecraft:block/sniffer_egg_slightly_cracked_top",
-  "minecraft:block/sniffer_egg_slightly_cracked_west",
-  "minecraft:block/sniffer_egg_very_cracked_bottom",
-  "minecraft:block/sniffer_egg_very_cracked_east",
-  "minecraft:block/sniffer_egg_very_cracked_north",
-  "minecraft:block/sniffer_egg_very_cracked_south",
-  "minecraft:block/sniffer_egg_very_cracked_top",
-  "minecraft:block/sniffer_egg_very_cracked_west",
-]);
+export const MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES = new Set(
+  BINARY_ALPHA_BLOCK_TEXTURES.map((name) => `minecraft:block/${name}`),
+);

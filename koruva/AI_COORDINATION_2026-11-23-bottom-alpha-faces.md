@@ -34,3 +34,12 @@ Source-level regression coverage was added. A local project checkout, dependency
 ## Versioning
 
 The repository workflow increments the Koruva minor version on a source push to `main`. The automatic change for this fix completed from `1.5.0` to `1.6.0`. Other parallel AI commits had already advanced the project to `1.5.0` before this change. Do not manually bump the manifests as well, or the automatic workflow may increment twice.
+
+
+## 2026-11-23: Transparent model faces were still being culled (-X / -Y)
+
+- Root cause: alpha-textured faces were routed to the cutout mesh, but model cullface still removed them when an adjacent normal opaque cube existed. The neighbour's full-cube occupancy also removed the coplanar face that should show through transparent texels.
+- Replaced the hand-maintained alpha list with the exact 526 binary-alpha block textures scanned from the supplied Minecraft Java 26.3 client ZIP. Textures with intermediate alpha (stained glass, portal effects, and other blended assets) remain excluded.
+- Mesh culling now preserves an alpha-tested face against opaque neighbours, treats a block with any binary-alpha face texture as a non-opaque visual occluder, and avoids using collision occupancy to erase the visible face behind alpha holes.
+- Added regression coverage for the six cactus faces and for a full-cube spawner model adjacent to stone on its -X and -Y sides. These tests verify both the cutout face and the stone face behind its transparent pixels.
+- Parallel AI note: keep face rendering, face culling, and occupancy culling in sync. Do not fix this by disabling all culling globally; keep ordinary opaque cube culling enabled. Preserve the existing -X/-Y coordinate and winding fixes.

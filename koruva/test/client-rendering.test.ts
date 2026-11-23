@@ -282,6 +282,7 @@ test("all binary-alpha cactus model faces use the alpha-tested cutout layer", ()
   // side/top/bottom PNGs all contain only alpha 0/255 pixels. Route those
   // individual model faces to cutout instead of expecting an opaque mesh.
   assert.equal(BLOCKS[cactus].render, "opaque");
+  assert.equal(MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES.size, 526, "registry must cover every binary-alpha Java 26.3 block texture");
   for (const texture of ["cactus_bottom", "cactus_side", "cactus_top"]) {
     assert.ok(MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES.has(`minecraft:block/${texture}`));
   }
@@ -293,6 +294,30 @@ test("all binary-alpha cactus model faces use the alpha-tested cutout layer", ()
   assert.ok(mesh.cutout, "binary-alpha model faces must use the cutout mesh");
   assert.ok(meshHasFaceNormal(mesh.cutout, [0, -1, 0], 1, 4), "the underside must be emitted into the alpha-tested layer");
   assert.ok(meshHasFaceNormal(mesh.cutout, [0, 1, 0], 1, 5), "the top face must retain its transparent pixels");
+  for (const normal of [[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]] as [number,number,number][]) {
+    assert.ok(meshHasFaceNormal(mesh.cutout, normal), `cactus side face ${normal.join(",")} must remain visible`);
+  }
+});
+
+test("binary-alpha full-cube models keep cutout faces and neighbour faces on all sides", () => {
+  const spawner = MINECRAFT_BLOCK_TO_ID["minecraft:spawner"];
+  assert.ok(spawner > 0);
+  assert.equal(BLOCKS[spawner].render, "opaque");
+  assert.ok(MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES.has("minecraft:block/spawner"));
+  // Spawner uses a full-cube model with cullface on all six faces, but its PNG
+  // contains transparent holes. Adjacent opaque faces must survive behind them.
+  const { chunk, world } = makeChunk([
+    [4, 4, 4, spawner],
+    [3, 4, 4, B.STONE],
+    [4, 3, 4, B.STONE],
+  ]);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.ok(mesh.cutout, "alpha-textured spawner faces must use the cutout layer");
+  assert.ok(mesh.solid, "neighbouring stone faces must remain in the opaque layer");
+  assert.ok(meshHasFaceNormal(mesh.cutout, [-1,0,0], 0, 4), "spawner's -X cutout face must survive adjacent stone");
+  assert.ok(meshHasFaceNormal(mesh.cutout, [0,-1,0], 1, 4), "spawner's -Y cutout face must survive stone below");
+  assert.ok(meshHasFaceNormal(mesh.solid, [1,0,0], 0, 4), "stone's +X face must show through spawner holes");
+  assert.ok(meshHasFaceNormal(mesh.solid, [0,1,0], 1, 4), "stone's +Y face must show through spawner holes");
 });
 
 test("grass block base sides and transparent overlay share one ordered cutout mesh", () => {

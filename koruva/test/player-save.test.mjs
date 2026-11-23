@@ -99,4 +99,17 @@ test("room re-entry restores saved dimension and checkpoints live movement", () 
   assert.match(room, /restoredLocation/);
 });
 
+test("room item drops validate the selected hotbar stack and persist inventory with the drop", () => {
+  const room = readFileSync(new URL("../src/worker/room.ts", import.meta.url), "utf8");
+  const protocol = readFileSync(new URL("../shared/protocol.ts", import.meta.url), "utf8");
+  assert.match(protocol, /t: "drop-item"/);
+  assert.match(room, /case "drop-item"/);
+  assert.match(room, /me\.stackData\[slotKey\]/);
+  assert.match(room, /clampDropCount\(msg\.count, available\)/);
+  assert.match(room, /dropInventoryStack\(ws, me, itemId, count, slotKey, slotCount\)/);
+  assert.match(room, /txn\.put\("drops"/);
+  assert.match(room, /txn\.put\("player-save:" \+ st\.cid, nextSave\)/);
+  assert.match(room, /txn\.put\("stack-data:" \+ st\.cid, nextStackData\)/);
+});
+
 test("wear is cloned and survives player-save updates",async()=>{const storage=new MemoryStorage(),original=createPlayerSaveSnapshot({inventory:[0,1],wear:[0,58]},100);await writePlayerSave(storage,"wear",original);original.wear[1]=1;assert.deepEqual((await loadPlayerSave(storage,"wear")).snapshot.wear,[0,58]);await updatePlayerSave(storage,"wear",{wear:[0,57]});assert.deepEqual((await loadPlayerSave(storage,"wear")).snapshot.wear,[0,57])});

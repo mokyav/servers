@@ -1,6 +1,5 @@
-/** Texture resources whose atlas layout matches one of the six lightweight MobModels rigs.
- * Other entity types deliberately use the nearest matching base rig without hue tinting;
- * a tint cannot substitute for the entity's own UV layout/model.
+/** Texture resources whose atlas layout matches a dedicated lightweight MobModels rig.
+ * Entities with a different vanilla UV net must not borrow an unrelated texture atlas.
  */
 export const MOB_RENDER_TEXTURES = Object.freeze({
   pig: "pig/pig_temperate",
@@ -27,6 +26,18 @@ export const MOB_RENDER_TEXTURES = Object.freeze({
 export const MOB_RENDER_OVERLAYS = Object.freeze({
   stray: ["skeleton/stray_overlay"],
   bogged: ["skeleton/bogged_overlay"],
+  // Villager skins are layered by biome, profession and profession level in vanilla.
+  // Until entity metadata carries those values, use the neutral plains nitwit defaults.
+  villager: [
+    "villager/type/plains",
+    "villager/profession/nitwit",
+    "villager/profession_level/stone",
+  ],
+  zombie_villager: [
+    "zombie_villager/type/plains",
+    "zombie_villager/profession/nitwit",
+    "zombie_villager/profession_level/stone",
+  ],
 });
 
 export const SKELETON_RIG_TYPES = Object.freeze([
@@ -34,8 +45,11 @@ export const SKELETON_RIG_TYPES = Object.freeze([
 ]);
 
 export const HUMANOID_RIG_TYPES = Object.freeze([
-  "zombie", "husk", "drowned", "zombie_villager", "villager", "wandering_trader", "evoker", "pillager", "vindicator", "illusioner", "piglin", "piglin_brute", "zombified_piglin",
+  "zombie", "husk", "drowned", "zombie_villager", "evoker", "pillager", "vindicator", "illusioner", "piglin", "piglin_brute", "zombified_piglin",
 ]);
+
+// Java 26.3 uses VillagerModel for both villagers and wandering traders.
+export const VILLAGER_RIG_TYPES = Object.freeze(["villager", "wandering_trader"]);
 
 /** Height in blocks of the lightweight model before scaling to the server profile. */
 export const MOB_MODEL_BASE_HEIGHTS = Object.freeze({
@@ -45,6 +59,7 @@ export const MOB_MODEL_BASE_HEIGHTS = Object.freeze({
   creeper: 26 / 16,
   zombie: 2,
   skeleton: 2,
+  villager: 2,
 });
 
 /** Vanilla cuboid UV net in +X, -X, +Y, -Y, +Z, -Z face order. */

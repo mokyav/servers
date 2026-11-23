@@ -388,7 +388,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
             const local: Vec3 = [
               center[0] + f.a[0] * halfA * sa + f.b[0] * halfB * sb,
               center[1] + f.a[1] * halfA * sa + f.b[1] * halfB * sb,
-              center[2] + f.a[2] * halfA * sa + f.b[2] * sb,
+              center[2] + f.a[2] * halfA * sa + f.b[2] * halfB * sb,
             ];
             let transformed = local;
             if (element.rotation?.angle) transformed = rotateModelPoint(transformed, element.rotation.axis, element.rotation.angle, element.rotation.origin as Vec3, element.rotation.rescale === true);

@@ -87,4 +87,16 @@ test("Room join and component persistence use the versioned save helper", () => 
 });
 
 
+test("room re-entry restores saved dimension and checkpoints live movement", () => {
+  const room = readFileSync(new URL("../src/worker/room.ts", import.meta.url), "utf8");
+  const main = readFileSync(new URL("../src/client/main.ts", import.meta.url), "utf8");
+  const save = readFileSync(new URL("../src/client/save.ts", import.meta.url), "utf8");
+  assert.match(save, /dimensionId\?: string/);
+  assert.match(main, /dimensionId: this\.world\.dimensionId/);
+  assert.match(main, /dimensionId: saved\?\.dimensionId/);
+  assert.match(room, /isDimensionId\(msg\.dimensionId\)/);
+  assert.match(room, /persistPlayerLocation\(me, 2000\)/);
+  assert.match(room, /restoredLocation/);
+});
+
 test("wear is cloned and survives player-save updates",async()=>{const storage=new MemoryStorage(),original=createPlayerSaveSnapshot({inventory:[0,1],wear:[0,58]},100);await writePlayerSave(storage,"wear",original);original.wear[1]=1;assert.deepEqual((await loadPlayerSave(storage,"wear")).snapshot.wear,[0,58]);await updatePlayerSave(storage,"wear",{wear:[0,57]});assert.deepEqual((await loadPlayerSave(storage,"wear")).snapshot.wear,[0,57])});

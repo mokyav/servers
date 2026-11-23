@@ -5,6 +5,7 @@ import { hotbarSlotCount } from "../src/client/ui";
 import { World } from "../src/client/world";
 import { B, BLOCKS, MINECRAFT_BLOCK_TO_ID, blockHasPartialModelShape } from "../shared/blocks";
 import { resolveBlockTextureResource } from "../shared/legacy-texture-aliases.js";
+import { canToggleFlight, isSpectatorFlightLocked } from "../shared/flight-mode.js";
 import { itemDropTexturePath } from "../shared/drop-item-texture.js";
 import { CHUNK_SIZE, CHUNK_VOLUME, WORLD_HEIGHT } from "../shared/constants";
 import { buildChunkMesh } from "../src/client/mesher";
@@ -132,6 +133,28 @@ test("vanilla cutout plants are emitted to their own model layer", () => {
   assert.ok(mesh.cutout && mesh.cutout.vertexCount > 0, "saplings must use the alpha-tested cutout layer");
 });
 
+
+test("official cross-model flowers and plants use alpha-tested rendering", () => {
+  for (const token of [
+    "dandelion", "poppy", "allium", "azure_bluet", "blue_orchid", "cornflower",
+    "lily_of_the_valley", "wither_rose", "red_mushroom", "brown_mushroom",
+    "sunflower", "lilac", "peony", "rose_bush", "tall_dry_grass",
+  ]) {
+    const id = MINECRAFT_BLOCK_TO_ID[`minecraft:${token}`];
+    assert.ok(id > 0, `missing runtime block ${token}`);
+    assert.equal(BLOCKS[id].render, "cutout", `${token} must preserve transparent texture pixels`);
+  }
+});
+
+test("spectator flight cannot be toggled off", () => {
+  assert.equal(isSpectatorFlightLocked("spectator"), true);
+  assert.equal(canToggleFlight("spectator"), false);
+  assert.equal(canToggleFlight("creative"), true);
+  assert.equal(isSpectatorFlightLocked("creative"), false);
+  assert.equal(canToggleFlight("survival"), false);
+  assert.equal(canToggleFlight("adventure"), false);
+});
+
 test("items with an official item sprite use it even when the item is also a placeable block", () => {
   const cake = MINECRAFT_BLOCK_TO_ID["minecraft:cake"];
   assert.ok(cake > 0);
@@ -203,6 +226,31 @@ test("all six isolated solid cube faces have outward normals", () => {
   assert.ok(mesh.solid);
   for (const normal of [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]] as [number,number,number][]) {
     assert.ok(meshHasFaceNormal(mesh.solid, normal), `missing outward face ${normal.join(",")}`);
+  }
+});
+
+
+test("vanilla model-backed cube emits faces on all six axes", () => {
+  const vanillaStone = MINECRAFT_BLOCK_TO_ID["minecraft:stone"];
+  assert.ok(vanillaStone > 0);
+  const { chunk, world } = makeChunk([[4, 4, 4, vanillaStone]]);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.ok(mesh.solid);
+  for (const normal of [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]] as [number,number,number][]) {
+    assert.ok(meshHasFaceNormal(mesh.solid, normal), `missing vanilla face ${normal.join(",")}`);
+  }
+});
+
+test("grass block base sides and transparent overlay share one ordered cutout mesh", () => {
+  const grass = MINECRAFT_BLOCK_TO_ID["minecraft:grass_block"];
+  assert.ok(grass > 0);
+  const { chunk, world } = makeChunk([[4, 4, 4, grass]]);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.ok(mesh.solid, "top and bottom remain opaque");
+  assert.ok(mesh.cutout, "side bases and overlays share cutout rendering");
+  assert.equal(mesh.cutout.vertexCount, 32);
+  for (const normal of [[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]] as [number,number,number][]) {
+    assert.ok(meshHasFaceNormal(mesh.cutout, normal), `missing grass side ${normal.join(",")}`);
   }
 });
 

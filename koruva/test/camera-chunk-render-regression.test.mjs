@@ -66,7 +66,7 @@ test("chunk vertices stay local while the renderer applies the chunk transform o
   const mesher = read("../src/client/mesher.ts");
   const chunkView = read("../src/client/chunkview.ts");
   assert.match(mesher, /target\.pos\.push\(px - ox, py, pz - oz\)/);
-  assert.match(mesher, /target\.pos\.push\(x - ox \+ transformed\[0\] \/ 16, y \+ transformed\[1\] \/ 16, z - oz \+ transformed\[2\] \/ 16\)/);
+  assert.match(mesher, /faceTarget\.pos\.push\(x - ox \+ transformed\[0\] \/ 16, y \+ transformed\[1\] \/ 16, z - oz \+ transformed\[2\] \/ 16\)/);
   assert.match(chunkView, /m\.position\.set\(c\.cx \* CHUNK_SIZE, 0, c\.cz \* CHUNK_SIZE\)/);
 });
 

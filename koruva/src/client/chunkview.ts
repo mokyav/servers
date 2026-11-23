@@ -93,7 +93,7 @@ export class ChunkView {
     const cutoutUniforms = { ...this.uniforms, uAlphaMode: { value: 1 } };
     this.cutoutMat = new THREE.ShaderMaterial({
       uniforms: cutoutUniforms, vertexShader: VERT, fragmentShader: FRAG,
-      side: THREE.DoubleSide, transparent: false, depthWrite: true,
+      side: THREE.DoubleSide, transparent: false, depthWrite: true, depthFunc: THREE.LessEqualDepth,
     });
     const translucentU = { ...this.uniforms, uOpacity: { value: 0.42 }, uAlphaMode: { value: 2 } };
     this.translucentMat = new THREE.ShaderMaterial({

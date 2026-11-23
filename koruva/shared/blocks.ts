@@ -161,6 +161,23 @@ BLOCKS.push(
 
 
 /** Minecraft catalog fallback. Official model/state geometry and textures are not included in this mapping. */
+// Official client.zip blockstates that resolve to block/cross models.
+// Their textures have transparent pixels even when names do not match the old fragile suffix list.
+const CROSS_MODEL_CUTOUT = new Set([
+  "torchflower_crop", "dandelion", "cobweb", "twisting_vines", "cherry_sapling", "cave_vines",
+  "lilac", "azure_bluet", "sweet_berry_bush", "sunflower", "lily_of_the_valley", "cactus_flower",
+  "poplar_sapling", "pale_hanging_moss", "warped_fungus", "wither_rose", "cave_vines_plant",
+  "acacia_sapling", "crimson_fungus", "torchflower", "closed_eyeblossom", "kelp_plant", "hanging_roots",
+  "medium_amethyst_bud", "spruce_sapling", "poppy", "oak_sapling", "weeping_vines", "weeping_vines_plant",
+  "dead_fire_coral", "fire_coral", "brain_coral", "jungle_sapling", "peony", "large_amethyst_bud",
+  "pale_oak_sapling", "allium", "cornflower", "rose_bush", "kelp", "golden_dandelion",
+  "dead_brain_coral", "small_amethyst_bud", "white_tulip", "red_mushroom", "bubble_coral", "dead_bush",
+  "crimson_roots", "dark_oak_sapling", "dead_tube_coral", "blue_orchid", "tall_dry_grass",
+  "twisting_vines_plant", "warped_roots", "amethyst_cluster", "tube_coral", "pink_tulip", "orange_tulip",
+  "horn_coral", "dead_bubble_coral", "short_dry_grass", "birch_sapling", "oxeye_daisy", "brown_mushroom",
+  "nether_sprouts", "red_shrub", "dead_horn_coral", "red_tulip",
+]);
+
 function minecraftFallback(token: string): { top: string; side: string; bottom: string; solid: boolean; render: RenderKind; cullSame: boolean; emissive: boolean; shape: BlockShape; placeable: boolean } {
   const low = token.toLowerCase();
   let top = "stone", side = "stone", bottom = "stone";
@@ -201,7 +218,7 @@ function minecraftFallback(token: string): { top: string; side: string; bottom: 
   const hidden = low === "barrier" || low === "structure_void" || low === "light";
   const leaves = low.includes("leaves");
   const translucent = /(?:glass|ice|slime_block|honey_block)/.test(low);
-  const transparent = translucent || leaves || fragile || hidden || partialKind === "pane";
+  const transparent = translucent || leaves || fragile || CROSS_MODEL_CUTOUT.has(low) || hidden || partialKind === "pane";
   const shape = low.endsWith("_slab") ? "slab" as const : low.endsWith("_stairs") ? "stairs" as const : partialKind;
   const solid = !liquid && low !== "light" && low !== "structure_void" && !fragile && low !== "fire";
   return { top, side, bottom, solid,

@@ -43,7 +43,7 @@ export interface BanEntry {
 }
 
 export type ClientMsg =
-  | { t: "hello"; name: string; skin: Skin; p?: Vec3; r?: Rot; cid?: string; hostToken?: string; counts?: number[]; armorSlots?: number[]; itemEnchantments?: Record<string, Record<string, number>>; stackData?: Record<string, unknown> }
+  | { t: "hello"; name: string; skin: Skin; p?: Vec3; r?: Rot; dimensionId?: string; cid?: string; hostToken?: string; counts?: number[]; armorSlots?: number[]; itemEnchantments?: Record<string, Record<string, number>>; stackData?: Record<string, unknown> }
   | { t: "pos"; p: Vec3; r: Rot; sprint?: boolean; swimming?: boolean; sneak?: boolean; fallFlying?: boolean; flightStrafe?: number }
   | { t: "set"; x: number; y: number; z: number; b: number; d?: number } // d: 壊したブロックのドロップ(サバイバルのみ有効)
   | { t: "use"; x: number; y: number; z: number; itemId?: number; nx?: number; ny?: number; nz?: number; slotKey?: string } // server-authoritative block interaction

@@ -5,6 +5,8 @@ import type { SoloRedstoneSnapshot } from "../../shared/solo-redstone.js";
 export interface Profile { name: string; skin: Skin }
 export interface PlayerSave {
   pos: [number, number, number];
+  /** Last room dimension; used only when the server has no saved location. */
+  dimensionId?: string;
   yaw: number;
   pitch: number;
   hotbar: number[];

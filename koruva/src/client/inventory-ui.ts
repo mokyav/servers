@@ -155,3 +155,9 @@ export function inventoryPanelVisibility(gameMode: string, workbenchOpen = false
     survivalInventory: !creativeInventory,
   };
 }
+
+
+/** E closes the inventory unless it is being typed into a text-entry control. */
+export function shouldCloseInventoryFromKey(code: string, isTextEntry: boolean): boolean {
+  return code === "Escape" || (code === "KeyE" && !isTextEntry);
+}

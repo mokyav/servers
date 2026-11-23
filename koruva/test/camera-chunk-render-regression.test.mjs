@@ -123,3 +123,23 @@ test("urgent remeshing cannot spend the frame budget on offscreen or never-meshe
   assert.match(urgent, /!this\.entries\.has\(key\)/);
   assert.match(urgent, /if \(c\.dirty\)/);
 });
+
+
+test("solid block faces render from either winding so X and bottom faces cannot disappear", () => {
+  const chunkView = read("../src/client/chunkview.ts");
+  const start = chunkView.indexOf("this.solidMat = new THREE.ShaderMaterial");
+  const end = chunkView.indexOf("this.cutoutMat =", start);
+  assert.ok(start >= 0 && end > start, "solid chunk material must exist");
+  assert.match(chunkView.slice(start, end), /side: THREE\.DoubleSide/);
+});
+
+test("the E inventory shortcut ignores text-entry targets while typing", () => {
+  const main = read("../src/client/main.ts");
+  const start = main.indexOf('if (this.state === "inventory") {');
+  const end = main.indexOf('if (this.state === "paused")', start);
+  assert.ok(start >= 0 && end > start, "inventory keyboard handler must exist");
+  const handler = main.slice(start, end);
+  assert.match(handler, /target instanceof HTMLInputElement/);
+  assert.match(handler, /target instanceof HTMLTextAreaElement/);
+  assert.match(handler, /shouldCloseInventoryFromKey\(e\.code, isTextEntry\)/);
+});

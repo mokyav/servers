@@ -77,7 +77,13 @@ export class ChunkView {
     tex.generateMipmaps = false;
     tex.colorSpace = THREE.SRGBColorSpace;
     this.uniforms.map.value = tex;
-    this.solidMat = new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: VERT, fragmentShader: FRAG, side: THREE.FrontSide });
+    // Minecraft blockstate rotations and model faces can produce mixed winding in a
+    // merged chunk mesh. Keep exposed solid faces visible from either winding; the
+    // mesher still removes shared faces that are fully hidden by neighbouring cubes.
+    this.solidMat = new THREE.ShaderMaterial({
+      uniforms: this.uniforms, vertexShader: VERT, fragmentShader: FRAG,
+      side: THREE.DoubleSide,
+    });
     // Plants and other cutout models use alpha discard, not blended transparency.
     // DoubleSide is required for vanilla crossed quads to remain visible from every angle.
     this.cutoutMat = new THREE.ShaderMaterial({

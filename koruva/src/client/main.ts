@@ -13,7 +13,7 @@ import { NAME_RULE, validateName } from "../../shared/validate";
 import type { FurnaceState, FurnaceStation } from "../../shared/smelting.js";
 import { ATLAS_READY_EVENT, createAtlasCanvas } from "./atlas";
 import { clearBlockIconCache, blockIcon } from "./icons";
-import { MinecraftInventoryUI, inventoryPanelVisibility, type InventorySlotRef, type InventorySlotType } from "./inventory-ui";
+import { MinecraftInventoryUI, inventoryPanelVisibility, shouldCloseInventoryFromKey, type InventorySlotRef, type InventorySlotType } from "./inventory-ui";
 import { applyArmorReduction, armorSlotForItemId, weaponStatsForItemId, weaponReachForItemId } from "../../shared/item-mechanics.js";
 import { normalizeItemEnchantments, availableEnchantmentsForItemId, setItemEnchantment, getItemEnchantment, ENCHANTMENT_LABELS, ENCHANTMENT_MAX_LEVEL, elytraWearChance } from "../../shared/enchantments.js";
 import { normalizeStackComponents, migrateLegacyEnchantments, makeStackRecord, setStackEnchantment, stackDataForSlot, withStackEnchantments, slotKey, combineAnvilStacks, grindstoneStack } from "../../shared/stack-components.js";
@@ -642,7 +642,14 @@ class Game {
         return;
       }
       if (this.state === "inventory") {
-        if (e.code === "KeyE" || e.code === "Escape") { e.preventDefault(); this.closeInventory(); }
+        const target = e.target;
+        const isTextEntry = target instanceof HTMLInputElement
+          || target instanceof HTMLTextAreaElement
+          || (target instanceof HTMLElement && target.isContentEditable);
+        if (shouldCloseInventoryFromKey(e.code, isTextEntry)) {
+          e.preventDefault();
+          this.closeInventory();
+        }
         return;
       }
       if (this.state === "paused") {

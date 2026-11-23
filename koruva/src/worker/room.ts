@@ -35,7 +35,7 @@ import { blockToken, canBlockStay, canPlaceBlockAt, isFallingBlock, isReplaceabl
 import { PersistentChunkEdits, normalizeChunkRecord } from "../../shared/chunk-edits.js";
 import { evaluateRedstoneWorld, nextRepeaterDelayBlockId } from "../../shared/redstone-world.js";
 import { createRepeaterDelayController } from "../../shared/repeater-delay.js";
-import { biomeAt, dimensionBiomeAt, generateChunk, generateDimensionChunk, LEGACY_WORLDGEN_VERSION, WORLDGEN_VERSION } from "../client/worldgen";
+import { biomeAt, dimensionBiomeAt, generateChunk, generateDimensionChunk, LEGACY_WORLDGEN_VERSION, normalizeWorldgenVersion, WORLDGEN_VERSION } from "../client/worldgen";
 import { DIMENSION_IDS, isDimensionId, normalizeDimensionId, mapDimensionCoordinates, resolveDimensionAlias, findSafeSpawn } from "../../shared/dimensions.js";
 import { MINECRAFT_BLOCK_TO_RUNTIME_ID, MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID } from "../../shared/minecraft-block-runtime.js";
 import { findPortalAt } from "../../shared/dimension-portals.js";
@@ -900,7 +900,7 @@ export class Room extends DurableObject<Env> {
         const lure = getItemEnchantment(enchants, rodId, "lure");
         const now = Date.now();
         const openWater = isFishingOpenWater((x:number,y:number,z:number)=>this.blockAt(x,y,z,me.dimensionId), water.x,water.y,water.z,[...waterIds]);
-        const biome = me.dimensionId === DIMENSION_IDS.OVERWORLD ? biomeAt(this.meta?.seed ?? 1,water.x,water.z,this.meta?.worldgenVersion===WORLDGEN_VERSION?WORLDGEN_VERSION:LEGACY_WORLDGEN_VERSION) : dimensionBiomeAt(this.meta?.seed ?? 1,water.x,water.z,me.dimensionId);
+        const biome = me.dimensionId === DIMENSION_IDS.OVERWORLD ? biomeAt(this.meta?.seed ?? 1,water.x,water.z,normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION)) : dimensionBiomeAt(this.meta?.seed ?? 1,water.x,water.z,me.dimensionId);
         const session: FishingSession = {
           id: `bobber-${crypto.randomUUID().slice(0,12)}`, ownerKey, ownerId: me.id, dimensionId: me.dimensionId,
           x: water.x + 0.5, y: water.y + 0.88, z: water.z + 0.5, state: "waiting", castAt: now,
@@ -1624,7 +1624,7 @@ export class Room extends DurableObject<Env> {
           if (!chunk) {
             if (this.mobChunkCache.size >= 24) this.mobChunkCache.delete(this.mobChunkCache.keys().next().value!);
             const seed = this.meta?.seed ?? 1;
-            const version = this.meta?.worldgenVersion === WORLDGEN_VERSION ? WORLDGEN_VERSION : LEGACY_WORLDGEN_VERSION;
+            const version = normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
             chunk = dimensionId === DIMENSION_IDS.OVERWORLD ? generateChunk(seed, cx, cz, version) : generateDimensionChunk(seed, cx, cz, dimensionId);
             this.mobChunkCache.set(cacheKey, chunk);
           }
@@ -2038,7 +2038,7 @@ export class Room extends DurableObject<Env> {
     if (!chunk) {
       if (this.mobChunkCache.size >= 24) this.mobChunkCache.delete(this.mobChunkCache.keys().next().value!);
       const seed = this.meta?.seed ?? 1;
-      const version = this.meta?.worldgenVersion === WORLDGEN_VERSION ? WORLDGEN_VERSION : LEGACY_WORLDGEN_VERSION;
+      const version = normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
       chunk = dimensionId === DIMENSION_IDS.OVERWORLD ? generateChunk(seed, cx, cz, version) : generateDimensionChunk(seed, cx, cz, dimensionId);
       this.mobChunkCache.set(cacheKey, chunk);
     }
@@ -2049,7 +2049,7 @@ export class Room extends DurableObject<Env> {
     if (!this.meta || !isNaturalMobSpawnDue(now, this.lastNaturalMobSpawnAt)) return false;
     this.lastNaturalMobSpawnAt = now;
     const seed = this.meta.seed ?? 1;
-    const worldgenVersion = this.meta.worldgenVersion === WORLDGEN_VERSION ? WORLDGEN_VERSION : LEGACY_WORLDGEN_VERSION;
+    const worldgenVersion = normalizeWorldgenVersion(this.meta.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
     let spawned = false;
     for (const dimensionId of NATURAL_MOB_DIMENSIONS) {
       if (this.mobs.size >= MAX_MOBS) break;
@@ -2432,7 +2432,7 @@ export class Room extends DurableObject<Env> {
       let chunk = generated.get(key);
       if (!chunk) {
         const seed = this.meta?.seed ?? 1;
-        const version = this.meta?.worldgenVersion === WORLDGEN_VERSION ? WORLDGEN_VERSION : LEGACY_WORLDGEN_VERSION;
+        const version = normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
         chunk = id === DIMENSION_IDS.OVERWORLD ? generateChunk(seed, cx, cz, version) : generateDimensionChunk(seed, cx, cz, id);
         generated.set(key, chunk);
       }
@@ -2680,7 +2680,7 @@ export class Room extends DurableObject<Env> {
       if (y < 0 || y >= WORLD_HEIGHT) return B.AIR;
       const cx=chunkCoord(x),cz=chunkCoord(z),key=`${cx},${cz}`;
       let chunk=spawnChunkCache.get(key);
-      if(!chunk){chunk=target===DIMENSION_IDS.OVERWORLD?generateChunk(this.meta?.seed??1,cx,cz,this.meta?.worldgenVersion===WORLDGEN_VERSION?WORLDGEN_VERSION:LEGACY_WORLDGEN_VERSION):generateDimensionChunk(this.meta?.seed??1,cx,cz,target);spawnChunkCache.set(key,chunk);}
+      if(!chunk){chunk=target===DIMENSION_IDS.OVERWORLD?generateChunk(this.meta?.seed??1,cx,cz,normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION)):generateDimensionChunk(this.meta?.seed??1,cx,cz,target);spawnChunkCache.set(key,chunk);}
       const index=localIndex(x,y,z), edits=targetEdits.get(key);
       return edits && edits[index]!==NO_EDIT ? edits[index] : chunk[index] ?? B.AIR;
     } }, mapped, {
@@ -2943,7 +2943,7 @@ export class Room extends DurableObject<Env> {
     const edits = this.chunksForDimension(id).get(key);
     if (edits && edits[index] !== NO_EDIT) return edits[index];
     const seed = this.meta?.seed ?? 1;
-    const version = this.meta?.worldgenVersion === WORLDGEN_VERSION ? WORLDGEN_VERSION : LEGACY_WORLDGEN_VERSION;
+    const version = normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
     const chunk = id === DIMENSION_IDS.OVERWORLD ? generateChunk(seed, cx, cz, version) : generateDimensionChunk(seed, cx, cz, id);
     return chunk[index] ?? 0;
   }

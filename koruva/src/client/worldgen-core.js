@@ -2,7 +2,7 @@ import { MINECRAFT_BIOME_IDS } from "../../shared/minecraft-worldgen-catalog.js"
 import { minecraftBlockVariantId } from "../../shared/minecraft-block-runtime.js";
 import { END_CENTER_SURFACE_Y, END_CONTINENT_RADIUS, END_OUTER_ISLAND_MIN_DISTANCE } from "../../shared/dimensions.js";
 
-const LEGACY_WORLDGEN_VERSION = 1, WORLDGEN_VERSION = 4;
+const LEGACY_WORLDGEN_VERSION = 1, WORLDGEN_VERSION = 5;
 
 /** Twelve End Portal Frames arranged around a 3×3 opening, all facing inward. */
 export function strongholdPortalFramePlacements(cx, cz, y, frameForFacing) {
@@ -93,7 +93,7 @@ function noise3(s, x, y, z) {
   return lerp(lerp(lerp(a, b, fx), lerp(c, d, fx), fy), lerp(lerp(e, f, fx), lerp(g, h, fx), fy), fz);
 }
 export { LEGACY_WORLDGEN_VERSION, WORLDGEN_VERSION };
-export function normalizeWorldgenVersion(v) { return v === 1 ? 1 : v === 2 ? 2 : v === 3 ? 3 : 4; }
+export function normalizeWorldgenVersion(v) { return v === 1 ? 1 : v === 2 ? 2 : v === 3 ? 3 : v === 4 ? 4 : 5; }
 
 const choose = (list, roll) => list[Math.min(list.length - 1, Math.floor(roll * list.length))];
 const OW_VARIANTS = Object.freeze({
@@ -446,7 +446,208 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
     }
   }
 
-  function generateChunkV4(seed, cx, cz) {
+  // Amethyst geodes follow the 26.3 feature palette. Origin cells, not target
+  // chunks, own the seed so the shell stays identical when chunks load in any order.
+  function decorateAmethystGeodesV5(data, ox, oz, seed, rockIds) {
+    const smoothBasalt = block("smooth_basalt", 0);
+    const calcite = block("calcite", 0);
+    const amethyst = block("amethyst_block", 0);
+    const budding = block("budding_amethyst", 0);
+    const cluster = block("amethyst_cluster", 0);
+    if (!smoothBasalt || !calcite || !amethyst || !budding) return;
+
+    const cellSize = 32, radius = 5.15;
+    const minCellX = Math.floor((ox - radius - cellSize / 2) / cellSize);
+    const maxCellX = Math.floor((ox + S + radius - cellSize / 2) / cellSize);
+    const minCellZ = Math.floor((oz - radius - cellSize / 2) / cellSize);
+    const maxCellZ = Math.floor((oz + S + radius - cellSize / 2) / cellSize);
+    const crystalFacing = Object.fromEntries(["north", "south", "east", "west", "up", "down"].map(facing => [
+      facing,
+      minecraftBlockVariantId("minecraft:amethyst_cluster", { facing, waterlogged: "false" }) || cluster,
+    ]));
+    const dirs = [
+      [0, 0, -1, "north"], [0, 0, 1, "south"],
+      [1, 0, 0, "east"], [-1, 0, 0, "west"],
+      [0, 1, 0, "up"], [0, -1, 0, "down"],
+    ];
+    for (let gz = minCellZ; gz <= maxCellZ; gz++) for (let gx = minCellX; gx <= maxCellX; gx++) {
+      if (rand2(seed + 17003, gx, gz) >= 0.22) continue;
+      const cx = gx * cellSize + cellSize / 2 + (rand2(seed + 17005, gx, gz) - 0.5) * 10;
+      const cz = gz * cellSize + cellSize / 2 + (rand2(seed + 17006, gx, gz) - 0.5) * 10;
+      const surface = heightAt(seed, Math.floor(cx), Math.floor(cz));
+      const minY = Math.max(6, Math.floor(H * 0.10));
+      const maxY = Math.min(Math.floor(H * 0.49), surface - 8);
+      if (maxY < minY) continue;
+      const cy = minY + Math.floor(rand2(seed + 17007, gx, gz) * (maxY - minY + 1));
+      const x0 = Math.floor(cx), y0 = cy, z0 = Math.floor(cz);
+      const r2 = radius * radius;
+
+      for (let y = Math.max(2, y0 - 6); y <= Math.min(H - 3, y0 + 6); y++) {
+        for (let z = z0 - 6; z <= z0 + 6; z++) for (let x = x0 - 6; x <= x0 + 6; x++) {
+          const dx = (x - cx) / 1.02, dy = (y - cy) / 0.94, dz = (z - cz) / 1.02;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 > r2) continue;
+          const lx = x - ox, lz = z - oz;
+          if (lx < 0 || lx >= S || lz < 0 || lz >= S) continue;
+          const i = idx(lx, y, lz), existing = data[i];
+          if (!rockIds.has(existing)) continue;
+
+          if (d2 >= 17.6) data[i] = smoothBasalt;
+          else if (d2 >= 11.8) data[i] = calcite;
+          else if (d2 >= 7.2) data[i] = rand3(seed + 17011, x, y, z) < 0.34 ? budding : amethyst;
+          else data[i] = B.AIR;
+        }
+      }
+
+      if (!cluster) continue;
+      for (let y = Math.max(2, y0 - 5); y <= Math.min(H - 3, y0 + 5); y++) {
+        for (let z = z0 - 5; z <= z0 + 5; z++) for (let x = x0 - 5; x <= x0 + 5; x++) {
+          const dx = (x - cx) / 1.02, dy = (y - cy) / 0.94, dz = (z - cz) / 1.02;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 < 7.2 || d2 >= 9.2 || rand3(seed + 17013, x, y, z) > 0.24) continue;
+          const lx = x - ox, lz = z - oz;
+          if (lx < 0 || lx >= S || lz < 0 || lz >= S) continue;
+          const innerDirs = dirs.filter(([vx, vy, vz]) => {
+            const nx = x + vx, ny = y + vy, nz = z + vz;
+            const ndx = (nx - cx) / 1.02, ndy = (ny - cy) / 0.94, ndz = (nz - cz) / 1.02;
+            return ndx * ndx + ndy * ndy + ndz * ndz < 7.0;
+          });
+          for (const [vx, vy, vz, facing] of innerDirs) {
+            const nx = x + vx, ny = y + vy, nz = z + vz;
+            if (ny < 2 || ny >= H - 2) continue;
+            const nlx = nx - ox, nlz = nz - oz;
+            if (nlx < 0 || nlx >= S || nlz < 0 || nlz >= S) continue;
+            const ni = idx(nlx, ny, nlz);
+            if (data[ni] !== B.AIR) continue;
+            data[ni] = crystalFacing[facing] || cluster;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  function decorateCaveBiomeBlocksV5(data, caveKinds, ox, oz, seed, rockIds) {
+    const moss = block("moss_block", 0), mossCarpet = block("moss_carpet", 0);
+    const rootedDirt = block("rooted_dirt", 0), hangingRoots = block("hanging_roots", 0);
+    const sporeBlossom = block("spore_blossom", 0);
+    const clay = block("clay", 0);
+    const caveVine = block("cave_vines", 0), caveVinePlant = block("cave_vines_plant", 0);
+    const glowLichen = block("glow_lichen", 0), sculk = block("sculk", 0);
+    const sculkVein = block("sculk_vein", 0), sculkCatalyst = block("sculk_catalyst", 0);
+    const sculkSensor = block("sculk_sensor", 0), sculkShrieker = block("sculk_shrieker", 0);
+    const dripstoneBlock = block("dripstone_block", 0), sulfur = block("sulfur", 0);
+    const pointedUp = ["base", "middle", "tip"].map(thickness => minecraftBlockVariantId("minecraft:pointed_dripstone", { thickness, vertical_direction: "up" }) || block("pointed_dripstone", 0));
+    const pointedDown = ["base", "middle", "tip"].map(thickness => minecraftBlockVariantId("minecraft:pointed_dripstone", { thickness, vertical_direction: "down" }) || block("pointed_dripstone", 0));
+    const sulfurUp = ["base", "middle", "tip"].map(thickness => minecraftBlockVariantId("minecraft:sulfur_spike", { thickness, vertical_direction: "up" }) || block("sulfur_spike", 0));
+    const sulfurDown = ["base", "middle", "tip"].map(thickness => minecraftBlockVariantId("minecraft:sulfur_spike", { thickness, vertical_direction: "down" }) || block("sulfur_spike", 0));
+    const faceDirs = [
+      [1, 0, 0, "east"], [-1, 0, 0, "west"],
+      [0, 1, 0, "up"], [0, -1, 0, "down"],
+      [0, 0, 1, "south"], [0, 0, -1, "north"],
+    ];
+    const faceState = (name, faces, fallback) => minecraftBlockVariantId("minecraft:" + name, {
+      north: faces.north ? "true" : "false", south: faces.south ? "true" : "false",
+      east: faces.east ? "true" : "false", west: faces.west ? "true" : "false",
+      up: faces.up ? "true" : "false", down: faces.down ? "true" : "false",
+      waterlogged: "false",
+    }) || fallback;
+    const growSpike = (x, y, z, anchorY, supportId, direction, variants, length) => {
+      const supportIndex = idx(x, anchorY, z);
+      if (!rockIds.has(data[supportIndex]) && data[supportIndex] !== supportId) return;
+      if (supportId) data[supportIndex] = supportId;
+      for (let step = 0; step < length; step++) {
+        const yy = anchorY + direction * (step + 1);
+        if (yy < 2 || yy >= H - 2) break;
+        const target = idx(x, yy, z);
+        if (data[target] !== B.AIR) break;
+        const thickness = length === 1 ? 2 : step === 0 ? 0 : step === length - 1 ? 2 : 1;
+        const id = variants[thickness];
+        if (!id) break;
+        data[target] = id;
+      }
+    };
+    const idx3 = idx;
+    const hasWaterNear = (x, y, z) => faceDirs.some(([dx, dy, dz]) => {
+      const yy = y + dy;
+      return yy >= 0 && yy < H && data[idx3(x + dx, yy, z + dz)] === block("water", B.WATER);
+    });
+    const vineHead = (berries) => minecraftBlockVariantId("minecraft:cave_vines", { berries: berries ? "true" : "false" }) || caveVine;
+    const vineBody = (berries) => minecraftBlockVariantId("minecraft:cave_vines_plant", { berries: berries ? "true" : "false" }) || caveVinePlant;
+
+    for (let y = 4; y < H - 2; y++) for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) {
+      const i = idx3(x, y, z), kind = caveKinds[i];
+      if (!kind || data[i] !== B.AIR) continue;
+      const floorIndex = idx3(x, y - 1, z), ceilingIndex = idx3(x, y + 1, z);
+      const floor = rockIds.has(data[floorIndex]), ceiling = rockIds.has(data[ceilingIndex]);
+      const wx = ox + x, wz = oz + z;
+      const roll = rand3(seed + 18001 + kind * 31, wx, y, wz);
+
+      if (kind === 1) {
+        if (floor && moss && roll < 0.18) data[floorIndex] = moss;
+        else if (floor && mossCarpet && roll < 0.235) data[i] = mossCarpet;
+        else if (floor && rootedDirt && roll > 0.86 && roll < 0.90) {
+          data[floorIndex] = rootedDirt;
+          if (hangingRoots && y > 5 && data[idx3(x, y - 2, z)] === B.AIR) data[idx3(x, y - 2, z)] = hangingRoots;
+        }
+        if (floor && clay && hasWaterNear(x, y - 1, z) && rand3(seed + 18007, wx, y, wz) < 0.12) data[floorIndex] = clay;
+        if (ceiling && sporeBlossom && rand3(seed + 18011, wx, y, wz) > 0.986) data[i] = sporeBlossom;
+        else if (ceiling && hangingRoots && rand3(seed + 18013, wx, y, wz) < 0.035) {
+          const length = 1 + Math.floor(rand3(seed + 18017, wx, y, wz) * 4);
+          for (let step = 0; step < length && y - step > 2; step++) {
+            const vi = idx3(x, y - step, z);
+            if (data[vi] !== B.AIR) break;
+            data[vi] = hangingRoots;
+          }
+        } else if (ceiling && caveVine && caveVinePlant && rand3(seed + 18019, wx, y, wz) < 0.052) {
+          const length = 2 + Math.floor(rand3(seed + 18023, wx, y, wz) * 5);
+          const berries = rand3(seed + 18029, wx, y, wz) < 0.22;
+          data[i] = vineHead(berries);
+          for (let step = 1; step < length && y - step > 2; step++) {
+            const vi = idx3(x, y - step, z);
+            if (data[vi] !== B.AIR) break;
+            data[vi] = vineBody(berries);
+          }
+        }
+      } else if (kind === 2) {
+        if (floor && dripstoneBlock && roll < 0.045) {
+          const length = 1 + Math.floor(rand3(seed + 18031, wx, y, wz) * 4);
+          growSpike(x, y, z, y - 1, dripstoneBlock, 1, pointedUp, length);
+        } else if (ceiling && dripstoneBlock && roll > 0.955) {
+          const length = 1 + Math.floor(rand3(seed + 18037, wx, y, wz) * 5);
+          growSpike(x, y, z, y + 1, dripstoneBlock, -1, pointedDown, length);
+        }
+      } else if (kind === 3) {
+        if (floor && roll < 0.12) data[floorIndex] = sculkCatalyst && roll > 0.108 ? sculkCatalyst : sculk;
+        if (floor && sculkSensor && roll > 0.994) data[floorIndex] = sculkSensor;
+        if (floor && sculkShrieker && roll > 0.9985) data[floorIndex] = sculkShrieker;
+      } else if (kind === 4) {
+        if (floor && sulfur && roll < 0.13) data[floorIndex] = sulfur;
+        if (floor && sulfur && sulfurUp[0] && roll > 0.92) {
+          const length = 1 + Math.floor(rand3(seed + 18041, wx, y, wz) * 3);
+          growSpike(x, y, z, y - 1, sulfur, 1, sulfurUp, length);
+        } else if (ceiling && sulfur && sulfurDown[0] && roll < 0.08) {
+          const length = 1 + Math.floor(rand3(seed + 18043, wx, y, wz) * 3);
+          growSpike(x, y, z, y + 1, sulfur, -1, sulfurDown, length);
+        }
+      }
+
+      if (data[i] !== B.AIR) continue;
+      const faces = Object.create(null);
+      for (const [dx, dy, dz, face] of faceDirs) {
+        const ny = y + dy;
+        if (ny < 1 || ny >= H || !rockIds.has(data[idx3(x + dx, ny, z + dz)])) continue;
+        if (rand3(seed + 18047 + face.length * 17, wx + dx * 3, y + dy * 5, wz + dz * 7) < 0.38) faces[face] = true;
+      }
+      if (kind === 3 && sculkVein && Object.keys(faces).length && rand3(seed + 18053, wx, y, wz) < 0.48) {
+        data[i] = faceState("sculk_vein", faces, sculkVein);
+      } else if (glowLichen && Object.keys(faces).length && rand3(seed + 18059, wx, y, wz) < 0.24) {
+        data[i] = faceState("glow_lichen", faces, glowLichen);
+      }
+    }
+  }
+
+  function generateChunkV4(seed, cx, cz, version = 4) {
     const data = new Uint16Array(V);
     const caveKinds = new Uint8Array(V);
     const ox = cx * S, oz = cz * S;
@@ -505,10 +706,14 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
       }
     }
 
+    // Geodes are a dedicated underground feature step and run only for new v5 chunks.
+    if (version >= 5) decorateAmethystGeodesV5(data, ox, oz, seed, rockIds);
+
     // Generate ores after carving, so cave walls expose ore clusters.
     generateOreVeinsV4(data, ox, oz, seed, cx, cz, surfaceHeights, caveV4);
 
-    // Biome-specific cave floor/ceiling details.
+    // Detailed cave-biome vegetation, wall attachments, and supported formations.
+    if (version >= 5) decorateCaveBiomeBlocksV5(data, caveKinds, ox, oz, seed, rockIds);
     decorateCavesV4(data, caveKinds, ox, oz, seed, rockIds);
 
     for (let z = oz - 2; z < oz + S + 2; z++) for (let x = ox - 2; x < ox + S + 2; x++) {
@@ -809,7 +1014,7 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
     const v = normalizeWorldgenVersion(version);
     if (v === 1 || v === 2) return generateChunkLegacy(seed, cx, cz, v);
     if (v === 3) return generateChunkV3(seed, cx, cz, 3);
-    return generateChunkV4(seed, cx, cz);
+    return generateChunkV4(seed, cx, cz, v);
   }
   return { rand2, heightAt, biomeAt, treeAt, caveBiomeAt: caveBiomeAtV4, caveAt: caveV4, generateChunk, biomeIds: MINECRAFT_BIOME_IDS };
 }

@@ -1,8 +1,8 @@
-import test from "node:test"; import assert from "node:assert/strict"; import {createHash} from "node:crypto"; import {createWorldgen, createDimensionWorldgen, strongholdPortalRoomPlacements} from "../src/client/worldgen-core.js";
+import test from "node:test"; import assert from "node:assert/strict"; import {createHash} from "node:crypto"; import {readFileSync} from "node:fs"; import {createWorldgen, createDimensionWorldgen, strongholdPortalRoomPlacements, normalizeWorldgenVersion, WORLDGEN_VERSION} from "../src/client/worldgen-core.js";
 import {minecraftBlockVariantId, MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID, MINECRAFT_BLOCK_TO_RUNTIME_ID} from "../shared/minecraft-block-runtime.js";
 import {DIMENSION_IDS, END_CENTER_SURFACE_Y, END_CONTINENT_RADIUS, mapDimensionCoordinates} from "../shared/dimensions.js"; import {MINECRAFT_BIOME_IDS,MINECRAFT_STRUCTURE_IDS,MINECRAFT_WORLDGEN_REGISTRY_COUNTS} from "../shared/minecraft-worldgen-catalog.js";
 const B={AIR:0,GRASS:1,DIRT:2,STONE:3,SAND:4,LOG:5,LEAVES:6,PLANKS:7,GLASS:8,COBBLE:9,BRICK:10,SNOW:11,WATER:12,LAMP:13,BEDROCK:14,GRAVEL:15,ORE:16,RED:17,BLUE:18,YELLOW:19,WHITE:20,OAK_PLANKS:21,SPRUCE_PLANKS:22,BIRCH_PLANKS:23,OAK_SLAB:24,STONE_SLAB:25,COBBLE_SLAB:26,BRICK_SLAB:27,SANDSTONE:28,COAL_ORE:29,IRON_ORE:30,GOLD_ORE:31,OAK_STAIRS:32,STONE_STAIRS:36,COBBLE_STAIRS:40,BRICK_STAIRS:44,SANDSTONE_STAIRS:48,SPRUCE_STAIRS:52,BIRCH_STAIRS:56,END_STONE:64};
-const S=16,H=64,gen=createWorldgen({blocks:B,chunkSize:S,chunkVolume:S*S*H,seaLevel:22,worldHeight:H}),genV4=createWorldgen({blocks:B,blockIds:MINECRAFT_BLOCK_TO_RUNTIME_ID,chunkSize:S,chunkVolume:S*S*H,seaLevel:22,worldHeight:H}),idx=(x,y,z)=>(y*S+z)*S+x,sha=a=>createHash('sha256').update(Uint8Array.from(a)).digest('hex');
+const S=16,H=64,gen=createWorldgen({blocks:B,chunkSize:S,chunkVolume:S*S*H,seaLevel:22,worldHeight:H}),genV4=createWorldgen({blocks:B,blockIds:MINECRAFT_BLOCK_TO_RUNTIME_ID,chunkSize:S,chunkVolume:S*S*H,seaLevel:22,worldHeight:H}),genV5=createWorldgen({blocks:B,blockIds:MINECRAFT_BLOCK_TO_RUNTIME_ID,chunkSize:S,chunkVolume:S*S*H,seaLevel:22,worldHeight:H}),idx=(x,y,z)=>(y*S+z)*S+x,sha=a=>createHash('sha256').update(Uint8Array.from(a)).digest('hex');
 test('legacy v1 chunk is byte-for-byte compatible with the previous generator',()=>assert.equal(sha(gen.generateChunk(123456789,-2,3,1)),'ef13bceb8ac520e1d8d54842ee075d7c4785b70f8845b47097807668c14905ed'));
 test('v2 is seeded, deterministic, bounded, and keeps bedrock',()=>{const a=gen.generateChunk(918273,-2,3,2),b=gen.generateChunk(918273,-2,3,2),c=gen.generateChunk(918274,-2,3,2);assert.equal(sha(a),sha(b));assert.notEqual(sha(a),sha(c));assert.ok(a instanceof Uint16Array);assert.equal(a.length,S*S*H);for(let z=0;z<S;z++)for(let x=0;x<S;x++)assert.equal(a[idx(x,0,z)],B.BEDROCK);for(const q of a)assert.ok(Number.isInteger(q)&&q>=0&&q<=56);});
 test('climate makes all five deterministic biomes',()=>{const seen=new Set();for(let z=-2048;z<=2048;z+=128)for(let x=-2048;x<=2048;x+=128)seen.add(gen.biomeAt(404,x,z,2));assert.deepEqual([...seen].sort(),['desert','forest','plains','snowy','taiga']);assert.equal(gen.biomeAt(404,123,-456,1),'legacy');});
@@ -112,4 +112,36 @@ test("End main continent has a constant surface Y and the End arrival coordinate
   assert.equal(mapped.x,0);
   assert.equal(mapped.z,0);
   assert.equal(mapped.y,END_CENTER_SURFACE_Y+1);
+});
+
+
+test("v5 adds Java 26.3 cave formations, geodes, and attached cave blocks deterministically", () => {
+  assert.equal(WORLDGEN_VERSION, 5);
+  assert.equal(normalizeWorldgenVersion(4), 4, "saved v4 worlds must retain their generator");
+  assert.equal(normalizeWorldgenVersion(5), 5);
+  const seed = 20261123;
+  const names = ["smooth_basalt", "calcite", "amethyst_block", "budding_amethyst", "amethyst_cluster", "glow_lichen", "pointed_dripstone", "sculk_vein", "hanging_roots", "rooted_dirt", "sulfur_spike"];
+  const ids = Object.fromEntries(names.map(name => [name, MINECRAFT_BLOCK_TO_RUNTIME_ID["minecraft:" + name] ?? 0]));
+  const counts = Object.fromEntries(names.map(name => [name, 0]));
+  for (let cz = -3; cz <= 3; cz++) for (let cx = -3; cx <= 3; cx++) {
+    const chunk = genV5.generateChunk(seed, cx, cz, 5);
+    for (const name of names) {
+      const id = ids[name];
+      if (!id) continue;
+      for (const value of chunk) if (value === id) counts[name]++;
+    }
+  }
+  assert.ok(counts.smooth_basalt > 0, "geode outer shell must use smooth basalt");
+  assert.ok(counts.calcite > 0, "geode middle shell must use calcite");
+  assert.ok(counts.amethyst_block + counts.budding_amethyst > 0, "geode inner shell must use amethyst");
+  assert.ok(counts.glow_lichen + counts.pointed_dripstone + counts.sculk_vein + counts.hanging_roots > 0, "cave wall and biome features should be generated");
+  const a = genV5.generateChunk(seed, -2, 1, 5);
+  const b = genV5.generateChunk(seed, -2, 1, 5);
+  assert.equal(sha(a), sha(b), "v5 generation must be deterministic");
+});
+
+test("v5 keeps v4 saved-room generation selectable after the default version changes", () => {
+  const room = readFileSync(new URL("../src/worker/room.ts", import.meta.url), "utf8");
+  assert.ok(room.includes("normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION)"));
+  assert.ok(!room.includes("this.meta?.worldgenVersion===WORLDGEN_VERSION?WORLDGEN_VERSION:LEGACY_WORLDGEN_VERSION"));
 });

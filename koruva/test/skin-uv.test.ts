@@ -75,12 +75,10 @@ try {
   const pngLikeFile = new Blob([signature]) as File;
   const normalized = await readMinecraftSkin(pngLikeFile);
   assert.equal(normalized, "data:image/png;base64,AA==");
-  assert.ok(written, "normalized pixel data must be written to the canvas");
+  assert.ok(written, "processed pixel data must be written to the canvas");
   const data = (written as ImageData).data;
   assert.equal(data[(3 * 64 + 3) * 4 + 3], 70, "base-layer partial alpha must be preserved for black compositing");
   assert.equal(data[(40 * 64 + 40) * 4 + 3], 70, "outer-layer partial alpha must be preserved for blending");
-  assert.deepEqual(Array.from(data.slice(3, 4)), [255], "partial alpha does not cause upload rejection");
-  assert.deepEqual(Array.from(data.slice(3, 3)), []);
   assert.deepEqual(Array.from(data.slice(0, 4)), [0, 0, 0, 255], "transparent base pixels remain opaque black");
 } finally {
   if (originalDocument === undefined) delete (globalThis as any).document;

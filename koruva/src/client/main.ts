@@ -915,6 +915,8 @@ class Game {
     bindHold(secondary, () => this.beginSecondaryAction(), () => this.endSecondaryAction());
     const inventory = makeButton("持ち物", "インベントリを開く", "utility");
     bindTap(inventory, () => this.openInventory());
+    const chat = makeButton("チャット", "ゲーム内チャットを開く", "chat");
+    bindTap(chat, () => this.openChat());
     const pause = makeButton("一時停止", "一時停止メニューを開く", "utility");
     bindTap(pause, () => this.openPause("一時停止"));
 
@@ -1875,7 +1877,9 @@ class Game {
     const ci = $<HTMLInputElement>("chatinput");
     ci.hidden = false; ci.value = "";
     this.chat.setOpen(true);
-    setTimeout(() => ci.focus(), 0);
+    // Call focus synchronously from the chat button's pointerup gesture so iOS/Android
+    // can open the software keyboard without losing the browser's user activation.
+    ci.focus();
   }
   closeChat(relock: boolean) {
     const ci = $<HTMLInputElement>("chatinput");

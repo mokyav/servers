@@ -463,7 +463,7 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
     const maxCellZ = Math.floor((oz + S + radius - cellSize / 2) / cellSize);
     const crystalFacing = Object.fromEntries(["north", "south", "east", "west", "up", "down"].map(facing => [
       facing,
-      minecraftBlockVariantId("minecraft:amethyst_cluster", { facing, waterlogged: "false" }) || cluster,
+      minecraftBlockVariantId("minecraft:amethyst_cluster", { facing }) || cluster,
     ]));
     const dirs = [
       [0, 0, -1, "north"], [0, 0, 1, "south"],
@@ -550,7 +550,6 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
       north: faces.north ? "true" : "false", south: faces.south ? "true" : "false",
       east: faces.east ? "true" : "false", west: faces.west ? "true" : "false",
       up: faces.up ? "true" : "false", down: faces.down ? "true" : "false",
-      waterlogged: "false",
     }) || fallback;
     const growSpike = (x, y, z, anchorY, supportId, direction, variants, length) => {
       const supportIndex = idx(x, anchorY, z);

@@ -125,10 +125,9 @@ test("v5 adds Java 26.3 cave formations, geodes, and attached cave blocks determ
   const counts = Object.fromEntries(names.map(name => [name, 0]));
   for (let cz = -3; cz <= 3; cz++) for (let cx = -3; cx <= 3; cx++) {
     const chunk = genV5.generateChunk(seed, cx, cz, 5);
-    for (const name of names) {
-      const id = ids[name];
-      if (!id) continue;
-      for (const value of chunk) if (value === id) counts[name]++;
+    for (const value of chunk) {
+      const token = MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID[value]?.token;
+      if (token && Object.prototype.hasOwnProperty.call(counts, token)) counts[token]++;
     }
   }
   assert.ok(counts.smooth_basalt > 0, "geode outer shell must use smooth basalt");

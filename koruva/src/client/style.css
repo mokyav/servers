@@ -282,7 +282,7 @@ label .hint { font-size: 11px; color: var(--muted); }
   #inventory-mobile-toolbar { position: sticky; top: 0; z-index: 3; width: 100%; padding: 2px 0 6px; background: rgba(12,17,26,.94); }
   #inventory-layout { flex-direction: column; align-items: center; gap: 8px; width: 100%; }
   #inv-status { width: min(352px,92vw); max-height: 22vh; }
-  #mc-inventory-window { transform: scale(min(.88, calc((100vw - 16px) / 352))); transform-origin: top center; margin: 0 0 -38px; }
+  #mc-inventory-window { transform: scale(.88); transform-origin: top center; margin: 0 0 -38px; }
   #survival-inventory { max-width: 100%; }
   #creative-inventory { width: 100%; max-height: min(64vh, 680px); }
   #invgrid { max-height: min(36vh, 380px); }
@@ -507,6 +507,7 @@ canvas#gl { touch-action: none; }
   #inventory-close { min-height: 48px; }
   #inventory .mc-slot, #inventory #invgrid .slot, #inventory #invhotbar .slot { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 }
+@media (max-width: 380px) and (pointer: coarse) { #mc-inventory-window { transform: scale(.78); margin-bottom: -72px; } }
 @media (orientation: landscape) and (max-height: 540px) and (pointer: coarse) {
   .inventory-overlay { justify-content: flex-start; padding-top: max(4px, env(safe-area-inset-top, 0px)); }
   #inventory-mobile-toolbar { min-height: 42px; }

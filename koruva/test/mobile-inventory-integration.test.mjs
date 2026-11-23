@@ -21,3 +21,10 @@ test("mobile inventory has an explicit touch-safe close path and pointerup activ
   assert.ok(main.includes('event.target === overlay'), "tapping the overlay backdrop must close the inventory");
   assert.ok(css.includes("@media (orientation: landscape) and (max-height: 540px) and (pointer: coarse)"), "short landscape screens need a dedicated layout");
 });
+
+
+test("mobile inventory remains within narrow portrait viewports without invalid scale math", () => {
+  assert.ok(css.includes("#mc-inventory-window { transform: scale(.88);"), "mobile inventory must use a valid numeric scale");
+  assert.ok(css.includes("@media (max-width: 380px) and (pointer: coarse)"), "narrow phones need a smaller inventory layout");
+  assert.ok(!css.includes("calc((100vw - 16px) / 352)"), "scale() must not receive a length-valued calc expression");
+});

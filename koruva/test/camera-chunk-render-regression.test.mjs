@@ -45,6 +45,9 @@ test("cutout block models render both sides without entering the blended transpa
 
 test("V cycles through first person, rear third person, and front third person", () => {
   const main = read("../src/client/main.ts");
+  assert.match(main, /KeyQ/);
+  assert.match(main, /dropSelectedItem\(e\.ctrlKey\)/);
+  assert.match(main, /drop-item-result/);
   assert.match(main, /thirdPersonFront = false/);
   assert.match(main, /三人称視点（前）/);
   assert.match(main, /this\.yaw \+ \(this\.thirdPersonFront \? Math\.PI : 0\)/);

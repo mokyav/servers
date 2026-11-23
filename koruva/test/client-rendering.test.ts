@@ -387,14 +387,21 @@ test("binary-alpha full-cube models keep cutout faces and neighbour faces on all
   assert.ok(mesh.cutout, "alpha-textured spawner faces must use the cutout layer");
   assert.ok(mesh.solid, "neighbouring stone faces must remain in the opaque layer");
 
-  const directions = [
+  const directions: Array<{
+    name: string;
+    modelNormal: [number, number, number];
+    modelAxis: number;
+    modelPlane: number;
+    stoneNormal: [number, number, number];
+    stonePlane: number;
+  }> = [
     { name: "+X", modelNormal: [1,0,0], modelAxis: 0, modelPlane: 5, stoneNormal: [-1,0,0], stonePlane: 5 },
     { name: "-X", modelNormal: [-1,0,0], modelAxis: 0, modelPlane: 4, stoneNormal: [1,0,0], stonePlane: 4 },
     { name: "+Y", modelNormal: [0,1,0], modelAxis: 1, modelPlane: 5, stoneNormal: [0,-1,0], stonePlane: 5 },
     { name: "-Y", modelNormal: [0,-1,0], modelAxis: 1, modelPlane: 4, stoneNormal: [0,1,0], stonePlane: 4 },
     { name: "+Z", modelNormal: [0,0,1], modelAxis: 2, modelPlane: 5, stoneNormal: [0,0,-1], stonePlane: 5 },
     { name: "-Z", modelNormal: [0,0,-1], modelAxis: 2, modelPlane: 4, stoneNormal: [0,0,1], stonePlane: 4 },
-  ] as const;
+  ];
   for (const direction of directions) {
     assert.ok(
       meshHasFaceNormal(mesh.cutout, direction.modelNormal, direction.modelAxis, direction.modelPlane),

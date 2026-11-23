@@ -2126,7 +2126,7 @@ export class Room extends DurableObject<Env> {
       if ([...this.mobs.values()].some(mob => mobDimensionId(mob) === dimensionId && (mob.x - spot.x) ** 2 + (mob.z - spot.z) ** 2 < 64)) continue;
       const requestedGroupSize = naturalMobSpawnGroupSize(type);
       if (requestedGroupSize === null) continue;
-      const profile = MOB_PROFILES[type];
+      const profile = MOB_PROFILES[type as MobType];
       if (!profile) continue;
       const spawnHeadroom = Math.min(8, Math.max(1, Math.ceil(profile.height)));
       const positions = findNaturalSpawnGroup({

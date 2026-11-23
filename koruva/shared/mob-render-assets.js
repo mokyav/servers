@@ -45,8 +45,11 @@ export const SKELETON_RIG_TYPES = Object.freeze([
 ]);
 
 export const HUMANOID_RIG_TYPES = Object.freeze([
-  "zombie", "husk", "drowned", "zombie_villager", "evoker", "pillager", "vindicator", "illusioner", "piglin", "piglin_brute", "zombified_piglin",
+  "zombie", "husk", "drowned", "zombie_villager", "evoker", "pillager", "vindicator", "illusioner",
 ]);
+
+// Java 26.3 PiglinModel / ZombifiedPiglinModel use their own 64x64 head, snout and ear UV layout.
+export const PIGLIN_RIG_TYPES = Object.freeze(["piglin", "piglin_brute", "zombified_piglin"]);
 
 // Java 26.3 uses VillagerModel for both villagers and wandering traders.
 export const VILLAGER_RIG_TYPES = Object.freeze(["villager", "wandering_trader"]);
@@ -60,6 +63,7 @@ export const MOB_MODEL_BASE_HEIGHTS = Object.freeze({
   zombie: 2,
   skeleton: 2,
   villager: 2,
+  piglin: 2,
 });
 
 /** Vanilla cuboid UV net in +X, -X, +Y, -Y, +Z, -Z face order. */

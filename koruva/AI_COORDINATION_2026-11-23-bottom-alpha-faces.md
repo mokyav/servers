@@ -4,7 +4,7 @@ Date: 2026-11-23
 Project: Koruva / Minecraft Java 26.3
 Base branch: `main`
 Base commit: `800a2b0aa1dbb311a214d12e27efc65d21e60353`
-Base package version: `1.3.0`
+Base package version: `1.5.0`
 
 ## Scope
 
@@ -33,4 +33,4 @@ Source-level regression coverage was added. A local project checkout, dependency
 
 ## Versioning
 
-The repository workflow increments the Koruva minor version on a source push to `main`. The expected automatic change is `1.3.0` to `1.4.0`. Do not manually bump the manifests as well, or the automatic workflow may increment twice.
+The repository workflow increments the Koruva minor version on a source push to `main`. The automatic change for this fix completed from `1.5.0` to `1.6.0`. Other parallel AI commits had already advanced the project to `1.5.0` before this change. Do not manually bump the manifests as well, or the automatic workflow may increment twice.

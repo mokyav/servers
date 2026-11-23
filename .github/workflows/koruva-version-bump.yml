@@ -11,6 +11,8 @@ on:
       - "!koruva/package-lock.json"
       # Test-only updates do not change the game release version.
       - "!koruva/test/**"
+      # AI coordination notes are documentation, not game releases.
+      - "!koruva/AI_COORDINATION_*.md"
 
 permissions:
   contents: write

@@ -137,6 +137,9 @@ class Game {
   state: State = "title";
   mode: "solo" | "room" = "solo";
   roomCode = "";
+  private roomSessionToken = 0;
+  private roomHasConnected = false;
+  private roomReconnectTask: Promise<void> | null = null;
   private furnaceView: FurnaceView | null = null;
   myId = "";
   net = new Net();
@@ -1900,6 +1903,9 @@ class Game {
   }
 
   backToTitle(err = "") {
+    this.roomSessionToken++;
+    this.roomHasConnected = false;
+    this.roomReconnectTask = null;
     this.net.close();
     this.ready = false;
     this.state = "title";
@@ -1955,7 +1961,48 @@ class Game {
     this.beginLoading("ワールドを生成中…");
   }
 
-  async startRoom(code: string) {
+  private scheduleRoomReconnect(code: string, sessionToken: number, reason: string) {
+    if (this.roomReconnectTask || sessionToken !== this.roomSessionToken) return;
+    this.autosave(true);
+    this.ready = false;
+    this.resetMobileInputState();
+    this.keys.clear(); this.physicalKeys.clear(); this.mouseL = this.mouseR = false;
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.showLoading("サーバーとの接続が切れました。再接続します…");
+
+    const task = (async () => {
+      let attempt = 0;
+      while (sessionToken === this.roomSessionToken && this.mode === "room" && this.roomCode === code && this.state !== "title") {
+        const delayMs = Math.min(15_000, 1_000 * (2 ** Math.min(attempt, 4)));
+        this.showLoading(`接続が切れました。再接続を試みています… (${attempt + 1}回目 / ${Math.ceil(delayMs / 1000)}秒後)`);
+        await new Promise<void>((resolve) => window.setTimeout(resolve, delayMs));
+        if (sessionToken !== this.roomSessionToken || this.mode !== "room" || this.roomCode !== code || this.state === "title") return;
+        try {
+          console.warn("[Koruva WS] reconnect attempt", { room: code, attempt: attempt + 1, reason });
+          await this.startRoom(code, true);
+          return;
+        } catch (error) {
+          attempt++;
+          console.warn("[Koruva WS] reconnect attempt failed", {
+            room: code, attempt, message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    })();
+    this.roomReconnectTask = task;
+    void task.finally(() => {
+      if (this.roomReconnectTask === task) this.roomReconnectTask = null;
+    });
+  }
+
+  async startRoom(code: string, reconnecting = false) {
+    if (!reconnecting) {
+      this.roomSessionToken++;
+      this.roomHasConnected = false;
+      this.roomReconnectTask = null;
+      this.net.close();
+    }
+    const roomSessionToken = this.roomSessionToken;
     this.mode = "room";
     this.roomCode = code;
     this.chat.setScope(code);
@@ -1969,12 +2016,41 @@ class Game {
     let gotInit = false;
     let roomEntryPosition: [number, number, number] | null = null;
     let roomEntryRotation: [number, number] | null = null;
+    let rejectSyncWait: ((error: Error) => void) | null = null;
+    let cancelSyncWatchdog = () => {};
     const done = new Promise<{
       position: [number, number, number] | null;
       rotation: [number, number] | null;
     }>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("ルームの読み込みがタイムアウトしました")), 20000);
+      let settled = false;
+      let timer = 0;
+      const clearWatchdog = () => { if (timer) window.clearTimeout(timer); timer = 0; };
+      const rejectOnce = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        clearWatchdog();
+        reject(error);
+      };
+      const resolveOnce = () => {
+        if (settled) return;
+        settled = true;
+        clearWatchdog();
+        cancelSyncWatchdog = () => {};
+        resolve({ position: roomEntryPosition, rotation: roomEntryRotation });
+      };
+      rejectSyncWait = rejectOnce;
+      const refreshSyncWatchdog = () => {
+        clearWatchdog();
+        timer = window.setTimeout(() => {
+          const error = new Error("ルームからの同期応答が60秒間ありませんでした");
+          this.net.close();
+          rejectOnce(error);
+        }, 60_000);
+        cancelSyncWatchdog = clearWatchdog;
+      };
+      refreshSyncWatchdog();
       this.net.onMessage = (m) => {
+        if (!settled) refreshSyncWatchdog();
         if (m.t === "init") {
           gotInit = true;
           this.myId = m.id;
@@ -2005,24 +2081,37 @@ class Game {
           this.projectileEntities.clear(); for (const projectile of m.projectiles ?? []) this.projectileEntities.add(projectile);
         } else if (m.t === "edits" && gotInit) {
           this.world.importEdits(m.list);
-          if (m.done) {
-            clearTimeout(timer);
-            resolve({ position: roomEntryPosition, rotation: roomEntryRotation });
-          }
-        } else if (m.t === "error") { this.kickMsg = m.message; clearTimeout(timer); reject(new Error(m.message)); }
-        else if (m.t === "kicked") { this.kickMsg = m.reason; clearTimeout(timer); reject(new Error(m.reason)); }
+          if (m.done) resolveOnce();
+        } else if (m.t === "error") { this.kickMsg = m.message; rejectOnce(new Error(m.message)); }
+        else if (m.t === "kicked") { this.kickMsg = m.reason; rejectOnce(new Error(m.reason)); }
         else this.onServerMsg(m);
       };
     });
-    this.net.onClose = (reason) => {
-      if (this.state !== "title") { this.backToTitle(this.kickMsg || reason); }
+    this.net.onClose = (reason, info) => {
+      cancelSyncWatchdog();
+      rejectSyncWait?.(new Error(reason));
+      if (roomSessionToken !== this.roomSessionToken || this.state === "title" || this.mode !== "room") return;
+      if (this.kickMsg || (info?.code !== undefined && info.code >= 4000 && info.code < 5000 && info.code !== 4005)) {
+        this.backToTitle(this.kickMsg || reason);
+        return;
+      }
+      if (this.roomHasConnected && !this.roomReconnectTask) {
+        this.scheduleRoomReconnect(code, roomSessionToken, reason);
+      }
     };
-    await this.net.connect(code, {
+    try {
+      await this.net.connect(code, {
       t: "hello", name: this.profile.name, skin: this.profile.skin,
       p: saved?.pos, r: saved ? [saved.yaw, saved.pitch] : undefined,
       cid: clientId(), dimensionId: saved?.dimensionId, hostToken: loadHostToken(code) || undefined, counts: saved?.counts, armorSlots: saved?.armorSlots, stackData: saved?.stackData,
-    });
+      });
+    } catch (error) {
+      cancelSyncWatchdog();
+      rejectSyncWait?.(error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
     const roomEntry = await done;
+    this.roomHasConnected = true;
     const serverCounts = [...this.counts];
     const serverArmorSlots = [...this.armorSlots];
     if (saved) this.applyPlayerSave(saved, true); else {
@@ -3248,7 +3337,7 @@ class Game {
   }
 
   sendPos(now: number) {
-    if (!this.net.connected || now - this.lastSend < 80) return;
+    if (!this.net.connected || now - this.lastSend < 100) return;
     const b = this.body, l = this.lastSent;
     const moved = Math.abs(b.x - l.x) + Math.abs(b.y - l.y) + Math.abs(b.z - l.z) > 0.01 || Math.abs(this.yaw - l.yaw) > 0.01 || Math.abs(this.pitch - l.pitch) > 0.01 || this.sneaking !== this.lastSentSneak || this.fallFlying !== this.lastSentFallFlying;
     if (!moved && now - this.lastSend < 1000) return;

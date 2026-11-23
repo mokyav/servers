@@ -1436,20 +1436,35 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  async webSocketClose(ws: WebSocket): Promise<void> {
-    if (!this.left.has(ws)) {
-      const me = this.player(ws);
-      if (me.joined) await this.persistPlayerLocation(me);
-    }
+  async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean): Promise<void> {
+    const me = this.player(ws);
+    console.info("[Koruva DO] websocket closed", {
+      room: this.meta?.code ?? "unknown",
+      playerId: me.joined ? me.id : undefined,
+      joined: me.joined,
+      code,
+      reason: String(reason ?? "").slice(0, 120),
+      wasClean,
+      sockets: this.ctx.getWebSockets().length,
+    });
+    if (!this.left.has(ws) && me.joined) await this.persistPlayerLocation(me);
     this.leave(ws);
-    try { ws.close(1000, "bye"); } catch { /* already closed */ }
+    // Complete a peer-initiated close with the same valid code/reason. 1006/1015 are never sent.
+    try {
+      if (code >= 1000 && code < 5000 && ![1004, 1005, 1006, 1015].includes(code)) ws.close(code, reason);
+      else ws.close();
+    } catch { /* already closed */ }
   }
 
-  async webSocketError(ws: WebSocket): Promise<void> {
-    if (!this.left.has(ws)) {
-      const me = this.player(ws);
-      if (me.joined) await this.persistPlayerLocation(me);
-    }
+  async webSocketError(ws: WebSocket, error?: unknown): Promise<void> {
+    const me = this.player(ws);
+    console.warn("[Koruva DO] websocket error", {
+      room: this.meta?.code ?? "unknown",
+      playerId: me.joined ? me.id : undefined,
+      joined: me.joined,
+      error: error instanceof Error ? error.message : String(error ?? "unknown"),
+    });
+    if (!this.left.has(ws) && me.joined) await this.persistPlayerLocation(me);
     this.leave(ws);
   }
 
@@ -1546,11 +1561,14 @@ export class Room extends DurableObject<Env> {
   private async armGameClock() {
     const storage = this.ctx.storage as any;
     if (!storage || typeof storage.setAlarm !== "function") return;
-    try { await storage.setAlarm(Date.now() + 50); } catch { /* unsupported in test stubs */ }
+    // Logical game time still advances in 50ms ticks; alarm callbacks process elapsed ticks in batches.
+    // A 100ms alarm cadence halves DO wakeups without skipping redstone, vitals, or mob ticks.
+    try { await storage.setAlarm(Date.now() + 100); } catch { /* unsupported in test stubs */ }
   }
 
   async alarm() {
-    const now = Date.now();
+    const alarmStartedAt = Date.now();
+    const now = alarmStartedAt;
     const ticks = Math.max(1, Math.min(1200, Math.floor(Math.max(50, now - this.lastTickAt) / 50)));
     this.lastTickAt = now;
     for (let i = 0; i < ticks && this.hasPendingRepeaterTicks(); i++) {
@@ -1578,6 +1596,18 @@ export class Room extends DurableObject<Env> {
       if (this.mobTickAccumulator >= 4) { this.mobTickAccumulator = 0; await this.tickMobs(0.2, now, online); }
     }
     if (online.length || this.hasPendingRepeaterTicks() || this.frostedBlocks.size) await this.armGameClock();
+    const elapsedMs = Date.now() - alarmStartedAt;
+    if (elapsedMs > 100) {
+      console.warn("[Koruva DO] slow room alarm", {
+        room: this.meta?.code ?? "unknown",
+        elapsedMs,
+        players: online.length,
+        mobs: this.mobs.size,
+        projectiles: this.projectiles.size,
+        drops: this.drops.size,
+        cachedMobChunks: this.mobChunkCache.size,
+      });
+    }
   }
 
   private async tickMobs(dt: number, now: number, online: { ws: WebSocket; st: PlayerState }[]) {

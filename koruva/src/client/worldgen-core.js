@@ -1,5 +1,6 @@
 import { MINECRAFT_BIOME_IDS } from "../../shared/minecraft-worldgen-catalog.js";
 import { minecraftBlockVariantId } from "../../shared/minecraft-block-runtime.js";
+import { END_CENTER_SURFACE_Y, END_CONTINENT_RADIUS, END_OUTER_ISLAND_MIN_DISTANCE } from "../../shared/dimensions.js";
 
 const LEGACY_WORLDGEN_VERSION = 1, WORLDGEN_VERSION = 3;
 
@@ -39,7 +40,8 @@ export function strongholdPortalRoomPlacements(cx, cz, floorY, brick, frameForFa
   }
   for (let z = -5; z <= 5; z++) for (let x = -7; x <= 7; x++) set(cx + x, floorY + 5, cz + z, brick);
 
-  // Open a three-wide doorway and a short corridor on the north side.
+  // Open a three-wide doorway. The first corridor section is covered; the final
+  // section continues to open air so the portal room cannot remain sealed underground.
   for (let y = 1; y <= 3; y++) {
     for (let x = -1; x <= 1; x++) set(cx + x, floorY + y, cz - 5, 0);
     for (let z = -12; z <= -6; z++) {
@@ -47,6 +49,7 @@ export function strongholdPortalRoomPlacements(cx, cz, floorY, brick, frameForFa
       set(cx + 2, floorY + y, cz + z, brick);
       for (let x = -1; x <= 1; x++) set(cx + x, floorY + y, cz + z, 0);
     }
+    for (let z = -13; z >= -24; z--) for (let x = -1; x <= 1; x++) set(cx + x, floorY + y, cz + z, 0);
   }
   for (let z = -12; z <= -6; z++) {
     for (let x = -2; x <= 2; x++) {
@@ -54,6 +57,7 @@ export function strongholdPortalRoomPlacements(cx, cz, floorY, brick, frameForFa
       set(cx + x, floorY + 4, cz + z, brick);
     }
   }
+  for (let z = -13; z >= -24; z--) for (let x = -1; x <= 1; x++) set(cx + x, floorY, cz + z, brick);
 
   for (const frame of strongholdPortalFramePlacements(cx, cz, floorY + 1, frameForFacing)) edits.push(frame);
   return edits;
@@ -335,7 +339,21 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
       for(let x=-7;x<=7;x++) set(cx+x,baseY,cz,rail);
     } else if (kind === "stronghold") {
       const strongholdBrick = block("stone_bricks", B.BRICK);
-      const y0 = baseY - 16;
+      // The portal floor is placed at the local surface height, never 16 blocks below it.
+      const y0 = baseY;
+      // Flatten/support the room footprint and the three-wide approach path. This
+      // removes overburden above the roof and connects the corridor to open terrain.
+      for (let z = -5; z <= 5; z++) for (let x = -7; x <= 7; x++) {
+        const terrainY = heightAt(seed, cx + x, cz + z);
+        if (terrainY < y0) for (let y = terrainY + 1; y < y0; y++) set(cx + x, y, cz + z, strongholdBrick);
+        else if (terrainY > y0 + 5) for (let y = y0 + 6; y <= terrainY + 1; y++) set(cx + x, y, cz + z, B.AIR);
+      }
+      for (let z = -6; z >= -24; z--) for (let x = -1; x <= 1; x++) {
+        const terrainY = heightAt(seed, cx + x, cz + z);
+        if (terrainY < y0) for (let y = terrainY + 1; y <= y0; y++) set(cx + x, y, cz + z, strongholdBrick);
+        else if (terrainY > y0) for (let y = y0 + 1; y <= terrainY + 1; y++) set(cx + x, y, cz + z, B.AIR);
+        for (let y = y0 + 1; y <= y0 + 3; y++) set(cx + x, y, cz + z, B.AIR);
+      }
       const frameForFacing = (facing) =>
         minecraftBlockVariantId("minecraft:end_portal_frame", { eye: "false", facing })
         ?? block("end_portal_frame", strongholdBrick);
@@ -401,7 +419,8 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
       let minH = h, maxH = h;
       for (const [dx, dz] of [[-5,0],[5,0],[0,-5],[0,5],[-3,-3],[3,3]]) { const y = heightAt(seed, cx + dx, cz + dz); minH = Math.min(minH, y); maxH = Math.max(maxH, y); }
       if (maxH - minH > 4) continue;
-      if (cx + 20 < ox || cx - 20 >= ox + S || cz + 20 < oz || cz - 20 >= oz + S) continue;
+      // Stronghold portal entrance extends 24 blocks from its deterministic center.
+      if (cx + 24 < ox || cx - 24 >= ox + S || cz + 24 < oz || cz - 24 >= oz + S) continue;
       buildStructure(d, ox, oz, seed, cx, cz, kind, h);
     }
   }
@@ -501,12 +520,12 @@ export function createDimensionWorldgen({ blocks: B, blockIds = {}, chunkSize: S
     if (ridge > .24) return "basalt_deltas"; if (moisture < .35) return "soul_sand_valley"; if (heat > .58) return "crimson_forest"; if (heat < .43) return "warped_forest"; return "nether_wastes";
   }
   function islandColumn(seed, x, z) {
-    const radial = Math.hypot(x, z), warp = (fbm(seed + 2201, x / 28, z / 28, 3) - .5) * 9, d = radial + warp, radius = 39;
-    if (d < radius) return { d, radius, center: 30 + Math.floor((fbm(seed + 2203, x / 35, z / 35, 3) - .5) * 8) };
+    const radial = Math.hypot(x, z), warp = (fbm(seed + 2201, x / 28, z / 28, 3) - .5) * 9, d = radial + warp, radius = END_CONTINENT_RADIUS;
+    if (d < radius) return { d, radius, center: END_CENTER_SURFACE_Y, main: true };
     const cell = 128, gx = Math.floor(x / cell), gz = Math.floor(z / cell);
     for (let cz = gz - 1; cz <= gz + 1; cz++) for (let cx = gx - 1; cx <= gx + 1; cx++) {
       const px = cx * cell + (rand2(seed + 2309, cx, cz) - .5) * 70, pz = cz * cell + (rand2(seed + 2311, cx, cz) - .5) * 70;
-      if (Math.hypot(px, pz) < 92) continue;
+      if (Math.hypot(px, pz) < END_OUTER_ISLAND_MIN_DISTANCE) continue;
       const r = 9 + rand2(seed + 2317, cx, cz) * 14, dd = Math.hypot(x - px, z - pz) + (fbm(seed + 2323, x / 15, z / 15, 2) - .5) * 4;
       if (dd < r) return { d: dd, radius: r, center: 29 + Math.floor((rand2(seed + 2333, cx, cz) - .5) * 10), outer: true };
     }
@@ -545,7 +564,7 @@ export function createDimensionWorldgen({ blocks: B, blockIds = {}, chunkSize: S
     for(let gz=minGZ;gz<=maxGZ;gz++) for(let gx=minGX;gx<=maxGX;gx++) {
       if(rand2(seed+43001,gx,gz)>.18) continue;
       const x=gx*region+(rand2(seed+43003,gx,gz)-.5)*70,z=gz*region+(rand2(seed+43007,gx,gz)-.5)*70;
-      if(Math.hypot(x,z)<92) continue;
+      if(Math.hypot(x,z)<END_OUTER_ISLAND_MIN_DISTANCE) continue;
       const col=islandColumn(seed,x,z); if(!col?.outer) continue;
       const base=clamp(col.center+Math.floor((fbm(seed+2401,x/11,z/11,2)-.5)*3)+col.radius*.65,12,H-15);
       for(let dz=-4;dz<=4;dz++) for(let dx=-4;dx<=4;dx++) set(x+dx,base,z+dz,brick);
@@ -584,11 +603,21 @@ export function createDimensionWorldgen({ blocks: B, blockIds = {}, chunkSize: S
   }
   function generateEnd(seed, cx, cz) {
     const data = new Uint16Array(V), ox = cx * S, oz = cz * S;
+    const endStone = block("end_stone", B.END_STONE);
     for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) {
       const wx = ox + x, wz = oz + z, col = islandColumn(seed, wx, wz); if (!col) continue;
+      if (col.main) {
+        // Broad central continent: one constant walkable surface elevation, with
+        // a thicker center and a tapered underside toward the coast.
+        const taper = clamp(1 - col.d / col.radius, 0, 1);
+        const depth = 7 + Math.floor(taper * 11);
+        const bottom = Math.max(1, END_CENTER_SURFACE_Y - depth);
+        for (let y = bottom; y <= END_CENTER_SURFACE_Y; y++) data[idx(x, y, z)] = endStone;
+        continue;
+      }
       const taper = clamp(1 - col.d / col.radius, 0, 1), thickness = 2 + Math.floor(taper * 15);
       const center = clamp(col.center + Math.floor((fbm(seed + 2401, wx / 11, wz / 11, 2) - .5) * 3), 8, H - 8), lo = Math.max(1, center - thickness), hi = Math.min(H - 1, center + thickness);
-      for (let y = lo; y <= hi; y++) { const edge = Math.abs(y - center) / Math.max(1, thickness), hollow = Math.abs(noise3(seed + 2411, wx / 16, y / 10, wz / 16) - .5) > .39; if (edge < 1 && !hollow) data[idx(x, y, z)] = block("end_stone", B.END_STONE); }
+      for (let y = lo; y <= hi; y++) { const edge = Math.abs(y - center) / Math.max(1, thickness), hollow = Math.abs(noise3(seed + 2411, wx / 16, y / 10, wz / 16) - .5) > .39; if (edge < 1 && !hollow) data[idx(x, y, z)] = endStone; }
     }
     // Ten deterministic obsidian pillars around the central island; End Crystal
     // entities are spawned and persisted by the server when the dragon fight begins.
@@ -596,8 +625,8 @@ export function createDimensionWorldgen({ blocks: B, blockIds = {}, chunkSize: S
     const obsidian=block("obsidian",B.END_STONE),bars=block("iron_bars",B.END_STONE);
     const pillars=[[-36,-20,10],[-36,20,13],[-20,-36,16],[-20,36,9],[0,-42,18],[0,42,12],[20,-36,11],[20,36,17],[36,-20,14],[36,20,10]];
     for(const [px,pz,height] of pillars){
-      for(let y=29;y<=29+height;y++)for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++)set(px+dx,y,pz+dz,obsidian);
-      if(bars){const cageY=30+height;for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++)if(Math.abs(dx)+Math.abs(dz)===2)set(px+dx,cageY,pz+dz,bars);}
+      for(let y=END_CENTER_SURFACE_Y;y<=END_CENTER_SURFACE_Y+height;y++)for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++)set(px+dx,y,pz+dz,obsidian);
+      if(bars){const cageY=END_CENTER_SURFACE_Y+height+1;for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++)if(Math.abs(dx)+Math.abs(dz)===2)set(px+dx,cageY,pz+dz,bars);}
     }
     addEndStructures(data, seed, ox, oz);
     return data;

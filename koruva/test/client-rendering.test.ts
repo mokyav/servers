@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { inventoryPanelVisibility, shouldCloseInventoryFromKey } from "../src/client/inventory-ui";
 import { hotbarSlotCount } from "../src/client/ui";
 import { World } from "../src/client/world";
-import { B, BLOCKS, MINECRAFT_BLOCK_TO_ID } from "../shared/blocks";
+import { B, BLOCKS, MINECRAFT_BLOCK_TO_ID, blockHasPartialModelShape } from "../shared/blocks";
+import { resolveBlockTextureResource } from "../shared/legacy-texture-aliases.js";
 import { itemDropTexturePath } from "../shared/drop-item-texture.js";
 import { CHUNK_SIZE, CHUNK_VOLUME, WORLD_HEIGHT } from "../shared/constants";
 import { buildChunkMesh } from "../src/client/mesher";
@@ -157,7 +158,7 @@ test("creative inventory search can type the letter E without closing the invent
 });
 
 
-function meshHasFaceNormal(mesh: NonNullable<ReturnType<typeof buildChunkMesh>["solid"]>, expected: [number, number, number]) {
+function meshHasFaceNormal(mesh: NonNullable<ReturnType<typeof buildChunkMesh>["solid"]>, expected: [number, number, number], planeAxis?: number, planeValue?: number) {
   for (let i = 0; i < mesh.indices.length; i += 3) {
     const ids = [mesh.indices[i], mesh.indices[i + 1], mesh.indices[i + 2]];
     const p = ids.map(index => [
@@ -174,7 +175,9 @@ function meshHasFaceNormal(mesh: NonNullable<ReturnType<typeof buildChunkMesh>["
     ];
     const length = Math.hypot(...normal) || 1;
     const dot = normal[0] / length * expected[0] + normal[1] / length * expected[1] + normal[2] / length * expected[2];
-    if (dot > 0.99) return true;
+    const onPlane = planeAxis === undefined || planeValue === undefined
+      || ids.every(index => Math.abs(mesh.positions[index * 3 + planeAxis] - planeValue) < 1e-5);
+    if (dot > 0.99 && onPlane) return true;
   }
   return false;
 }
@@ -191,4 +194,32 @@ test("negative-X chunk boundary emits the west-facing outer face with correct wi
   const mesh = buildChunkMesh(world, chunk, fullTile);
   assert.ok(mesh.solid);
   assert.ok(meshHasFaceNormal(mesh.solid, [-1, 0, 0]), "the -X face must be emitted with an outward normal");
+});
+
+
+test("all six isolated solid cube faces have outward normals", () => {
+  const { chunk, world } = makeChunk([[4, 4, 4, B.STONE]]);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.ok(mesh.solid);
+  for (const normal of [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]] as [number,number,number][]) {
+    assert.ok(meshHasFaceNormal(mesh.solid, normal), `missing outward face ${normal.join(",")}`);
+  }
+});
+
+test("partial vanilla models with cube fallback shape do not cull adjacent solid faces", () => {
+  // Cauldron's official collision mask is partial even though the fallback BlockDef shape is "cube".
+  const cauldronId = MINECRAFT_BLOCK_TO_ID["minecraft:cauldron"];
+  assert.ok(cauldronId > 0);
+  assert.equal(BLOCKS[cauldronId].shape, "cube");
+  assert.equal(BLOCKS[cauldronId].render, "opaque");
+  assert.ok(blockHasPartialModelShape(cauldronId), "official cauldron model occupancy must be partial");
+  const { chunk, world } = makeChunk([[0, 2, 8, cauldronId], [1, 2, 8, B.STONE]]);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.ok(mesh.solid);
+  assert.ok(meshHasFaceNormal(mesh.solid, [-1,0,0], 0, 1), "stone's -X face must remain beside the partial cauldron model");
+});
+
+test("non-air texture keys without explicit aliases resolve to a vanilla texture path", () => {
+  assert.equal(resolveBlockTextureResource("none"), null);
+  assert.equal(resolveBlockTextureResource("end_stone"), "minecraft:block/end_stone");
 });

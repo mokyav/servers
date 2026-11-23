@@ -148,3 +148,14 @@ test("the E inventory shortcut ignores text-entry targets while typing", () => {
   assert.match(handler, /target instanceof HTMLTextAreaElement/);
   assert.match(handler, /shouldCloseInventoryFromKey\(e\.code, isTextEntry\)/);
 });
+
+
+test("solid, cutout, and blended block textures use different alpha policies", () => {
+  const chunkView = read("../src/client/chunkview.ts");
+  assert.match(chunkView, /uniform float uAlphaMode/);
+  assert.match(chunkView, /uAlphaMode > 0\.5 && uAlphaMode < 1\.5 && t\.a < 0\.5/);
+  assert.match(chunkView, /uAlphaMode: \{ value: 0 \}/);
+  assert.match(chunkView, /uAlphaMode: \{ value: 1 \}/);
+  assert.match(chunkView, /uAlphaMode: \{ value: 2 \}/);
+  assert.match(chunkView, /float outAlpha = uAlphaMode < 1\.5 \? 1\.0 : t\.a \* uOpacity/);
+});

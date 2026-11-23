@@ -1,5 +1,8 @@
 import { MINECRAFT_DIMENSION_TYPE_DATA } from "./minecraft-worldgen-catalog.js";
 export const DIMENSION_IDS = Object.freeze({ OVERWORLD: "minecraft:overworld", NETHER: "minecraft:the_nether", END: "minecraft:the_end" });
+export const END_CENTER_SURFACE_Y = 48;
+export const END_CONTINENT_RADIUS = 88;
+export const END_OUTER_ISLAND_MIN_DISTANCE = 128;
 const vanillaType = (key) => MINECRAFT_DIMENSION_TYPE_DATA[key] ?? {};
 const runtimeDimension = (id, generator, typeKey, hasSky, naturalLight) => {
   const type = vanillaType(typeKey);
@@ -25,7 +28,7 @@ export function mapDimensionCoordinates(from,to,position) {
   if(from===to)return{x,y,z};
   if(from===DIMENSION_IDS.OVERWORLD&&to===DIMENSION_IDS.NETHER)return{x:x/8,y,z:z/8};
   if(from===DIMENSION_IDS.NETHER&&to===DIMENSION_IDS.OVERWORLD)return{x:x*8,y,z:z*8};
-  if(to===DIMENSION_IDS.END)return{x:0,y:40,z:0};
+  if(to===DIMENSION_IDS.END)return{x:0,y:END_CENTER_SURFACE_Y+1,z:0};
   if(from===DIMENSION_IDS.END)return{x:0,y:64,z:0};
   return{x,y,z};
 }

@@ -35,5 +35,7 @@ export function resolveBlockTextureResource(key) {
   if (key === "none") return null;
   if (typeof key !== "string" || !key) return null;
   if (key.startsWith("minecraft:")) return key;
-  return LEGACY_TEXTURE_ALIASES[key] ?? null;
+  // Non-air tile names without an explicit alias should still try the canonical
+  // vanilla texture path; missing files become visible magenta atlas cells.
+  return LEGACY_TEXTURE_ALIASES[key] ?? `minecraft:block/${key}`;
 }

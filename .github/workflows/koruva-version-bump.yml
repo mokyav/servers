@@ -9,6 +9,8 @@ on:
       # A commit that only updates the package version must not trigger another bump.
       - "!koruva/package.json"
       - "!koruva/package-lock.json"
+      # Test-only updates do not change the game release version.
+      - "!koruva/test/**"
 
 permissions:
   contents: write

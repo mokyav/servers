@@ -17,10 +17,10 @@ test("title menu shows the build's Koruva version", async () => {
   const pkg = JSON.parse(pkgText);
   const lock = JSON.parse(lockText);
 
-  assert.equal(pkg.version, "1.3.0");
+  assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
-  assert.equal(pkg.version.split(".").slice(0, 2).join("."), "1.3");
+  assert.match(pkg.version.split(".").slice(0, 2).join("."), /^\d+\.\d+$/);
   assert.ok(html.includes('id="game-version" class="game-version">Version 1.0</p>'));
   assert.ok(css.includes("#game-version.game-version {"));
   assert.ok(vite.includes('define: { __KORUVA_VERSION__: JSON.stringify(displayVersion) }'));

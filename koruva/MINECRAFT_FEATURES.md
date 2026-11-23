@@ -31,3 +31,13 @@
 - Minecraftクライアント由来のシェーダー／リソース素材は成果物へコピーしていない。`client.zip` は構造調査のみで全ファイル解析ではなく、素材の完全ライセンス調査も未了。
 - アイテムIDカタログ件数は、各アイテムの完全な挙動・レシピ・テクスチャ実装件数を意味しない。
 
+
+
+## Overworld world generation v4 (2026-11-23)
+
+- New worlds now use v4; saved v1-v3 worlds keep their prior terrain generator.
+- Added connected cave density fields, spaghetti/noodle tunnels and larger cavern spaces.
+- Added localized underground water/lava aquifers and cave-biome decoration for lush caves, dripstone caves, deep dark and sulfur caves.
+- Added coal, iron, copper, gold, redstone, diamond, lapis and emerald ore vein profiles, including deepslate variants and mountain-only emeralds.
+- Added tuff/granite/diorite/andesite geology and stable neighbour-chunk vein origins to avoid ore seams at chunk borders.
+- This is a deterministic adaptation to Koruva's 128-block world and sea level 22; it is not an exact copy of vanilla's 384-block-high Java 26.3 terrain.

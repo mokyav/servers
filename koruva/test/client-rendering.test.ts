@@ -207,15 +207,16 @@ test("all six isolated solid cube faces have outward normals", () => {
 });
 
 test("partial vanilla models with cube fallback shape do not cull adjacent solid faces", () => {
-  const chestId = MINECRAFT_BLOCK_TO_ID["minecraft:chest"];
-  assert.ok(chestId > 0);
-  assert.equal(BLOCKS[chestId].shape, "cube");
-  assert.equal(BLOCKS[chestId].render, "opaque");
-  assert.ok(blockHasPartialModelShape(chestId), "official chest model occupancy must be partial");
-  const { chunk, world } = makeChunk([[0, 2, 8, chestId], [1, 2, 8, B.STONE]]);
+  // Cauldron's official collision mask is partial even though the fallback BlockDef shape is "cube".
+  const cauldronId = MINECRAFT_BLOCK_TO_ID["minecraft:cauldron"];
+  assert.ok(cauldronId > 0);
+  assert.equal(BLOCKS[cauldronId].shape, "cube");
+  assert.equal(BLOCKS[cauldronId].render, "opaque");
+  assert.ok(blockHasPartialModelShape(cauldronId), "official cauldron model occupancy must be partial");
+  const { chunk, world } = makeChunk([[0, 2, 8, cauldronId], [1, 2, 8, B.STONE]]);
   const mesh = buildChunkMesh(world, chunk, fullTile);
   assert.ok(mesh.solid);
-  assert.ok(meshHasFaceNormal(mesh.solid, [-1,0,0], 0, 1), "stone's -X face must remain beside the partial chest model");
+  assert.ok(meshHasFaceNormal(mesh.solid, [-1,0,0], 0, 1), "stone's -X face must remain beside the partial cauldron model");
 });
 
 test("non-air texture keys without explicit aliases resolve to a vanilla texture path", () => {

@@ -1,5 +1,5 @@
 // チャンク単位のメッシュ生成: 隠れ面カリング + 頂点AO。three.js に依存しない純粋関数。
-import { BLOCKS, blockOccupiesSubcell } from "../../shared/blocks";
+import { B, BLOCKS, blockOccupiesSubcell } from "../../shared/blocks";
 import { CHUNK_SIZE, WORLD_HEIGHT } from "../../shared/constants";
 import { MINECRAFT_BLOCK_MODEL_REGISTRY, type MinecraftModelElement, type MinecraftModelFace, type MinecraftModelInstance } from "../../shared/minecraft-block-model-registry.js";
 import { MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID } from "../../shared/minecraft-block-runtime.js";

@@ -4,12 +4,13 @@ import { inventoryPanelVisibility, shouldCloseInventoryFromKey } from "../src/cl
 import { hotbarSlotCount } from "../src/client/ui";
 import { World } from "../src/client/world";
 import { B, BLOCKS, MINECRAFT_BLOCK_TO_ID, blockHasPartialModelShape } from "../shared/blocks";
+import { MINECRAFT_BLOCK_MODEL_REGISTRY } from "../shared/minecraft-block-model-registry.js";
 import { MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES } from "../shared/minecraft-block-alpha-test-textures.js";
 import { resolveBlockTextureResource } from "../shared/legacy-texture-aliases.js";
 import { canToggleFlight, isSpectatorFlightLocked } from "../shared/flight-mode.js";
 import { itemDropTexturePath } from "../shared/drop-item-texture.js";
 import { CHUNK_SIZE, CHUNK_VOLUME, WORLD_HEIGHT } from "../shared/constants";
-import { buildChunkMesh } from "../src/client/mesher";
+import { buildChunkMesh, mapMinecraftModelFaceUv } from "../src/client/mesher";
 import type { Chunk } from "../src/client/world";
 
 test("creative catalogue and player inventory never overlap", () => {
@@ -321,6 +322,89 @@ test("legacy and vanilla model cubes map all six face UVs to Java 26.3 direction
   assertVanillaCubeFaceUv(vanillaMesh, "vanilla stone", 0);
 });
 
+test("model face UV rotation matches Minecraft BlockFaceUV vertex permutations on all six axes", () => {
+  const identity = { m: 0, x: 0, y: 0, z: 0, uvlock: false };
+  // Vertex order copied from Minecraft FaceInfo for each named face.
+  // With no rotation, all six faces map to the same four UV rectangle corners.
+  const vertices: Record<string, [number, number, number][]> = {
+    down: [[0,0,16], [0,0,0], [16,0,0], [16,0,16]],
+    up: [[0,16,0], [0,16,16], [16,16,16], [16,16,0]],
+    north: [[16,16,0], [16,0,0], [0,0,0], [0,16,0]],
+    south: [[0,16,16], [0,0,16], [16,0,16], [16,16,16]],
+    west: [[0,16,0], [0,0,0], [0,0,16], [0,16,16]],
+    east: [[16,16,16], [16,0,16], [16,0,0], [16,16,0]],
+  };
+  const uvCorners: [number, number][] = [[2,3], [2,11], [14,11], [14,3]];
+  const sourceVertexByRotation: Record<number, number[]> = {
+    0: [0,1,2,3],
+    90: [1,2,3,0],
+    180: [2,3,0,1],
+    270: [3,0,1,2],
+  };
+
+  for (const [direction, faceVertices] of Object.entries(vertices)) {
+    for (const rotation of [0, 90, 180, 270]) {
+      const face = {
+        texture: "minecraft:block/stone",
+        uv: [2,3,14,11],
+        rotation,
+        tintindex: -1,
+        cullface: direction,
+      };
+      for (let vertex = 0; vertex < 4; vertex++) {
+        const actual = mapMinecraftModelFaceUv(
+          direction, faceVertices[vertex], [0,0,0], [16,16,16], face, identity,
+        );
+        const [expectedU, expectedV] = uvCorners[sourceVertexByRotation[rotation][vertex]];
+        assert.ok(Math.abs(actual[0] - expectedU / 16) < 1e-6,
+          `${direction} rotation=${rotation} vertex=${vertex}: U ${actual[0]} != ${expectedU / 16}`);
+        assert.ok(Math.abs(actual[1] - expectedV / 16) < 1e-6,
+          `${direction} rotation=${rotation} vertex=${vertex}: V ${actual[1]} != ${expectedV / 16}`);
+      }
+    }
+  }
+});
+
+test("rotated model UVs stay inside narrow west and down texture rectangles", () => {
+  const identity = { m: 0, x: 0, y: 0, z: 0, uvlock: false };
+  const westFace = {
+    texture: "minecraft:block/oak_door_bottom",
+    uv: [0,13,16,16],
+    rotation: 90,
+    tintindex: -1,
+    cullface: "west",
+  };
+  // West face's top-left corner rotates to the bottom-left UV corner.
+  const west = mapMinecraftModelFaceUv("west", [0,16,0], [0,0,0], [16,16,16], westFace, identity);
+  assert.ok(Math.abs(west[0] - 0) < 1e-6);
+  assert.ok(Math.abs(west[1] - 1) < 1e-6);
+
+  const downFace = {
+    texture: "minecraft:block/piston_bottom",
+    uv: [4,4,8,8],
+    rotation: 90,
+    tintindex: -1,
+    cullface: "down",
+  };
+  // Same vertex-index permutation is used; DOWN's local basis makes the
+  // visible rotation appear opposite when viewed from beneath the block.
+  const down = mapMinecraftModelFaceUv("down", [0,0,16], [0,0,0], [16,16,16], downFace, identity);
+  assert.ok(Math.abs(down[0] - 4 / 16) < 1e-6);
+  assert.ok(Math.abs(down[1] - 8 / 16) < 1e-6);
+});
+
+test("the bundled Java 26.3 model registry exercises rotated -X and -Y faces", () => {
+  let westRotated = 0, downRotated = 0;
+  for (const model of MINECRAFT_BLOCK_MODEL_REGISTRY.models) {
+    for (const element of model.elements) {
+      if ((element.faces.west?.rotation ?? 0) !== 0) westRotated++;
+      if ((element.faces.down?.rotation ?? 0) !== 0) downRotated++;
+    }
+  }
+  assert.ok(westRotated > 0, "the bundled models must exercise -X face rotation");
+  assert.ok(downRotated > 0, "the bundled models must exercise -Y face rotation");
+});
+
 test("all six isolated solid cube faces have outward normals", () => {
   const { chunk, world } = makeChunk([[4, 4, 4, B.STONE]]);
   const mesh = buildChunkMesh(world, chunk, fullTile);
@@ -366,25 +450,48 @@ test("all binary-alpha cactus model faces use the alpha-tested cutout layer", ()
   }
 });
 
-test("binary-alpha full-cube models keep cutout faces and neighbour faces on all sides", () => {
+test("binary-alpha full-cube models preserve both model and neighbour faces on all six sides", () => {
   const spawner = MINECRAFT_BLOCK_TO_ID["minecraft:spawner"];
   assert.ok(spawner > 0);
   assert.equal(BLOCKS[spawner].render, "opaque");
   assert.ok(MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES.has("minecraft:block/spawner"));
-  // Spawner uses a full-cube model with cullface on all six faces, but its PNG
-  // contains transparent holes. Adjacent opaque faces must survive behind them.
   const { chunk, world } = makeChunk([
     [4, 4, 4, spawner],
-    [3, 4, 4, B.STONE],
-    [4, 3, 4, B.STONE],
+    [5, 4, 4, B.STONE], // +X
+    [3, 4, 4, B.STONE], // -X
+    [4, 5, 4, B.STONE], // +Y
+    [4, 3, 4, B.STONE], // -Y
+    [4, 4, 5, B.STONE], // +Z
+    [4, 4, 3, B.STONE], // -Z
   ]);
   const mesh = buildChunkMesh(world, chunk, fullTile);
   assert.ok(mesh.cutout, "alpha-textured spawner faces must use the cutout layer");
   assert.ok(mesh.solid, "neighbouring stone faces must remain in the opaque layer");
-  assert.ok(meshHasFaceNormal(mesh.cutout, [-1,0,0], 0, 4), "spawner's -X cutout face must survive adjacent stone");
-  assert.ok(meshHasFaceNormal(mesh.cutout, [0,-1,0], 1, 4), "spawner's -Y cutout face must survive stone below");
-  assert.ok(meshHasFaceNormal(mesh.solid, [1,0,0], 0, 4), "stone's +X face must show through spawner holes");
-  assert.ok(meshHasFaceNormal(mesh.solid, [0,1,0], 1, 4), "stone's +Y face must show through spawner holes");
+  const directions: Array<{
+    name: string;
+    modelNormal: [number, number, number];
+    modelAxis: number;
+    modelPlane: number;
+    stoneNormal: [number, number, number];
+    stonePlane: number;
+  }> = [
+    { name: "+X", modelNormal: [1,0,0], modelAxis: 0, modelPlane: 5, stoneNormal: [-1,0,0], stonePlane: 5 },
+    { name: "-X", modelNormal: [-1,0,0], modelAxis: 0, modelPlane: 4, stoneNormal: [1,0,0], stonePlane: 4 },
+    { name: "+Y", modelNormal: [0,1,0], modelAxis: 1, modelPlane: 5, stoneNormal: [0,-1,0], stonePlane: 5 },
+    { name: "-Y", modelNormal: [0,-1,0], modelAxis: 1, modelPlane: 4, stoneNormal: [0,1,0], stonePlane: 4 },
+    { name: "+Z", modelNormal: [0,0,1], modelAxis: 2, modelPlane: 5, stoneNormal: [0,0,-1], stonePlane: 5 },
+    { name: "-Z", modelNormal: [0,0,-1], modelAxis: 2, modelPlane: 4, stoneNormal: [0,0,1], stonePlane: 4 },
+  ];
+  for (const direction of directions) {
+    assert.ok(
+      meshHasFaceNormal(mesh.cutout, direction.modelNormal, direction.modelAxis, direction.modelPlane),
+      `spawner's ${direction.name} cutout face must survive adjacent stone`,
+    );
+    assert.ok(
+      meshHasFaceNormal(mesh.solid, direction.stoneNormal, direction.modelAxis, direction.stonePlane),
+      `stone behind the ${direction.name} transparent pixels must remain visible`,
+    );
+  }
 });
 
 test("grass block base sides and transparent overlay share one ordered cutout mesh", () => {

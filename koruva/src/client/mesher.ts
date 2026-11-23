@@ -190,6 +190,22 @@ function defaultUvBounds(direction: string, from: number[], to: number[]): [numb
   }
 }
 
+/**
+ * Apply the same vertex-index permutation used by Minecraft's BlockFaceUV.
+ * The apparent rotation direction differs when a face is viewed from the
+ * opposite side (notably the underside), because each face has its own local
+ * coordinate basis. Therefore this mapping is deliberately direction-agnostic.
+ */
+function rotateMinecraftFaceUv(u: number, v: number, rotation: number): [number, number] {
+  const turn = ((rotation % 360) + 360) % 360;
+  switch (turn) {
+    case 90: return [v, 1 - u];
+    case 180: return [1 - u, 1 - v];
+    case 270: return [1 - v, u];
+    default: return [u, v];
+  }
+}
+
 function faceUvPixels(direction: string, point: Vec3, from: number[], to: number[], face: MinecraftModelFace): [number, number] {
   let u = 0, v = 0;
   if (direction === "east") { u = 16 - point[2]; v = 16 - point[1]; }
@@ -198,11 +214,35 @@ function faceUvPixels(direction: string, point: Vec3, from: number[], to: number
   else if (direction === "down") { u = point[0]; v = 16 - point[2]; }
   else if (direction === "north") { u = 16 - point[0]; v = 16 - point[1]; }
   else { u = point[0]; v = 16 - point[1]; }
+
   const defaults = defaultUvBounds(direction, from, to);
   const normU = Math.max(0, Math.min(1, (u - defaults[0]) / Math.max(0.0001, defaults[2] - defaults[0])));
   const normV = Math.max(0, Math.min(1, (v - defaults[1]) / Math.max(0.0001, defaults[3] - defaults[1])));
   const uv = face.uv ?? defaults;
-  return [uv[0] + (uv[2] - uv[0]) * normU, uv[1] + (uv[3] - uv[1]) * normV];
+
+  // Minecraft rotates the four face vertices, not the whole 16×16 texture.
+  // Rotate normalized face-local coordinates first, then expand into the
+  // selected UV rectangle. This keeps narrow UV strips (doors, trapdoors,
+  // pistons, etc.) inside their original texture area.
+  const [rotatedU, rotatedV] = rotateMinecraftFaceUv(normU, normV, face.rotation);
+  return [
+    uv[0] + (uv[2] - uv[0]) * rotatedU,
+    uv[1] + (uv[3] - uv[1]) * rotatedV,
+  ];
+}
+
+/** Convert a model face vertex into normalized atlas-tile UVs, including uvlock. */
+export function mapMinecraftModelFaceUv(
+  direction: string,
+  point: Vec3,
+  from: number[],
+  to: number[],
+  face: MinecraftModelFace,
+  instance: MinecraftModelInstance,
+): [number, number] {
+  const [pixelU, pixelV] = faceUvPixels(direction, point, from, to, face);
+  // Vanilla applies blockstate UV-lock after the face's own UV rectangle/rotation.
+  return lockModelUv(pixelU / 16, pixelV / 16, direction, instance);
 }
 
 function biomeTintForTexture(texture: string, biome: string, dimension: string): [number, number, number] {
@@ -396,12 +436,7 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
             // Keep model-backed vertices in the same chunk-local coordinate space as cube faces.
             faceTarget.pos.push(x - ox + transformed[0] / 16, y + transformed[1] / 16, z - oz + transformed[2] / 16);
             emittedFace = true;
-            const [pixelU, pixelV] = faceUvPixels(direction, local, from, to, face);
-            let [tu, tv] = lockModelUv(pixelU / 16, pixelV / 16, direction, instance);
-            const uvTurn = ((face.rotation % 360) + 360) % 360;
-            if (uvTurn === 90) [tu, tv] = [tv, 1 - tu];
-            else if (uvTurn === 180) [tu, tv] = [1 - tu, 1 - tv];
-            else if (uvTurn === 270) [tu, tv] = [1 - tv, tu];
+            const [tu, tv] = mapMinecraftModelFaceUv(direction, local, from, to, face, instance);
             faceTarget.uv.push(uvRect[0] + (uvRect[2] - uvRect[0]) * tu, uvRect[3] - (uvRect[3] - uvRect[1]) * tv);
             const light = shade * aoValue;
             faceTarget.col.push(light * tint[0] / 255, light * tint[1] / 255, light * tint[2] / 255, def.emissive ? 1 : 0);

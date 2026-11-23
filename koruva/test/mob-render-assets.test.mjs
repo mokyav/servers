@@ -30,7 +30,7 @@ test("all explicit mob texture and overlay resources exist", () => {
     for (const resource of overlays) {
       const file = path.join(root, "src/client/public/assets/minecraft/textures/entity", `${resource}.png`);
       assert.ok(existsSync(file), `${mob} overlay missing: ${resource}`);
-        const expectedSize = mob.includes("villager") ? [64, 64] : [64, 32];
+      const expectedSize = mob.includes("villager") ? [64, 64] : [64, 32];
       assert.deepEqual(pngSize(file), expectedSize, `${mob} overlay atlas dimensions`);
     }
   }
@@ -110,6 +110,7 @@ test("vanilla core rigs keep entity feet on the ground and preserve mirrored lim
   assert.match(mobSource, /pos:\[0,29,0\],uv:\[0,0\]/); // Java 26.3 villager head
   assert.match(mobSource, /pos:\[-6,19,1\],uv:\[44,22\]/); // folded villager arm
   assert.match(mobSource, /inflate:\.5/); // robe and hat layer separation
+  assert.match(mobSource, /applyPlaneAtlasUV\(brimGeometry,\[30,47,16,1\],\[64,64\]\)/); // villager hat brim
   assert.match(mobSource, /applyBoxAtlasUV\(g,p\.size,p\.uv,DIMS\[t\],!!p\.mirrorX\)/);
 });
 

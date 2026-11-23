@@ -50,7 +50,7 @@ function minecraftPart(imageData: string, baseFaces: SkinFace[], outerFaces: Ski
     }
     for (const item of outer) {
       const c = item.cv.getContext("2d")!;
-      c.drawImage(image, item.rect.x, item.rect.y, item.rect.w, item.rect.h, 0, 0, item.cv.width, item.cv.height);
+      drawSkinFaceTexture(c, image, item.rect);
       item.texture.needsUpdate = true;
     }
   };

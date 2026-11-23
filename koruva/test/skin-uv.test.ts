@@ -80,7 +80,7 @@ assert.deepEqual(drawCalls, [
 ]);
 
 const slim = skinFaces("slim");
-assert.deepEqual(slim.armL.outer[3], { x: 55, y: 48, w: 3, h: 4 }); // slim bottom is 3px wide
+assert.deepEqual(slim.armL.outer[3], { x: 55, y: 48, w: 3, h: 4, flipX: true, flipY: true }); // slim bottom is 3px wide and rotated 180 degrees
 
 // Legacy 64x32 → 64x64: mirrored copies must land inside the left limb base regions.
 for (const [sx, sy, dx, dy, w, h] of LEGACY_MIRROR_COPIES) {

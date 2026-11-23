@@ -4,12 +4,13 @@ import { inventoryPanelVisibility, shouldCloseInventoryFromKey } from "../src/cl
 import { hotbarSlotCount } from "../src/client/ui";
 import { World } from "../src/client/world";
 import { B, BLOCKS, MINECRAFT_BLOCK_TO_ID, blockHasPartialModelShape } from "../shared/blocks";
+import { MINECRAFT_BLOCK_MODEL_REGISTRY } from "../shared/minecraft-block-model-registry.js";
 import { MINECRAFT_BLOCK_ALPHA_TEST_TEXTURES } from "../shared/minecraft-block-alpha-test-textures.js";
 import { resolveBlockTextureResource } from "../shared/legacy-texture-aliases.js";
 import { canToggleFlight, isSpectatorFlightLocked } from "../shared/flight-mode.js";
 import { itemDropTexturePath } from "../shared/drop-item-texture.js";
 import { CHUNK_SIZE, CHUNK_VOLUME, WORLD_HEIGHT } from "../shared/constants";
-import { buildChunkMesh } from "../src/client/mesher";
+import { buildChunkMesh, mapMinecraftModelFaceUv, rotateMinecraftFaceUv } from "../src/client/mesher";
 import type { Chunk } from "../src/client/world";
 
 test("creative catalogue and player inventory never overlap", () => {
@@ -319,6 +320,69 @@ test("legacy and vanilla model cubes map all six face UVs to Java 26.3 direction
   const vanillaMesh = buildChunkMesh(vanilla.world, vanilla.chunk, fullTile).solid;
   assert.ok(vanillaMesh, "vanilla stone mesh must exist");
   assertVanillaCubeFaceUv(vanillaMesh, "vanilla stone", 0);
+});
+
+test("Minecraft face rotations follow per-direction clockwise rules", () => {
+  const directions = ["east", "west", "up", "down", "north", "south"];
+  for (const direction of directions) {
+    const down = direction === "down";
+    assert.deepEqual(
+      rotateMinecraftFaceUv(0, 0, 90, direction),
+      down ? [0, 1] : [1, 0],
+      `${direction}: 90-degree texture rotation`,
+    );
+    assert.deepEqual(
+      rotateMinecraftFaceUv(0, 0, 180, direction),
+      [1, 1],
+      `${direction}: 180-degree texture rotation`,
+    );
+    assert.deepEqual(
+      rotateMinecraftFaceUv(0, 0, 270, direction),
+      down ? [1, 0] : [0, 1],
+      `${direction}: 270-degree texture rotation`,
+    );
+  }
+});
+
+test("rotated model UVs remain inside their selected rectangle on -X and -Y", () => {
+  const identity = { m: 0, x: 0, y: 0, z: 0, uvlock: false };
+  const westFace = {
+    texture: "minecraft:block/oak_door_bottom",
+    uv: [0, 13, 16, 16],
+    rotation: 90,
+    tintindex: -1,
+    cullface: "west",
+  };
+  const westUv = mapMinecraftModelFaceUv(
+    "west", [0, 8, 0], [0, 0, 0], [16, 16, 16], westFace, identity,
+  );
+  assert.ok(Math.abs(westUv[0] - 0.5) < 1e-6, `west U should rotate within [0,16], got ${westUv[0]}`);
+  assert.ok(Math.abs(westUv[1] - 13 / 16) < 1e-6, `west V should stay in the bottom strip, got ${westUv[1]}`);
+
+  const downFace = {
+    texture: "minecraft:block/piston_bottom",
+    uv: [4, 4, 8, 8],
+    rotation: 90,
+    tintindex: -1,
+    cullface: "down",
+  };
+  const downUv = mapMinecraftModelFaceUv(
+    "down", [0, 0, 8], [0, 0, 0], [16, 16, 16], downFace, identity,
+  );
+  assert.ok(Math.abs(downUv[0] - 6 / 16) < 1e-6, `down U should stay in [4,8], got ${downUv[0]}`);
+  assert.ok(Math.abs(downUv[1] - 8 / 16) < 1e-6, `down V should stay in [4,8], got ${downUv[1]}`);
+});
+
+test("the bundled Java model registry includes rotated west and down faces", () => {
+  let west90 = 0, down90 = 0;
+  for (const model of MINECRAFT_BLOCK_MODEL_REGISTRY.models) {
+    for (const element of model.elements) {
+      if (element.faces.west?.rotation === 90) west90++;
+      if (element.faces.down?.rotation === 90) down90++;
+    }
+  }
+  assert.ok(west90 > 0, "the real block registry must exercise rotated -X faces");
+  assert.ok(down90 > 0, "the real block registry must exercise rotated -Y faces");
 });
 
 test("all six isolated solid cube faces have outward normals", () => {

@@ -17,7 +17,7 @@ test("title menu shows the build's Koruva version", async () => {
   const pkg = JSON.parse(pkgText);
   const lock = JSON.parse(lockText);
 
-  assert.equal(pkg.version, "1.2.0");
+  assert.equal(pkg.version, "1.3.0");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
   assert.equal(pkg.version.split(".").slice(0, 2).join("."), "1.2");

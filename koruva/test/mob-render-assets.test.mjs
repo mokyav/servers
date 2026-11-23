@@ -30,7 +30,8 @@ test("all explicit mob texture and overlay resources exist", () => {
     for (const resource of overlays) {
       const file = path.join(root, "src/client/public/assets/minecraft/textures/entity", `${resource}.png`);
       assert.ok(existsSync(file), `${mob} overlay missing: ${resource}`);
-      assert.deepEqual(pngSize(file), [64, 32], `${mob} overlay atlas dimensions`);
+        const expectedSize = mob.includes("villager") ? [64, 64] : [64, 32];
+      assert.deepEqual(pngSize(file), expectedSize, `${mob} overlay atlas dimensions`);
     }
   }
 });
@@ -46,8 +47,8 @@ test("boss texture atlases have the expected 26.3 dimensions", () => {
 
 test("the core MobModels cuboid UV rectangles all fit their texture atlases", () => {
   const modelSection = mobSource.slice(mobSource.indexOf("const MODELS:"), mobSource.indexOf("function applyBoxAtlasUV"));
-  const dimensions = { pig: [64, 64], cow: [64, 64], chicken: [64, 32], creeper: [64, 32], zombie: [64, 64], skeleton: [64, 32] };
-  const starts = [...modelSection.matchAll(/^\s*(pig|cow|chicken|creeper|zombie|skeleton):\[/gm)];
+  const dimensions = { pig: [64, 64], cow: [64, 64], chicken: [64, 32], creeper: [64, 32], zombie: [64, 64], skeleton: [64, 32], villager: [64, 64] };
+  const starts = [...modelSection.matchAll(/^\s*(pig|cow|chicken|creeper|zombie|skeleton|villager):\[/gm)];
   let count = 0;
   for (let i = 0; i < starts.length; i++) {
     const type = starts[i][1];
@@ -105,6 +106,10 @@ test("vanilla core rigs keep entity feet on the ground and preserve mirrored lim
   assert.match(mobSource, /pos:\[0,8,0\],uv:\[0,9\],rotationX:Math\.PI\/2/); // chicken body
   assert.match(mobSource, /pos:\[0,22,0\],uv:\[0,0\]/); // creeper head
   assert.match(mobSource, /pos:\[0,28,0\],uv:\[0,0\]/); // humanoid head
+  assert.match(mobSource, /VILLAGER_RIG_TYPES\.includes\(type as string\)\)return "villager"/);
+  assert.match(mobSource, /pos:\[0,29,0\],uv:\[0,0\]/); // Java 26.3 villager head
+  assert.match(mobSource, /pos:\[-6,19,1\],uv:\[44,22\]/); // folded villager arm
+  assert.match(mobSource, /inflate:\.5/); // robe and hat layer separation
   assert.match(mobSource, /applyBoxAtlasUV\(g,p\.size,p\.uv,DIMS\[t\],!!p\.mirrorX\)/);
 });
 
@@ -117,6 +122,13 @@ test("dragon wings remain parented to the torso pivot instead of being detached 
 test("villager and wandering trader use their matching 26.3 entity atlases", () => {
   assert.equal(MOB_RENDER_TEXTURES.villager, "villager/villager");
   assert.equal(MOB_RENDER_TEXTURES.wandering_trader, "wandering_trader/wandering_trader");
+  assert.deepEqual(MOB_RENDER_OVERLAYS.villager, [
+    "villager/type/plains", "villager/profession/nitwit", "villager/profession_level/stone",
+  ]);
+  assert.deepEqual(MOB_RENDER_OVERLAYS.zombie_villager, [
+    "zombie_villager/type/plains", "zombie_villager/profession/nitwit", "zombie_villager/profession_level/stone",
+  ]);
+  assert.match(mobSource, /VILLAGER_RIG_TYPES/);
   assert.ok(existsSync(path.join(root, "src/client/public/assets/minecraft/textures/entity/villager/villager.png")));
   assert.ok(existsSync(path.join(root, "src/client/public/assets/minecraft/textures/entity/wandering_trader/wandering_trader.png")));
 });

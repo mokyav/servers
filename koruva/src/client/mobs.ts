@@ -1,10 +1,10 @@
 import * as THREE from "three";
 import { MOB_PROFILES } from "../../shared/mob-ai.js";
-import { MOB_RENDER_TEXTURES, MOB_RENDER_OVERLAYS, SKELETON_RIG_TYPES, HUMANOID_RIG_TYPES, MOB_MODEL_BASE_HEIGHTS, atlasBoxFaceRects, mapAtlasFaceUV, mapAtlasPlaneUV } from "../../shared/mob-render-assets.js";
+import { MOB_RENDER_TEXTURES, MOB_RENDER_OVERLAYS, SKELETON_RIG_TYPES, HUMANOID_RIG_TYPES, VILLAGER_RIG_TYPES, MOB_MODEL_BASE_HEIGHTS, atlasBoxFaceRects, mapAtlasFaceUV, mapAtlasPlaneUV } from "../../shared/mob-render-assets.js";
 import type { MobInfo, MobType } from "../../shared/entities";
-interface Part{size:[number,number,number];pos:[number,number,number];uv:[number,number];leg?:boolean;rotationX?:number;rotationY?:number;rotationZ?:number;mirrorX?:boolean}
-type CoreMobType = "pig" | "cow" | "chicken" | "creeper" | "zombie" | "skeleton";
-const DIMS:Record<CoreMobType,[number,number]>={pig:[64,64],cow:[64,64],chicken:[64,32],creeper:[64,32],zombie:[64,64],skeleton:[64,32]};
+interface Part{size:[number,number,number];pos:[number,number,number];uv:[number,number];leg?:boolean;rotationX?:number;rotationY?:number;rotationZ?:number;mirrorX?:boolean;inflate?:number}
+type CoreMobType = "pig" | "cow" | "chicken" | "creeper" | "zombie" | "skeleton" | "villager";
+const DIMS:Record<CoreMobType,[number,number]>={pig:[64,64],cow:[64,64],chicken:[64,32],creeper:[64,32],zombie:[64,64],skeleton:[64,32],villager:[64,64]};
 // Core rigs below use the supplied 26.3 client model cuboids and UV offsets.
 // pos is the world-space cuboid centre in sixteenths above the entity feet;
 // rotations are applied after UV generation so each atlas face stays aligned.
@@ -63,6 +63,19 @@ const MODELS:Record<CoreMobType,Part[]>={
   {size:[2,12,2],pos:[5,18,0],uv:[40,16],leg:true,mirrorX:true},
   {size:[2,12,2],pos:[-1.9,6,0],uv:[0,16],leg:true},
   {size:[2,12,2],pos:[1.9,6,0],uv:[0,16],leg:true,mirrorX:true},
+ ],
+ // VillagerModel 26.3: folded arms, robe, long head and separate hat/nose UV regions.
+ villager:[
+  {size:[8,10,8],pos:[0,29,0],uv:[0,0]},
+  {size:[8,10,8],pos:[0,29,0],uv:[32,0],inflate:.51},
+  {size:[2,4,2],pos:[0,25,5],uv:[24,0]},
+  {size:[8,12,6],pos:[0,18,0],uv:[16,20]},
+  {size:[8,12,6],pos:[0,18,0],uv:[0,38],inflate:.5},
+  {size:[4,8,4],pos:[-6,19,1],uv:[44,22]},
+  {size:[4,8,4],pos:[6,19,1],uv:[44,22],mirrorX:true},
+  {size:[8,4,4],pos:[0,17,1],uv:[40,38]},
+  {size:[4,12,4],pos:[-2,6,0],uv:[0,22],leg:true},
+  {size:[4,12,4],pos:[2,6,0],uv:[0,22],leg:true,mirrorX:true},
  ]};
 function applyBoxAtlasUV(g:THREE.BufferGeometry,size:[number,number,number],offset:[number,number],textureSize:[number,number],mirrorX=false) {
  const rects=atlasBoxFaceRects(size,offset,textureSize),uv=g.getAttribute("uv") as THREE.BufferAttribute;
@@ -81,6 +94,7 @@ function applyBoxAtlasUV(g:THREE.BufferGeometry,size:[number,number,number],offs
 function applyUV(g:THREE.BufferGeometry,t:CoreMobType,p:Part){applyBoxAtlasUV(g,p.size,p.uv,DIMS[t],!!p.mirrorX);}
 function modelType(type:MobType):CoreMobType {
  if(SKELETON_RIG_TYPES.includes(type as string))return "skeleton";
+ if(VILLAGER_RIG_TYPES.includes(type as string))return "villager";
  if(HUMANOID_RIG_TYPES.includes(type as string))return "zombie";
  return MOB_PROFILES[type]?.visual ?? "pig";
 }
@@ -296,7 +310,8 @@ export class MobModels {
    const mat=this.materialFor(info.type,key),overlayResources=(MOB_RENDER_OVERLAYS as Record<string,string[]>)[info.type]??[];
    const overlayMaterials=overlayResources.map(path=>this.materialForResource(path));
    for(const p of MODELS[key]){
-    const g=new THREE.BoxGeometry(p.size[0]/16,p.size[1]/16,p.size[2]/16);applyUV(g,key,p);
+    const inflate=p.inflate??0;
+   const g=new THREE.BoxGeometry((p.size[0]+inflate*2)/16,(p.size[1]+inflate*2)/16,(p.size[2]+inflate*2)/16);applyUV(g,key,p);
     const m=new THREE.Mesh(g,mat);m.position.set(p.pos[0]/16,p.pos[1]/16,p.pos[2]/16);m.rotation.set(p.rotationX??0,p.rotationY??0,p.rotationZ??0);root.add(m);if(p.leg)legs.push(m);
     for(const overlayMaterial of overlayMaterials){const overlay=new THREE.Mesh(g.clone(),overlayMaterial);overlay.position.copy(m.position);overlay.rotation.copy(m.rotation);overlay.scale.copy(m.scale);root.add(overlay);}
    }

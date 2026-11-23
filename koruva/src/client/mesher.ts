@@ -137,6 +137,46 @@ function lockModelUv(u: number, v: number, direction: string, instance: Minecraf
     0.5 + dot3(sourceU, targetBasis.v) * du + dot3(sourceV, targetBasis.v) * dv,
   ];
 }
+
+/**
+ * Rotate normalized face UVs using Minecraft's per-face convention.
+ * U grows right and V grows down in the model's texture coordinate space.
+ * All faces rotate clockwise, except "down", which rotates counter-clockwise.
+ */
+export function rotateMinecraftFaceUv(
+  u: number,
+  v: number,
+  rotation: number,
+  direction: string,
+): [number, number] {
+  const turn = ((Math.round(rotation / 90) * 90) % 360 + 360) % 360;
+  const down = direction === "down";
+  switch (turn) {
+    case 90:
+      return down ? [v, 1 - u] : [1 - v, u];
+    case 180:
+      return [1 - u, 1 - v];
+    case 270:
+      return down ? [1 - v, u] : [v, 1 - u];
+    default:
+      return [u, v];
+  }
+}
+
+/**
+ * Convert 0..16 model UVs to normalized atlas UVs. Face rotation is resolved
+ * in model space first, then optional blockstate UV-lock maps it into world space.
+ */
+export function mapMinecraftModelFaceUv(
+  pixelU: number,
+  pixelV: number,
+  direction: string,
+  rotation: number,
+  instance: MinecraftModelInstance,
+): [number, number] {
+  const [u, v] = rotateMinecraftFaceUv(pixelU / 16, pixelV / 16, rotation, direction);
+  return lockModelUv(u, v, direction, instance);
+}
 const GRASS_TINT: Record<string, [number, number, number]> = {
   // Sampled from vanilla textures/colormap/grass.png at representative climate coordinates.
   plains: [145, 189, 89], forest: [121, 192, 91], taiga: [134, 183, 131], snowy: [131, 181, 147], desert: [191, 183, 85], legacy: [145, 189, 89],
@@ -397,11 +437,10 @@ export function buildChunkMesh(world: World, chunk: Chunk, tileUV: TileUV): Chun
             faceTarget.pos.push(x - ox + transformed[0] / 16, y + transformed[1] / 16, z - oz + transformed[2] / 16);
             emittedFace = true;
             const [pixelU, pixelV] = faceUvPixels(direction, local, from, to, face);
-            let [tu, tv] = lockModelUv(pixelU / 16, pixelV / 16, direction, instance);
-            const uvTurn = ((face.rotation % 360) + 360) % 360;
-            if (uvTurn === 90) [tu, tv] = [tv, 1 - tu];
-            else if (uvTurn === 180) [tu, tv] = [1 - tu, 1 - tv];
-            else if (uvTurn === 270) [tu, tv] = [1 - tv, tu];
+            // Minecraft rotates the face's UV corners clockwise, except for the
+            // down face, which is counter-clockwise. Apply that model-space rotation
+            // before the blockstate UV lock, matching FaceBakery's bake order.
+            const [tu, tv] = mapMinecraftModelFaceUv(pixelU, pixelV, direction, face.rotation, instance);
             faceTarget.uv.push(uvRect[0] + (uvRect[2] - uvRect[0]) * tu, uvRect[3] - (uvRect[3] - uvRect[1]) * tv);
             const light = shade * aoValue;
             faceTarget.col.push(light * tint[0] / 255, light * tint[1] / 255, light * tint[2] / 255, def.emissive ? 1 : 0);

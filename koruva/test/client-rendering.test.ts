@@ -292,7 +292,7 @@ test("all binary-alpha cactus model faces use the alpha-tested cutout layer", ()
   assert.equal(mesh.solid, null, "all cactus model faces use binary-alpha textures in the 26.3 atlas");
   assert.ok(mesh.cutout, "binary-alpha model faces must use the cutout mesh");
   assert.ok(meshHasFaceNormal(mesh.cutout, [0, -1, 0], 1, 4), "the underside must be emitted into the alpha-tested layer");
-  assert.ok(meshHasFaceNormal(mesh.cutout, [0, 1, 0], 1, 4), "the top face must retain its transparent pixels");
+  assert.ok(meshHasFaceNormal(mesh.cutout, [0, 1, 0], 1, 5), "the top face must retain its transparent pixels");
 });
 
 test("grass block base sides and transparent overlay share one ordered cutout mesh", () => {

@@ -32,8 +32,19 @@ export class Net {
       const ws = new WebSocket(`${proto}://${location.host}/ws/${code}`);
       this.ws = ws;
       let opened = false;
+      let settled = false;
+      const connectTimer = window.setTimeout(() => {
+        if (opened || settled) return;
+        settled = true;
+        if (this.ws === ws) this.ws = null;
+        try { ws.close(4000, "connect-timeout"); } catch { /* already closed */ }
+        reject(new Error("サーバーへの接続が時間内に完了しませんでした"));
+      }, 30000);
       ws.onopen = () => {
+        if (settled) { try { ws.close(4000, "connect-cancelled"); } catch { /* already closed */ } return; }
         opened = true;
+        settled = true;
+        clearTimeout(connectTimer);
         this.send(hello);
         this.pingTimer = window.setInterval(() => ws.readyState === 1 && ws.send("ping"), 25000);
         resolve();
@@ -44,13 +55,14 @@ export class Net {
       };
       ws.onerror = () => {
         console.error("[Koruva WS] connection error", { url: ws.url, readyState: ws.readyState });
-        if (!opened) reject(new Error("サーバーに接続できませんでした"));
+        if (!opened && !settled) { settled = true; clearTimeout(connectTimer); reject(new Error("サーバーに接続できませんでした")); }
       };
       ws.onclose = (event) => {
+        clearTimeout(connectTimer);
         clearInterval(this.pingTimer);
         console.warn("[Koruva WS] connection closed", { code: event.code, reason: event.reason, wasClean: event.wasClean });
-        if (!opened) reject(new Error(`サーバーに接続できませんでした (close ${event.code})`));
-        else if (this.ws === ws) { this.ws = null; this.onClose("サーバーとの接続が切れました"); }
+        if (!opened && !settled) { settled = true; reject(new Error(`サーバーに接続できませんでした (close ${event.code})`)); }
+        else if (opened && this.ws === ws) { this.ws = null; this.onClose("サーバーとの接続が切れました"); }
       };
     });
   }

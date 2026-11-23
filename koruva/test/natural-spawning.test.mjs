@@ -132,3 +132,24 @@ test("26.3 biome spawn tables expose all 67 vanilla biomes and extra spawn categ
   const ambient = naturalMobSpawnEntries({ biome: "plains", category: "ambient" });
   assert.equal(ambient[0]?.type, "bat");
 });
+
+test("large mob spawn footprint and full model headroom are checked",()=>{
+  const base={
+    players:[{p:[0,12,0],gameMode:"survival"}],
+    random:rolls(0,0,0),attempts:1,getSurfaceY:()=>5,
+    isClear:(x,y,z)=>!(x===16&&y===7),
+    headroom:2,width:1.4,
+  };
+  assert.equal(findNaturalSpawnSpot(base),null);
+  const centre={x:.5,y:6,z:.5};
+  assert.deepEqual(findNaturalSpawnGroup({...base,center:centre,size:1}),[centre]);
+  assert.deepEqual(findNaturalSpawnGroup({...base,center:centre,size:1,width:.6}),[centre]);
+});
+test("natural group candidates check every block covered by mob width",()=>{
+  const group=findNaturalSpawnGroup({
+    center:{x:.5,y:6,z:.5},size:2,random:rolls(0,0),
+    getSurfaceY:()=>5,isClear:(x,y,z)=>!(x===1&&y===7),
+    headroom:2,width:1.4,
+  });
+  assert.equal(group.length,1);
+});

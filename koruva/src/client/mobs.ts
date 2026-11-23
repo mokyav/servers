@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { MOB_PROFILES } from "../../shared/mob-ai.js";
-import { MOB_RENDER_TEXTURES, MOB_RENDER_OVERLAYS, SKELETON_RIG_TYPES, HUMANOID_RIG_TYPES, VILLAGER_RIG_TYPES, PIGLIN_RIG_TYPES, MOB_MODEL_BASE_HEIGHTS, atlasBoxFaceRects, mapAtlasFaceUV, mapAtlasPlaneUV } from "../../shared/mob-render-assets.js";
+import { MOB_RENDER_TEXTURES, MOB_RENDER_OVERLAYS, SKELETON_RIG_TYPES, HUMANOID_RIG_TYPES, VILLAGER_RIG_TYPES, PIGLIN_RIG_TYPES, MOB_MODEL_BASE_HEIGHTS, MOB_MODEL_BASE_WIDTHS, atlasBoxFaceRects, mapAtlasFaceUV, mapAtlasPlaneUV } from "../../shared/mob-render-assets.js";
 import type { MobInfo, MobType } from "../../shared/entities";
 interface Part{size:[number,number,number];pos:[number,number,number];uv:[number,number];leg?:boolean;rotationX?:number;rotationY?:number;rotationZ?:number;mirrorX?:boolean;inflate?:number}
 type CoreMobType = "pig" | "cow" | "chicken" | "creeper" | "zombie" | "skeleton" | "villager" | "piglin";
@@ -342,10 +342,12 @@ export class MobModels {
   const profile=MOB_PROFILES[info.type];
   if(info.type!=="ender_dragon"&&info.type!=="end_crystal"){
    const baseHeight=info.type==="wither"?26.7/16:info.type==="warden"?3.7:(MOB_MODEL_BASE_HEIGHTS as Record<string,number>)[key]??28/16;
-   const desiredHeight=profile?.height??baseHeight;
-   const scale=Math.max(.35,Math.min(2.8,desiredHeight/baseHeight));
-   root.scale.setScalar(scale);
-   if(info.type==="wither")root.userData.yOffset=22.7/16*scale;
+   const baseWidth=info.type==="wither"?32/16:info.type==="warden"?32/16:(MOB_MODEL_BASE_WIDTHS as Record<string,number>)[key]??baseHeight*.75;
+   const desiredHeight=profile?.height??baseHeight,desiredWidth=profile?.width??baseWidth;
+   const scaleY=Math.max(.3,Math.min(3.5,desiredHeight/baseHeight));
+   const scaleXZ=Math.max(.3,Math.min(3.5,desiredWidth/baseWidth));
+   root.scale.set(scaleXZ,scaleY,scaleXZ);
+   if(info.type==="wither")root.userData.yOffset=22.7/16*scaleY;
    else if(info.type==="warden")root.userData.yOffset=0;
   }
   root.position.x=info.x;root.position.z=info.z;root.position.y=info.y+(Number(root.userData.yOffset)||0);

@@ -1,4 +1,4 @@
-import test from "node:test";import assert from "node:assert/strict";import{createMob,MOB_PROFILES,stepMobAI}from"../shared/mob-ai.js";
+import test from "node:test";import assert from "node:assert/strict";import{canMobOccupy,createMob,MOB_PROFILE_DIMENSIONS,MOB_PROFILES,stepMobAI}from"../shared/mob-ai.js";
 const ground=(x,y,z)=>y<10;const player=(id,x,y=10,z=0,gameMode="survival")=>({id,p:[x,y,z],gameMode});
 test("data-driven defaults and unknown type rejection",()=>{assert.equal(createMob("pig","p",1,10,2).health,MOB_PROFILES.pig.maxHealth);assert.throws(()=>createMob("dragon","x",0,1,0),/unknown mob/);});
 test("zombie targets nearest survival player, moves, then attacks with cooldown",()=>{const m=createMob("zombie","z",0,10,0),ps=[player("far",9),player("near",4)];const chase=stepMobAI(m,ps,.2,1000,ground);assert.equal(chase.mob.targetId,"near");assert.equal(chase.mob.state,"chase");assert.ok(chase.mob.x>0);const hit=stepMobAI({...chase.mob,x:0,z:0},[player("near",1)],.2,2000,ground);assert.equal(hit.attacks[0]?.targetId,"near");assert.equal(stepMobAI(hit.mob,[player("near",1)],.2,2500,ground).attacks.length,0);});
@@ -44,4 +44,33 @@ test("Ender Dragon swoop emits melee damage only when it reaches the player",()=
   const result=stepMobAI(dragon,[player("target",2,10,0)],.2,2000,()=>false);
   assert.ok(result.attacks.some(a=>a.targetId==="target"&&a.kind==="melee"));
   assert.equal(result.mob.dragonPhase,"circle");
+});
+
+test("every registered mob has finite positive collision dimensions",()=>{
+  for(const type of Object.keys(MOB_PROFILE_DIMENSIONS)){
+    const profile=MOB_PROFILES[type];
+    assert.ok(profile,type);
+    assert.ok(Number.isFinite(profile.width)&&profile.width>0&&profile.width<=16,type);
+    assert.ok(Number.isFinite(profile.height)&&profile.height>0&&profile.height<=8,type);
+    assert.ok(["ground","flying","aquatic"].includes(profile.movement),type);
+    assert.deepEqual(MOB_PROFILE_DIMENSIONS[type],[profile.width,profile.height],type);
+  }
+  assert.equal(Object.keys(MOB_PROFILE_DIMENSIONS).length,88);
+});
+test("mob AABB clearance checks the full footprint and every vertical block",()=>{
+  const wall=(x,y,z)=>x===1&&y>=10;
+  assert.equal(canMobOccupy("pig",.5,10,.5,wall),true);
+  assert.equal(canMobOccupy("iron_golem",.5,10,.5,wall),false);
+  assert.equal(canMobOccupy("zombie",.5,10,.5,(x,y)=>y===11),false);
+});
+test("mob movement stops before its width overlaps a wall",()=>{
+  const wall=(x,y,z)=>x===1&&y>=10;
+  const result=stepMobAI(createMob("zombie","wide-hitbox",.5,10,.5),[player("p",8,10,.5)],.2,1000,wall);
+  assert.equal(result.mob.x,.5);
+});
+test("flying mobs do not fall through the air while grounded mobs use floor support",()=>{
+  const bat=createMob("bat","bat-air",0,30,0);
+  assert.equal(stepMobAI(bat,[],.2,1000,()=>false).mob.y,30);
+  const zombie=createMob("zombie","grounded",0,10,0);
+  assert.equal(stepMobAI(zombie,[],.2,1000,ground).mob.y,10);
 });

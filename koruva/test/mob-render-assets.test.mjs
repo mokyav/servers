@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   MOB_RENDER_TEXTURES,
+  MOB_MODEL_BASE_WIDTHS,
   MOB_RENDER_OVERLAYS,
   PIGLIN_RIG_TYPES,
   atlasBoxFaceRects,
@@ -145,4 +146,11 @@ test("villager and wandering trader use their matching 26.3 entity atlases", () 
   assert.match(mobSource, /VILLAGER_RIG_TYPES/);
   assert.ok(existsSync(path.join(root, "src/client/public/assets/minecraft/textures/entity/villager/villager.png")));
   assert.ok(existsSync(path.join(root, "src/client/public/assets/minecraft/textures/entity/wandering_trader/wandering_trader.png")));
+});
+
+test("core mob model rigs have width bases for hitbox fitting",()=>{
+  for(const key of ["pig","cow","chicken","creeper","zombie","skeleton","villager","piglin"]){
+    assert.ok(Number.isFinite(MOB_MODEL_BASE_WIDTHS[key])&&MOB_MODEL_BASE_WIDTHS[key]>0,key);
+  }
+  assert.match(mobSource,/root\.scale\.set\(scaleXZ,scaleY,scaleXZ\)/);
 });

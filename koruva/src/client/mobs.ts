@@ -1,10 +1,10 @@
 import * as THREE from "three";
 import { MOB_PROFILES } from "../../shared/mob-ai.js";
-import { MOB_RENDER_TEXTURES, MOB_RENDER_OVERLAYS, SKELETON_RIG_TYPES, HUMANOID_RIG_TYPES, VILLAGER_RIG_TYPES, MOB_MODEL_BASE_HEIGHTS, atlasBoxFaceRects, mapAtlasFaceUV, mapAtlasPlaneUV } from "../../shared/mob-render-assets.js";
+import { MOB_RENDER_TEXTURES, MOB_RENDER_OVERLAYS, SKELETON_RIG_TYPES, HUMANOID_RIG_TYPES, VILLAGER_RIG_TYPES, PIGLIN_RIG_TYPES, MOB_MODEL_BASE_HEIGHTS, atlasBoxFaceRects, mapAtlasFaceUV, mapAtlasPlaneUV } from "../../shared/mob-render-assets.js";
 import type { MobInfo, MobType } from "../../shared/entities";
 interface Part{size:[number,number,number];pos:[number,number,number];uv:[number,number];leg?:boolean;rotationX?:number;rotationY?:number;rotationZ?:number;mirrorX?:boolean;inflate?:number}
-type CoreMobType = "pig" | "cow" | "chicken" | "creeper" | "zombie" | "skeleton" | "villager";
-const DIMS:Record<CoreMobType,[number,number]>={pig:[64,64],cow:[64,64],chicken:[64,32],creeper:[64,32],zombie:[64,64],skeleton:[64,32],villager:[64,64]};
+type CoreMobType = "pig" | "cow" | "chicken" | "creeper" | "zombie" | "skeleton" | "villager" | "piglin";
+const DIMS:Record<CoreMobType,[number,number]>={pig:[64,64],cow:[64,64],chicken:[64,32],creeper:[64,32],zombie:[64,64],skeleton:[64,32],villager:[64,64],piglin:[64,64]};
 // Core rigs below use the supplied 26.3 client model cuboids and UV offsets.
 // pos is the world-space cuboid centre in sixteenths above the entity feet;
 // rotations are applied after UV generation so each atlas face stays aligned.
@@ -76,7 +76,22 @@ const MODELS:Record<CoreMobType,Part[]>={
   {size:[8,4,4],pos:[0,17,1],uv:[40,38]},
   {size:[4,12,4],pos:[-2,6,0],uv:[0,22],leg:true},
   {size:[4,12,4],pos:[2,6,0],uv:[0,22],leg:true,mirrorX:true},
- ]};
+ ],
+ // Java 26.3 AdultPiglinModel: wider head, dedicated snout and two separately mapped ears.
+ piglin:[
+  {size:[10,8,8],pos:[0,28,0],uv:[0,0]},
+  {size:[4,4,1],pos:[0,30,5.5],uv:[31,1]},
+  {size:[1,2,1],pos:[2.5,31,5.5],uv:[2,4]},
+  {size:[1,2,1],pos:[-2.5,31,5.5],uv:[2,0]},
+  {size:[1,5,4],pos:[5,35.5,0],uv:[51,6],rotationZ:-Math.PI/6},
+  {size:[1,5,4],pos:[-5,35.5,0],uv:[39,6],rotationZ:Math.PI/6},
+  {size:[8,12,4],pos:[0,18,0],uv:[16,16]},
+  {size:[4,12,4],pos:[-5,18,0],uv:[40,16],leg:true},
+  {size:[4,12,4],pos:[5,18,0],uv:[40,16],leg:true,mirrorX:true},
+  {size:[4,12,4],pos:[-1.9,6,0],uv:[0,16],leg:true},
+  {size:[4,12,4],pos:[1.9,6,0],uv:[0,16],leg:true,mirrorX:true},
+ ],
+};
 function applyBoxAtlasUV(g:THREE.BufferGeometry,size:[number,number,number],offset:[number,number],textureSize:[number,number],mirrorX=false) {
  const rects=atlasBoxFaceRects(size,offset,textureSize),uv=g.getAttribute("uv") as THREE.BufferAttribute;
  // BoxGeometry already stores a different orientation for each face. Preserve those
@@ -95,6 +110,7 @@ function applyUV(g:THREE.BufferGeometry,t:CoreMobType,p:Part){applyBoxAtlasUV(g,
 function modelType(type:MobType):CoreMobType {
  if(SKELETON_RIG_TYPES.includes(type as string))return "skeleton";
  if(VILLAGER_RIG_TYPES.includes(type as string))return "villager";
+ if(PIGLIN_RIG_TYPES.includes(type as string))return "piglin";
  if(HUMANOID_RIG_TYPES.includes(type as string))return "zombie";
  return MOB_PROFILES[type]?.visual ?? "pig";
 }

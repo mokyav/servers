@@ -96,6 +96,11 @@ test("model-less runtime blocks fall back instead of silently omitting their geo
   assert.match(mesher, /const def = BLOCKS\[id\] \?\? BLOCKS\[3\]/);
 });
 
+test("merged chunk meshes are not discarded by camera-side frustum culling", () => {
+  const chunkView = read("../src/client/chunkview.ts");
+  assert.match(chunkView, /m\.frustumCulled = false/);
+});
+
 test("chunk frustum bounds come from actual mesh vertices", () => {
   const chunkView = read("../src/client/chunkview.ts");
   assert.match(chunkView, /g\.computeBoundingBox\(\)/);

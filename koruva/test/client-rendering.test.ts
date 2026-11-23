@@ -155,3 +155,40 @@ test("creative inventory search can type the letter E without closing the invent
   assert.equal(shouldCloseInventoryFromKey("KeyE", false), true);
   assert.equal(shouldCloseInventoryFromKey("Escape", true), true);
 });
+
+
+function meshHasFaceNormal(mesh: NonNullable<ReturnType<typeof buildChunkMesh>["solid"]>, expected: [number, number, number]) {
+  for (let i = 0; i < mesh.indices.length; i += 3) {
+    const ids = [mesh.indices[i], mesh.indices[i + 1], mesh.indices[i + 2]];
+    const p = ids.map(index => [
+      mesh.positions[index * 3],
+      mesh.positions[index * 3 + 1],
+      mesh.positions[index * 3 + 2],
+    ]);
+    const a = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]];
+    const b = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]];
+    const normal = [
+      a[1] * b[2] - a[2] * b[1],
+      a[2] * b[0] - a[0] * b[2],
+      a[0] * b[1] - a[1] * b[0],
+    ];
+    const length = Math.hypot(...normal) || 1;
+    const dot = normal[0] / length * expected[0] + normal[1] / length * expected[1] + normal[2] / length * expected[2];
+    if (dot > 0.99) return true;
+  }
+  return false;
+}
+
+test("bottom bedrock keeps its underside because render culling ignores the physics void bedrock sentinel", () => {
+  const { chunk, world } = makeChunk([[0, 0, 8, B.BEDROCK]]);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.ok(mesh.solid);
+  assert.ok(meshHasFaceNormal(mesh.solid, [0, -1, 0]), "the -Y bottom face must be emitted");
+});
+
+test("negative-X chunk boundary emits the west-facing outer face with correct winding", () => {
+  const { chunk, world } = makeChunk([[0, 2, 8]], -1, 0);
+  const mesh = buildChunkMesh(world, chunk, fullTile);
+  assert.ok(mesh.solid);
+  assert.ok(meshHasFaceNormal(mesh.solid, [-1, 0, 0]), "the -X face must be emitted with an outward normal");
+});

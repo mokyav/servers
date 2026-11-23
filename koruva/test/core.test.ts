@@ -25,7 +25,7 @@ ok(m.solid!.indices.length / 6 === m.solid!.vertexCount / 4, "面数一致");
 let maxIdx = 0; for (const i of m.solid!.indices) maxIdx = Math.max(maxIdx, i);
 ok(maxIdx < m.solid!.vertexCount, "インデックス範囲");
 
-// 内部の完全に埋まったブロックは面を持たない: 全部石のチャンクを作る
+// 水平方向の隣接チャンクに隠れる側面は除去し、ワールド上下端の面は残す。
 const w2 = new World(1);
 const cc = w2.ensureChunk(0, 0);
 cc.data.fill(B.AIR);
@@ -33,7 +33,7 @@ cc.data.fill(B.STONE, 0, 64 * 16 * 16);
 cc.maxY = 63;
 for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]) { const n = w2.ensureChunk(dx, dz); n.data.fill(B.STONE); }
 const mm = buildChunkMesh(w2, cc, tileUV);
-ok((mm.solid?.vertexCount ?? 0) / 4 === 256, `埋まったチャンクは上面のみ (${(mm.solid?.vertexCount ?? 0) / 4}面)`);
+ok((mm.solid?.vertexCount ?? 0) / 4 === 512, `埋まったチャンクは上下面のみ (${(mm.solid?.vertexCount ?? 0) / 4}面)`);
 
 // 編集
 const dirty: number[] = [];

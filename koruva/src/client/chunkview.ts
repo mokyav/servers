@@ -239,6 +239,10 @@ export class ChunkView {
     g.computeBoundingBox();
     g.computeBoundingSphere();
     const m = new THREE.Mesh(g, mat);
+    // Chunk lifetime and render distance are managed by ChunkView. The merged mesh
+    // bounds may include rotated/imported vanilla elements; do not let a camera-side
+    // frustum test drop an entire terrain layer (notably from -X or below).
+    m.frustumCulled = false;
     m.position.set(c.cx * CHUNK_SIZE, 0, c.cz * CHUNK_SIZE);
     m.matrixAutoUpdate = false;
     m.updateMatrix();

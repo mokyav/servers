@@ -63,7 +63,8 @@ test("initial-sync disconnect and slow WebSocket messages are recoverable and di
   assert.ok(main.includes("if (!reconnecting && this.roomHasConnected && roomSessionToken === this.roomSessionToken && !this.roomReconnectTask)"));
   assert.ok(main.includes("await this.roomReconnectTask;"));
   assert.ok(room.includes("async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void>"));
-  assert.ok(room.includes("private async handleWebSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void>"));\n  assert.ok(room.includes(String.raw`/^\\s*\\{\\s*"t"\\s*:\\s*"([^"]+)"/`), "slow-message diagnostics should extract message type without reparsing JSON");
+  assert.ok(room.includes("private async handleWebSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void>"));
+  assert.ok(room.includes(String.raw`/^\s*\{\s*"t"\s*:\s*"([^"]+)"/`), "slow-message diagnostics should extract message type without reparsing JSON");
   assert.ok(room.includes('console.warn("[Koruva DO] slow websocket message"'));
   assert.ok(room.includes("type: messageType,"));
   assert.ok(room.includes("elapsedMs,"));

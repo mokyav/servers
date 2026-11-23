@@ -19,7 +19,8 @@ test("every registered mob has bounded profile data and a supported visual fallb
     assert.ok(["passive", "melee", "ranged", "fuse", "dragon"].includes(p.kind), type);
     assert.ok(Number.isFinite(p.maxHealth) && p.maxHealth > 0 && p.maxHealth <= 500, type);
     assert.ok(Number.isFinite(p.speed) && p.speed > 0 && p.speed <= 2, type);
-    assert.ok(Number.isFinite(p.height) && p.height > 0 && p.height <= 4, type);
+    assert.ok(Number.isFinite(p.width) && p.width > 0 && p.width <= 16, type);
+    assert.ok(Number.isFinite(p.height) && p.height > 0 && p.height <= 8, type);
     assert.ok(visuals.has(p.visual), type);
     if (p.kind !== "passive") assert.ok(Number.isFinite(p.damage) && p.damage > 0, type);
     const mob = createMob(type, `test-${type}`, 0, 10, 0);

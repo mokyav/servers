@@ -45,6 +45,7 @@ import { normalizePlayerLocation } from "../../shared/player-location.js";
 import { clearInventoryState } from "../../shared/inventory-clear.js";
 import { createPlayerSaveSnapshot, loadPlayerSave, writePlayerSave, updatePlayerSave } from "../../shared/player-save.js";
 import { buildDeathDropStacks } from "../../shared/death-drops.js";
+import { clampDropCount } from "../../shared/item-drop.js";
 import { resolveCommandTargets } from "../../shared/command-targets.js";
 import { parseTeleportPosition } from "../../shared/teleport.js";
 import type { Env } from "./env";
@@ -1310,6 +1311,25 @@ export class Room extends DurableObject<Env> {
         if(!food||me.vitals.eatingFoodId||(me.vitals.foodCounts[foodId]??0)<=0||(!food.canEatWhenFull&&me.vitals.foodLevel>=20)){this.send(ws,{t:"error",message:"その食料は食べられません"});return;}
         me.vitals.eatingFoodId=foodId;me.vitals.eatingTicksRemaining=food.eatTicks;await this.persistVitals(me);this.sendStats(me);return;
       }
+      case "drop-item": {
+        if (!this.take(me.setB, 30, 20)) return;
+        const gameMode = this.meta?.mode ?? "creative";
+        const itemId = Number.isSafeInteger(msg.itemId) ? msg.itemId : 0;
+        const slotKey = typeof msg.slotKey === "string" ? msg.slotKey : "";
+        const validSlot = /^hotbar:[0-8]$/.test(slotKey);
+        const stack = validSlot ? me.stackData[slotKey] : null;
+        const slotCount = stack?.itemId === itemId && Number.isSafeInteger(stack?.count) ? stack.count : 0;
+        const available = Math.min(slotCount, Math.max(0, Math.floor(me.counts[itemId] ?? 0)));
+        const count = clampDropCount(msg.count, available);
+        if ((gameMode !== "survival" && gameMode !== "adventure")
+          || me.vitals.dead || itemId <= 0 || itemId >= BLOCKS.length || !BLOCKS[itemId]
+          || !validSlot || count <= 0) {
+          this.send(ws, { t: "drop-item-result", slotKey, itemId, count: 0, remaining: slotCount, accepted: false });
+          return;
+        }
+        await this.dropInventoryStack(ws, me, itemId, count, slotKey, slotCount);
+        return;
+      }
       case "pickup": {
         if (!this.take(me.setB, 30, 20)) return;
         const eid = typeof msg.eid === "string" ? msg.eid : "";
@@ -2270,6 +2290,68 @@ export class Room extends DurableObject<Env> {
     }
     const all = Array.from(this.drops.values());
     return dimensionId === undefined ? all : dropsForDimension(all, dimensionId);
+  }
+
+
+  /** Drop a validated hotbar stack and persist the item + reduced inventory atomically. */
+  private async dropInventoryStack(ws: WebSocket, st: PlayerState, itemId: number, count: number, slotKey: string, slotCount: number) {
+    await this.liveDrops();
+    const previousDrops = new Map(this.drops);
+    const evicted: Drop[] = [];
+    while (this.drops.size >= MAX_DROPS) {
+      const oldest = this.drops.keys().next().value as string;
+      const removed = this.drops.get(oldest);
+      this.drops.delete(oldest);
+      if (removed) evicted.push(removed);
+    }
+
+    const remaining = Math.max(0, slotCount - count);
+    const nextCounts = normalizeInventory(st.counts.map((value, index) => index === itemId ? Math.max(0, value - count) : value));
+    const nextStackData = { ...st.stackData };
+    if (remaining > 0) nextStackData[slotKey] = { ...nextStackData[slotKey], itemId, count: remaining };
+    else delete nextStackData[slotKey];
+
+    const dimensionId = normalizeDimensionId(st.dimensionId);
+    const x = Math.floor(st.p[0] - Math.sin(st.r[0]) * 0.75);
+    const y = Math.max(1, Math.min(WORLD_HEIGHT - 1, Math.floor(st.p[1] + 0.55)));
+    const z = Math.floor(st.p[2] - Math.cos(st.r[0]) * 0.75);
+    const eid = crypto.randomUUID().replaceAll("-", "").slice(0, 16);
+    const drop: Drop = { eid, dimensionId, x, y, z, itemId, count, at: Date.now() };
+    this.drops.set(eid, drop);
+
+    const saved = st.cid ? await loadPlayerSave(this.ctx.storage, st.cid) : null;
+    const nextSave = saved ? createPlayerSaveSnapshot({
+      ...saved.snapshot,
+      location: normalizePlayerLocation({ version: 1, dimensionId, p: st.p, r: st.r }),
+      vitals: st.vitals,
+      inventory: nextCounts,
+      armorSlots: st.armorSlots,
+    }, Date.now()) : null;
+
+    try {
+      await this.ctx.storage.transaction(async (txn) => {
+        await txn.put("drops", [...this.drops.values()]);
+        if (st.cid && nextSave) {
+          await txn.put("player-save:" + st.cid, nextSave);
+          await txn.put("loc:" + st.cid, nextSave.location);
+          await txn.put("p:" + st.cid, nextSave.vitals);
+          await txn.put("i:" + st.cid, nextSave.inventory);
+          await txn.put("stack-data:" + st.cid, nextStackData);
+        }
+      });
+    } catch (error) {
+      this.drops = previousDrops;
+      throw error;
+    }
+
+    st.counts = nextCounts;
+    st.stackData = nextStackData;
+    this.serializePlayer(ws, st);
+    for (const old of evicted) this.broadcastDimension({ t: "gone", eid: old.eid, by: "" }, old.dimensionId);
+    this.broadcastDimension({ t: "drop", eid, x, y, z, itemId, count }, dimensionId);
+    this.send(ws, { t: "drop-item-result", slotKey, itemId, count, remaining, accepted: true });
+    this.sendInventory(ws, st);
+    this.send(ws, { t: "stack-data", stackData: st.stackData });
   }
 
   private async spawnDrop(x: number, y: number, z: number, b: number, dimensionId: string = DIMENSION_IDS.OVERWORLD, count = 1) {

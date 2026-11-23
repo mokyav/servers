@@ -275,7 +275,7 @@ function quadBaseForNormal(mesh: NonNullable<ReturnType<typeof buildChunkMesh>["
   return -1;
 }
 
-function assertVanillaCubeFaceUv(mesh: NonNullable<ReturnType<typeof buildChunkMesh>["solid"]>, label: string) {
+function assertVanillaCubeFaceUv(mesh: NonNullable<ReturnType<typeof buildChunkMesh>["solid"]>, label: string, pad: number) {
   const faces: Array<{
     name: string;
     normal: [number, number, number];
@@ -288,7 +288,6 @@ function assertVanillaCubeFaceUv(mesh: NonNullable<ReturnType<typeof buildChunkM
     { name: "south", normal: [0, 0, 1], uv: (x, y, z) => [x, y] },
     { name: "north", normal: [0, 0, -1], uv: (x, y, z) => [1 - x, y] },
   ];
-  const pad = 0.0005;
   for (const face of faces) {
     const base = quadBaseForNormal(mesh, face.normal);
     assert.ok(base >= 0, `${label}: missing ${face.name} face`);
@@ -312,14 +311,14 @@ test("legacy and vanilla model cubes map all six face UVs to Java 26.3 direction
   const legacy = makeChunk([[4, 4, 4, B.STONE]]);
   const legacyMesh = buildChunkMesh(legacy.world, legacy.chunk, fullTile).solid;
   assert.ok(legacyMesh, "legacy stone mesh must exist");
-  assertVanillaCubeFaceUv(legacyMesh, "legacy stone");
+  assertVanillaCubeFaceUv(legacyMesh, "legacy stone", 0.0005);
 
   const vanillaStone = MINECRAFT_BLOCK_TO_ID["minecraft:stone"];
   assert.ok(vanillaStone > 0);
   const vanilla = makeChunk([[4, 4, 4, vanillaStone]]);
   const vanillaMesh = buildChunkMesh(vanilla.world, vanilla.chunk, fullTile).solid;
   assert.ok(vanillaMesh, "vanilla stone mesh must exist");
-  assertVanillaCubeFaceUv(vanillaMesh, "vanilla stone");
+  assertVanillaCubeFaceUv(vanillaMesh, "vanilla stone", 0);
 });
 
 test("all six isolated solid cube faces have outward normals", () => {

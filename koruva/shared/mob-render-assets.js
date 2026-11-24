@@ -233,7 +233,7 @@ export const MOB_MODEL_BASE_HEIGHTS = Object.freeze({
   enderman: 46 / 16,
   spider: 14 / 16,
   blaze: 30 / 16,
-  ghast: 29 / 16,
+  ghast: 28 / 16,
   slime: 8 / 16,
   magma_cube: 8 / 16,
   silverfish: 4 / 16,
@@ -249,7 +249,7 @@ export const MOB_RENDER_HEIGHTS = Object.freeze({
   cave_spider: 0.5,
   blaze: 1.8,
   // GhastModel applies MeshTransformer.scaling(4.5) to its 29px body/tentacle model.
-  ghast: (29 / 16) * 4.5,
+  ghast: (28 / 16) * 4.5,
   slime: 1,
   magma_cube: 1,
   silverfish: 0.4,

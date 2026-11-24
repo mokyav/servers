@@ -5,6 +5,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   MOB_RENDER_TEXTURES,
+  MOB_RENDER_TEXTURE_SIZES,
+  MOB_RENDER_HEIGHTS,
+  MOB_MODEL_BASE_HEIGHTS,
   MOB_RENDER_OVERLAYS,
   PIGLIN_RIG_TYPES,
   atlasBoxFaceRects,
@@ -14,25 +17,34 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const mobSource = readFileSync(path.join(root, "src/client/mobs.ts"), "utf8");
+const entitiesSource = readFileSync(path.join(root, "shared/entities.ts"), "utf8");
+const mobTypesDeclaration = entitiesSource.match(/export const MOB_TYPES = \[([\s\S]*?)\] as const/);
+assert.ok(mobTypesDeclaration, "MOB_TYPES declaration not found");
+const registeredMobTypes = [...mobTypesDeclaration[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
 const pngSize = (file) => {
   const data = readFileSync(file);
   assert.equal(data.toString("hex", 0, 8), "89504e470d0a1a0a", `${file} is not a PNG`);
   return [data.readUInt32BE(16), data.readUInt32BE(20)];
 };
 
-test("all explicit mob texture and overlay resources exist", () => {
-  for (const [mob, resource] of Object.entries(MOB_RENDER_TEXTURES)) {
+test("all 88 registered mobs have an explicit existing Java 26.3 texture and exact atlas dimensions", () => {
+  assert.equal(registeredMobTypes.length, 88, "source mob registry should contain 88 spawn-egg mobs");
+  assert.deepEqual(Object.keys(MOB_RENDER_TEXTURES).sort(), [...registeredMobTypes].sort(), "texture map must cover exactly every registered mob");
+  assert.deepEqual(Object.keys(MOB_RENDER_TEXTURE_SIZES).sort(), [...registeredMobTypes].sort(), "size map must cover exactly every registered mob");
+  for (const mob of registeredMobTypes) {
+    const resource = MOB_RENDER_TEXTURES[mob];
+    const expectedSize = MOB_RENDER_TEXTURE_SIZES[mob];
+    assert.ok(resource, `${mob} texture mapping missing`);
+    assert.ok(Array.isArray(expectedSize) && expectedSize.length === 2 && expectedSize.every((v) => Number.isInteger(v) && v > 0), `${mob} texture size metadata invalid`);
     const file = path.join(root, "src/client/public/assets/minecraft/textures/entity", `${resource}.png`);
     assert.ok(existsSync(file), `${mob} texture missing: ${resource}`);
-    const [w, h] = pngSize(file);
-    assert.ok(w >= 64 && h >= 32, `${mob} texture has unexpected size ${w}x${h}`);
+    assert.deepEqual(pngSize(file), expectedSize, `${mob} texture dimensions differ from source-client manifest`);
   }
   for (const [mob, overlays] of Object.entries(MOB_RENDER_OVERLAYS)) {
     for (const resource of overlays) {
       const file = path.join(root, "src/client/public/assets/minecraft/textures/entity", `${resource}.png`);
       assert.ok(existsSync(file), `${mob} overlay missing: ${resource}`);
-      const expectedSize = mob.includes("villager") ? [64, 64] : [64, 32];
-      assert.deepEqual(pngSize(file), expectedSize, `${mob} overlay atlas dimensions`);
+      assert.deepEqual(pngSize(file), MOB_RENDER_TEXTURE_SIZES[mob], `${mob} overlay atlas dimensions`);
     }
   }
 });
@@ -48,8 +60,8 @@ test("boss texture atlases have the expected 26.3 dimensions", () => {
 
 test("the core MobModels cuboid UV rectangles all fit their texture atlases", () => {
   const modelSection = mobSource.slice(mobSource.indexOf("const MODELS:"), mobSource.indexOf("function applyBoxAtlasUV"));
-  const dimensions = { pig: [64, 64], cow: [64, 64], chicken: [64, 32], creeper: [64, 32], zombie: [64, 64], skeleton: [64, 32], villager: [64, 64], piglin: [64, 64] };
-  const starts = [...modelSection.matchAll(/^\s*(pig|cow|chicken|creeper|zombie|skeleton|villager|piglin):\[/gm)];
+  const dimensions = { pig: [64, 64], cow: [64, 64], chicken: [64, 32], creeper: [64, 32], zombie: [64, 64], skeleton: [64, 32], villager: [64, 64], piglin: [64, 64], enderman: [64, 32], spider: [64, 32], blaze: [64, 32], ghast: [64, 32], slime: [64, 32], magma_cube: [64, 64], silverfish: [64, 32], endermite: [64, 32] };
+  const starts = [...modelSection.matchAll(/^\s*(pig|cow|chicken|creeper|zombie|skeleton|villager|piglin|enderman|spider|blaze|ghast|slime|magma_cube|silverfish|endermite):\[/gm)];
   let count = 0;
   for (let i = 0; i < starts.length; i++) {
     const type = starts[i][1];
@@ -93,7 +105,10 @@ test("plane UV mirroring reverses the horizontal span without leaving the atlas"
 });
 
 test("renderer uses per-face UV remapping and dedicated boss rigs without hue tint fallback", () => {
-  assert.match(mobSource, /mapAtlasFaceUV\(mirrorX\?1-baseU:baseU/);
+  assert.match(mobSource, /mapAtlasFaceUV\(p\.mirrorX\?1-baseU:baseU/);
+  assert.match(mobSource, /MOB_RENDER_TEXTURE_SIZES/);
+  assert.match(mobSource, /applyUV\(g,key,p,info\.type\)/);
+  assert.doesNotMatch(mobSource, /`\/assets\/mobs\/\$\{key\}\.png`/, "renderer must not request missing generic texture files");
   assert.match(mobSource, /addWitherModel\(root\)/);
   assert.match(mobSource, /addWardenModel\(root\)/);
   assert.match(mobSource, /applyPlaneAtlasUV\(membrane,\[56,88,56,56\],\[256,256\],true\)/);
@@ -113,7 +128,66 @@ test("vanilla core rigs keep entity feet on the ground and preserve mirrored lim
   assert.match(mobSource, /pos:\[-6,19,1\],uv:\[44,22\]/); // folded villager arm
   assert.match(mobSource, /inflate:\.5/); // robe and hat layer separation
   assert.match(mobSource, /applyPlaneAtlasUV\(brimGeometry,\[30,47,16,1\],\[64,64\]\)/); // villager hat brim
-  assert.match(mobSource, /applyBoxAtlasUV\(g,p\.size,p\.uv,DIMS\[t\],!!p\.mirrorX\)/);
+  assert.match(mobSource, /atlasBoxFaceRects\(p\.size,p\.uv,sourceSize\)/);
+  assert.match(mobSource, /const scaleU=textureSize\[0\]\/sourceSize\[0\],scaleV=textureSize\[1\]\/sourceSize\[1\]/);
+});
+
+test("dedicated 26.3 mob families route to the correct rigs and keep family UVs inside their real atlases", () => {
+  assert.match(mobSource, /if\(type==="enderman"\)return "enderman"/);
+  assert.match(mobSource, /if\(type==="spider"\|\|type==="cave_spider"\)return "spider"/);
+  assert.match(mobSource, /if\(type==="blaze"\)return "blaze"/);
+  assert.match(mobSource, /if\(type==="ghast"\)return "ghast"/);
+  assert.match(mobSource, /if\(type==="slime"\)return "slime"/);
+  assert.match(mobSource, /if\(type==="magma_cube"\)return "magma_cube"/);
+  assert.match(mobSource, /if\(type==="silverfish"\)return "silverfish"/);
+  assert.match(mobSource, /if\(type==="endermite"\)return "endermite"/);
+
+  assert.equal(MOB_RENDER_TEXTURES.enderman, "enderman/enderman");
+  assert.equal(MOB_RENDER_TEXTURES.spider, "spider/spider");
+  assert.equal(MOB_RENDER_TEXTURES.cave_spider, "spider/cave_spider");
+  assert.equal(MOB_RENDER_TEXTURES.blaze, "blaze/blaze");
+  assert.equal(MOB_RENDER_TEXTURES.ghast, "ghast/ghast");
+  assert.equal(MOB_RENDER_TEXTURES.slime, "slime/slime");
+  assert.equal(MOB_RENDER_TEXTURES.magma_cube, "slime/magmacube");
+  assert.equal(MOB_RENDER_TEXTURES.silverfish, "silverfish/silverfish");
+  assert.equal(MOB_RENDER_TEXTURES.endermite, "endermite/endermite");
+
+  assert.deepEqual(MOB_RENDER_OVERLAYS.enderman, ["enderman/enderman_eyes"]);
+  assert.deepEqual(MOB_RENDER_OVERLAYS.spider, ["spider/spider_eyes"]);
+  assert.equal(MOB_MODEL_BASE_HEIGHTS.ghast, 28 / 16, "ghast model extent before vanilla layer scaling");
+  assert.equal(MOB_RENDER_HEIGHTS.ghast, (28 / 16) * 4.5, "GhastModel applies a 4.5x MeshTransformer");
+  assert.deepEqual(MOB_RENDER_HEIGHTS, {
+    enderman: 2.9, spider: 0.9, cave_spider: 0.5, blaze: 1.8, ghast: 7.875,
+    slime: 1, magma_cube: 1, silverfish: 0.4, endermite: 0.4,
+  });
+
+  // UV rectangles below are from the Java 26.3 model-layer definitions.
+  for (const [size, uv, dims] of [
+    [[2,30,2],[56,0],[64,32]], // Enderman long arm/leg
+    [[16,2,2],[18,0],[64,32]], // Spider leg
+    [[2,8,2],[0,16],[64,32]], // Blaze rod
+    [[16,16,16],[0,0],[64,32]], // Ghast base model atlas; the PNG is 2x larger
+    [[8,8,8],[0,0],[64,32]], // Slime outer cube
+    [[8,1,8],[32,27],[64,64]], // Magma Cube final slice
+    [[6,4,3],[0,9],[64,32]], // Silverfish mid-body segment
+    [[6,4,5],[0,5],[64,32]], // Endermite mid-body segment
+  ]) assert.equal(atlasBoxFaceRects(size, uv, dims).length, 6);
+
+  assert.ok(mobSource.includes("const BLAZE_RODS:Part[]=Array.from({length:12}"));
+  assert.ok(mobSource.includes("const GHAST_TENTACLE_LENGTHS=[8,13,9,11,11,10,12,9,12]"));
+  assert.ok(mobSource.includes("const MAGMA_CUBE_SLICES:Part[]=Array.from({length:8}"));
+  assert.ok(mobSource.includes("const SILVERFISH_SIZES:[number,number,number][]=[[3,2,2],[4,3,2],[6,4,3],[3,3,3],[2,2,3],[2,1,2],[1,1,2]]"));
+  assert.ok(mobSource.includes("const ENDERMITE_SIZES:[number,number,number][]=[[4,3,2],[6,4,5],[3,3,1],[1,2,1]]"));
+  const spiderSection = mobSource.slice(mobSource.indexOf(" spider:["), mobSource.indexOf(" blaze:["));
+  assert.equal((spiderSection.match(/pivot:\[/g) ?? []).length, 8, "Spider rig must contain eight explicitly pivoted legs");
+  assert.ok(mobSource.includes("pivot:[x,y,z],local:[0,-4,0],leg:true"), "Blaze rods must be attached to individual pivots");
+  assert.ok(mobSource.includes("pivot:[x,pivotY,z],local:[0,-length/2,0],leg:true"), "Ghast tentacles must pivot at the body");
+  assert.ok(mobSource.includes("parent.rotation.set(p.rotationX??0,p.rotationY??0,p.rotationZ??0)"));
+  assert.ok(mobSource.includes("const yaw=-Math.cos(phase*2+phaseOffsets[pair])*.4*speed"));
+  assert.ok(mobSource.includes("const roll=Math.abs(Math.sin(phase+phaseOffsets[pair])*.4)*speed"));
+  assert.ok(mobSource.includes("m.rotation.x=.2*Math.sin(ageInTicks*.3+i)+.4"));
+  assert.ok(mobSource.includes("const angularVelocity=ring===0?-.1*Math.PI:ring===1?.03*Math.PI:-.05*Math.PI"));
+  assert.ok(mobSource.includes("m.position.set(Math.cos(angle)*radius/16,(24-modelY)/16,Math.sin(angle)*radius/16)"));
 });
 
 test("dragon wings remain parented to the torso pivot instead of being detached to the root", () => {
@@ -145,4 +219,12 @@ test("villager and wandering trader use their matching 26.3 entity atlases", () 
   assert.match(mobSource, /VILLAGER_RIG_TYPES/);
   assert.ok(existsSync(path.join(root, "src/client/public/assets/minecraft/textures/entity/villager/villager.png")));
   assert.ok(existsSync(path.join(root, "src/client/public/assets/minecraft/textures/entity/wandering_trader/wandering_trader.png")));
+});
+
+test("removing or clearing mobs disposes per-instance GPU resources without disposing shared materials", () => {
+  assert.match(mobSource, /private disposeEntry\(entry:MobEntry\)/);
+  assert.match(mobSource, /mesh\.geometry\.dispose\(\)/);
+  assert.match(mobSource, /!sharedMaterials\.has\(material\)\)material\.dispose\(\)/);
+  assert.match(mobSource, /this\.disposeEntry\(e\)/);
+  assert.match(mobSource, /clear\(\)\{for\(const id of \[\.\.\.this\.entries\.keys\(\)\]\)this\.remove\(id\);\}/);
 });

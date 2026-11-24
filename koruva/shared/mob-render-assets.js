@@ -135,7 +135,7 @@ export const MOB_RENDER_TEXTURE_SIZES = Object.freeze({
   husk: [64, 64],
   iron_golem: [128, 128],
   llama: [128, 64],
-  magma_cube: [64, 32],
+  magma_cube: [64, 64],
   mooshroom: [64, 64],
   mule: [64, 64],
   nautilus: [128, 128],

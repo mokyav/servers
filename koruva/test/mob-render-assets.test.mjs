@@ -170,13 +170,13 @@ test("dedicated 26.3 mob families route to the correct rigs and keep family UVs 
     [[6,4,5],[0,5],[64,32]], // Endermite mid-body segment
   ]) assert.equal(atlasBoxFaceRects(size, uv, dims).length, 6);
 
-  assert.match(mobSource, /const BLAZE_RODS:Part\\[\\]=Array\\.from\\(\\{length:12\\}/);
-  assert.match(mobSource, /const GHAST_TENTACLE_LENGTHS=\\[10,12,9,12,8,14,11,9,12\\]/);
-  assert.match(mobSource, /const MAGMA_CUBE_SLICES:Part\\[\\]=Array\\.from\\(\\{length:8\\}/);
-  assert.match(mobSource, /const SILVERFISH_SIZES:\\[number,number,number\\]\\[\\]=\\[\\[3,2,2\\],\\[4,3,2\\],\\[6,4,3\\],\\[3,3,3\\],\\[2,2,3\\],\\[2,1,2\\],\\[1,1,2\\]\\]/);
-  assert.match(mobSource, /const ENDERMITE_SIZES:\\[number,number,number\\]\\[\\]=\\[\\[4,3,2\\],\\[6,4,5\\],\\[3,3,1\\],\\[1,2,1\\]\\]/);
-  assert.ok((mobSource.match(/pivot:\\[/g) ?? []).length >= 25, "articulated model families must have explicit pivots");
-  assert.match(mobSource, /parent\\.rotation\\.set\\(p\\.rotationX\\?\\?0,p\\.rotationY\\?\\?0,p\\.rotationZ\\?\\?0\\)/);
+  assert.ok(mobSource.includes("const BLAZE_RODS:Part[]=Array.from({length:12}"));
+  assert.ok(mobSource.includes("const GHAST_TENTACLE_LENGTHS=[10,12,9,12,8,14,11,9,12]"));
+  assert.ok(mobSource.includes("const MAGMA_CUBE_SLICES:Part[]=Array.from({length:8}"));
+  assert.ok(mobSource.includes("const SILVERFISH_SIZES:[number,number,number][]=[[3,2,2],[4,3,2],[6,4,3],[3,3,3],[2,2,3],[2,1,2],[1,1,2]]"));
+  assert.ok(mobSource.includes("const ENDERMITE_SIZES:[number,number,number][]=[[4,3,2],[6,4,5],[3,3,1],[1,2,1]]"));
+  assert.ok(mobSource.split("pivot:[").length - 1 >= 25, "articulated model families must have explicit pivots");
+  assert.ok(mobSource.includes("parent.rotation.set(p.rotationX??0,p.rotationY??0,p.rotationZ??0)"));
 });
 
 test("dragon wings remain parented to the torso pivot instead of being detached to the root", () => {

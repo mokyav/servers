@@ -368,7 +368,20 @@ export class MobModels {
   root.position.x=info.x;root.position.z=info.z;root.position.y=info.y+(Number(root.userData.yOffset)||0);
   root.userData.mobId=info.id;this.group.add(root);this.entries.set(info.id,{root,info:{...info},legs,crystal,beam,dragon,wither,warden,wings:dragon?.wings});
  }
- remove(id:string){const e=this.entries.get(id);if(e){this.group.remove(e.root);this.entries.delete(id);}}
+ private disposeEntry(entry:MobEntry){
+  const sharedMaterials=new Set<THREE.Material>([
+   ...this.entityMaterials.values(),this.dragonMat,this.dragonEyesMat,this.crystalMat,this.beamMat,
+   this.witherMaterial,this.wardenMaterial,this.wardenGlowMaterial,
+  ]);
+  entry.root.traverse((object)=>{
+   const mesh=object as THREE.Mesh;
+   if(!mesh.isMesh)return;
+   mesh.geometry.dispose();
+   const materials=Array.isArray(mesh.material)?mesh.material:[mesh.material];
+   for(const material of materials)if(material&&!sharedMaterials.has(material))material.dispose();
+  });
+ }
+ remove(id:string){const e=this.entries.get(id);if(e){this.group.remove(e.root);this.disposeEntry(e);this.entries.delete(id);}}
  clear(){for(const id of [...this.entries.keys()])this.remove(id);}
  setRenderDistance(x:number,y:number,z:number,maxDistance:number){
   const limit=Number.isFinite(maxDistance)?Math.max(0,maxDistance):48,limitSq=limit*limit;

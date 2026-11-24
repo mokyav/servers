@@ -2,7 +2,7 @@ import { MINECRAFT_BIOME_IDS } from "../../shared/minecraft-worldgen-catalog.js"
 import { minecraftBlockVariantId } from "../../shared/minecraft-block-runtime.js";
 import { END_CENTER_SURFACE_Y, END_CONTINENT_RADIUS, END_OUTER_ISLAND_MIN_DISTANCE } from "../../shared/dimensions.js";
 
-const LEGACY_WORLDGEN_VERSION = 1, WORLDGEN_VERSION = 5;
+const LEGACY_WORLDGEN_VERSION = 1, WORLDGEN_VERSION = 6;
 
 /** Twelve End Portal Frames arranged around a 3×3 opening, all facing inward. */
 export function strongholdPortalFramePlacements(cx, cz, y, frameForFacing) {
@@ -93,7 +93,7 @@ function noise3(s, x, y, z) {
   return lerp(lerp(lerp(a, b, fx), lerp(c, d, fx), fy), lerp(lerp(e, f, fx), lerp(g, h, fx), fy), fz);
 }
 export { LEGACY_WORLDGEN_VERSION, WORLDGEN_VERSION };
-export function normalizeWorldgenVersion(v) { return v === 1 ? 1 : v === 2 ? 2 : v === 3 ? 3 : v === 4 ? 4 : 5; }
+export function normalizeWorldgenVersion(v) { return v === 1 ? 1 : v === 2 ? 2 : v === 3 ? 3 : v === 4 ? 4 : v === 5 ? 5 : 6; }
 
 const choose = (list, roll) => list[Math.min(list.length - 1, Math.floor(roll * list.length))];
 const OW_VARIANTS = Object.freeze({
@@ -257,6 +257,34 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
     return spaghetti || noodle || cheese || cavern;
   }
 
+  // v6 cave shaping. The tunnel/chamber noise fields are the same family as v4,
+  // but two corrections make the underground read like real cave terrain:
+  //  1. a minimum rock roof of 6 blocks is enforced per column (the v4 test only
+  //     needed 4, which produced paper-thin ceilings right under the surface),
+  //  2. chamber thresholds are tightened a little so carved volume stays a
+  //     believable fraction of the rock instead of honeycombing whole chunks.
+  // Both tests depend only on column height and world position, so chunk load
+  // order cannot change the result.
+  function caveV6(seed, x, y, z, surfaceY = heightAt(seed, x, z)) {
+    if (y < 3 || y >= H - 3) return false;
+    if (surfaceY - y < 6) return false;
+    const warp = (noise3(seed + 7003, x / 38, y / 24, z / 38) - 0.5) * 9;
+    const wx = x + warp;
+    const spaghettiA = Math.abs(noise3(seed + 7001, wx / 31, y / 17, z / 31) - 0.5);
+    const spaghettiB = Math.abs(noise3(seed + 9059, wx / 12, y / 9, z / 12) - 0.5);
+    const noodleA = Math.abs(noise3(seed + 9067, x / 10, y / 7, z / 10) - 0.5);
+    const noodleB = Math.abs(noise3(seed + 9071, x / 24, y / 15, z / 24) - 0.5);
+    const cheeseWide = noise3(seed + 7111, x / 54, y / 29, z / 54);
+    const cheeseFine = noise3(seed + 7117, x / 27, y / 16, z / 27);
+    const cavernWide = noise3(seed + 7121, x / 43, y / 22, z / 43);
+    const cavernFine = noise3(seed + 7127, x / 19, y / 12, z / 19);
+    const spaghetti = spaghettiA < 0.056 && spaghettiB < 0.175;
+    const noodle = noodleA < 0.030 && noodleB < 0.195;
+    const cheese = cheeseWide > 0.790 && cheeseFine > 0.455;
+    const cavern = cavernWide > 0.822 && cavernFine > 0.412;
+    return spaghetti || noodle || cheese || cavern;
+  }
+
   function caveFluidV4(seed, x, y, z, waterId, lavaId) {
     const lavaPocket = noise3(seed + 7141, x / 24, y / 13, z / 24);
     if (y <= Math.max(4, Math.floor(H * 0.055)) && lavaPocket > 0.56) return lavaId;
@@ -279,7 +307,49 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
     return clamp(Math.round(value), minY, maxY);
   }
 
-  function generateOreVeinsV4(data, ox, oz, seed, chunkCx, chunkCz, surfaceHeights, caveAt) {
+  // Ore profiles for saved v4 worlds. These are deliberately dense; v6 replaces
+  // them with vanilla-scaled counts (see ORE_PROFILES_V6) so that ore is a rare
+  // find in rock instead of the dominant underground material.
+  const ORE_PROFILES_V4 = [
+    { token: "coal_ore", deep: "deepslate_coal_ore", salt: 1103, tries: 7, minY: 3, max: h => h - 4, peak: h => Math.min(h - 5, H * 0.52), minSize: 6, maxSize: 13, radius: 1.12 },
+    { token: "iron_ore", deep: "deepslate_iron_ore", salt: 2207, tries: 5, minY: 3, max: h => Math.min(h - 4, H * 0.62), peak: h => Math.min(H * 0.27, h - 5), minSize: 5, maxSize: 10, radius: 1.02 },
+    { token: "copper_ore", deep: "deepslate_copper_ore", salt: 3301, tries: 6, minY: 4, max: h => Math.min(h - 4, H * 0.57), peak: h => Math.min(H * 0.36, h - 5), minSize: 7, maxSize: 13, radius: 1.22 },
+    { token: "gold_ore", deep: "deepslate_gold_ore", salt: 4409, tries: 4, minY: 2, max: h => Math.min(h - 4, H * 0.36), peak: h => Math.min(H * 0.11, h - 5), minSize: 4, maxSize: 8, radius: 0.94 },
+    { token: "redstone_ore", deep: "deepslate_redstone_ore", salt: 5519, tries: 5, minY: 2, max: h => Math.min(h - 3, H * 0.22), peak: h => Math.min(H * 0.045, h - 4), minSize: 4, maxSize: 8, radius: 0.88 },
+    { token: "diamond_ore", deep: "deepslate_diamond_ore", salt: 6637, tries: 4, minY: 2, max: h => Math.min(h - 4, H * 0.18), peak: h => Math.min(H * 0.035, h - 5), minSize: 2, maxSize: 5, radius: 0.72, exposureDiscard: 0.62 },
+    { token: "lapis_ore", deep: "deepslate_lapis_ore", salt: 7753, tries: 3, minY: 3, max: h => Math.min(h - 4, H * 0.38), peak: h => Math.min(H * 0.16, h - 5), minSize: 4, maxSize: 8, radius: 0.9 },
+    { token: "emerald_ore", deep: "deepslate_emerald_ore", salt: 8861, tries: 5, minY: 5, max: h => h - 3, peak: h => h - 6, minSize: 1, maxSize: 1, radius: 0.2, mountainOnly: true, spawnChance: 0.32 },
+  ];
+
+  // v6 ore profiles. Vanilla Java ore placements live in a 384-block world
+  // (-64..319, sea level 63); Koruva is 128 blocks tall with sea level 22, so a
+  // vanilla Y is mapped with yKoruva = (yVanilla + 64) / 3 and every band is
+  // clamped below the local surface. Vein counts are scaled down so ore is a
+  // sparse find in rock (about 2% of solids, versus the ~20% the v4 table
+  // produced) and the relative rarity of each ore still follows vanilla order:
+  // coal > iron > copper > redstone > lapis > gold > diamond > emerald.
+  const ORE_PROFILES_V6 = [
+    { token: "coal_ore", deep: "deepslate_coal_ore", salt: 1103, tries: 4, minY: 3, max: h => h - 4, peak: h => Math.min(h - 5, H * 0.62), minSize: 4, maxSize: 10, radius: 0.62 },
+    { token: "iron_ore", deep: "deepslate_iron_ore", salt: 2207, tries: 4, minY: 2, max: h => Math.min(h - 4, H * 0.80), peak: h => Math.min(H * 0.42, h - 5), minSize: 3, maxSize: 7, radius: 0.55 },
+    { token: "copper_ore", deep: "deepslate_copper_ore", salt: 3301, tries: 1, minY: 4, max: h => Math.min(h - 4, H * 0.55), peak: h => Math.min(H * 0.30, h - 5), minSize: 5, maxSize: 10, radius: 0.68 },
+    { token: "gold_ore", deep: "deepslate_gold_ore", salt: 4409, tries: 1, minY: 2, max: h => Math.min(h - 4, H * 0.20), peak: h => Math.min(H * 0.08, h - 5), minSize: 3, maxSize: 6, radius: 0.45 },
+    { token: "redstone_ore", deep: "deepslate_redstone_ore", salt: 5519, tries: 2, minY: 2, max: h => Math.min(h - 3, H * 0.16), peak: h => Math.min(H * 0.035, h - 4), minSize: 3, maxSize: 6, radius: 0.44 },
+    { token: "diamond_ore", deep: "deepslate_diamond_ore", salt: 6637, tries: 1, minY: 2, max: h => Math.min(h - 4, H * 0.10), peak: h => Math.min(H * 0.02, h - 5), minSize: 2, maxSize: 4, radius: 0.45, exposureDiscard: 0.5 },
+    { token: "lapis_ore", deep: "deepslate_lapis_ore", salt: 7753, tries: 1, minY: 3, max: h => Math.min(h - 4, H * 0.22), peak: h => Math.min(H * 0.09, h - 5), minSize: 3, maxSize: 6, radius: 0.42 },
+    { token: "emerald_ore", deep: "deepslate_emerald_ore", salt: 8861, tries: 2, minY: 5, max: h => h - 3, peak: h => h - 6, minSize: 1, maxSize: 1, radius: 0.2, mountainOnly: true, spawnChance: 0.3 },
+  ];
+
+  // v6 deepslate boundary. A constant level would put deepslate at the grass line
+  // because Koruva's land sits around y=23 in a 128-block world. The v6 boundary
+  // is therefore a low, noisy surface (roughly y=7..13) so stone stays the normal
+  // underground layer and deepslate only appears in the deep dark.
+  function deepslateLevelAt(seed, x, z) {
+    const warp = noise3(seed + 6101, x / 41, 0.5, z / 41) - 0.5;
+    const fine = noise3(seed + 6103, x / 17, 2.5, z / 17) - 0.5;
+    return clamp(Math.round(H * 0.055 + warp * 7 + fine * 2.2), 5, Math.max(6, Math.round(H * 0.115)));
+  }
+
+  function generateOreVeinsV4(data, ox, oz, seed, chunkCx, chunkCz, surfaceHeights, caveAt, options = {}) {
     const stone = block("stone", B.STONE);
     const deepslate = block("deepslate", stone);
     const tuff = block("tuff", stone);
@@ -287,17 +357,14 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
     const diorite = block("diorite", stone);
     const andesite = block("andesite", stone);
     const replaceable = new Set([stone, deepslate, tuff, granite, diorite, andesite].filter(id => id > 0));
-    const deepLevel = Math.max(4, Math.min(H - 8, Math.round(H * 0.17)));
-    const profiles = [
-      { token: "coal_ore", deep: "deepslate_coal_ore", salt: 1103, tries: 7, minY: 3, max: h => h - 4, peak: h => Math.min(h - 5, H * 0.52), minSize: 6, maxSize: 13, radius: 1.12 },
-      { token: "iron_ore", deep: "deepslate_iron_ore", salt: 2207, tries: 5, minY: 3, max: h => Math.min(h - 4, H * 0.62), peak: h => Math.min(H * 0.27, h - 5), minSize: 5, maxSize: 10, radius: 1.02 },
-      { token: "copper_ore", deep: "deepslate_copper_ore", salt: 3301, tries: 6, minY: 4, max: h => Math.min(h - 4, H * 0.57), peak: h => Math.min(H * 0.36, h - 5), minSize: 7, maxSize: 13, radius: 1.22 },
-      { token: "gold_ore", deep: "deepslate_gold_ore", salt: 4409, tries: 4, minY: 2, max: h => Math.min(h - 4, H * 0.36), peak: h => Math.min(H * 0.11, h - 5), minSize: 4, maxSize: 8, radius: 0.94 },
-      { token: "redstone_ore", deep: "deepslate_redstone_ore", salt: 5519, tries: 5, minY: 2, max: h => Math.min(h - 3, H * 0.22), peak: h => Math.min(H * 0.045, h - 4), minSize: 4, maxSize: 8, radius: 0.88 },
-      { token: "diamond_ore", deep: "deepslate_diamond_ore", salt: 6637, tries: 4, minY: 2, max: h => Math.min(h - 4, H * 0.18), peak: h => Math.min(H * 0.035, h - 5), minSize: 2, maxSize: 5, radius: 0.72, exposureDiscard: 0.62 },
-      { token: "lapis_ore", deep: "deepslate_lapis_ore", salt: 7753, tries: 3, minY: 3, max: h => Math.min(h - 4, H * 0.38), peak: h => Math.min(H * 0.16, h - 5), minSize: 4, maxSize: 8, radius: 0.9 },
-      { token: "emerald_ore", deep: "deepslate_emerald_ore", salt: 8861, tries: 5, minY: 5, max: h => h - 3, peak: h => h - 6, minSize: 1, maxSize: 1, radius: 0.2, mountainOnly: true, spawnChance: 0.32 },
-    ];
+    const flatDeepLevel = Number.isInteger(options.deepLevel)
+      ? options.deepLevel
+      : Math.max(4, Math.min(H - 8, Math.round(H * 0.17)));
+    const deepLevelAt = typeof options.deepLevelAt === "function"
+      ? options.deepLevelAt
+      : () => flatDeepLevel;
+    const profiles = options.profiles || ORE_PROFILES_V4;
+    const badlandsBonus = options.badlandsBonus !== false;
     const mountainBiomes = new Set(["meadow", "grove", "snowy_slopes", "frozen_peaks", "jagged_peaks", "stony_peaks", "windswept_hills", "windswept_gravelly_hills", "windswept_savanna"]);
     const localIndex = (x, y, z) => (y * S + z) * S + x;
     const water = block("water", B.WATER);
@@ -356,7 +423,7 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
                 const index = localIndex(lx, y, lz);
                 if (!replaceable.has(data[index])) continue;
                 if (profile.exposureDiscard && exposesCave(x, y, z) && rand3(seed + salt + 19, x, y, z) < profile.exposureDiscard) continue;
-                data[index] = y <= deepLevel || data[index] === deepslate ? deepId : normalId;
+                data[index] = y <= deepLevelAt(x, z) || data[index] === deepslate ? deepId : normalId;
               }
             }
           }
@@ -380,7 +447,7 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
         if (lx < 0 || lx >= S || lz < 0 || lz >= S) continue;
         const index = localIndex(lx, y, lz);
         const existing = data[index];
-        if (replaceable.has(existing)) data[index] = y <= deepLevel ? block("deepslate_gold_ore", block("gold_ore", 0)) : block("gold_ore", 0);
+        if (replaceable.has(existing)) data[index] = y <= deepLevelAt(x, z) ? block("deepslate_gold_ore", block("gold_ore", 0)) : block("gold_ore", 0);
       }
     }
   }
@@ -659,6 +726,7 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
     const bedrock = block("bedrock", B.BEDROCK);
     const water = block("water", B.WATER);
     const lava = block("lava", B.LAVA);
+    const v6Deepslate = version >= 6;
     const deepLevel = Math.max(4, Math.min(H - 8, Math.round(H * 0.17)));
     const rockIds = new Set([stone, deepslate, tuff, granite, diorite, andesite].filter(id => id > 0));
     const surfaceHeights = new Uint16Array(S * S);
@@ -671,12 +739,15 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
       const biome = biomeAt(seed, wx, wz, WORLDGEN_VERSION);
       const coast = h <= SEA + 3;
       const [topBlock, subBlock] = surfaceFor(biome);
+      // v6 keeps stone as the normal underground layer and pushes deepslate down
+      // to a low, noisy boundary; v4/v5 keep their single flat boundary.
+      const columnDeepLevel = v6Deepslate ? Math.min(deepslateLevelAt(seed, wx, wz), Math.max(4, h - 6)) : deepLevel;
       for (let y = 0; y <= h; y++) {
         let id = stone;
         if (y === 0) id = bedrock;
         else if (y === h) id = coast && !biome.includes("desert") ? block("sand", B.SAND) : topBlock;
         else if (y >= h - 3) id = y === h - 1 && (biome === "desert" || biome.includes("badlands")) ? block("sandstone", B.SANDSTONE) : subBlock;
-        else if (y <= deepLevel) {
+        else if (y <= columnDeepLevel) {
           const tuffPocket = noise3(seed + 5003, wx / 23, y / 11, wz / 23) > 0.80 && y > 3;
           id = tuffPocket ? tuff : deepslate;
         } else {
@@ -690,12 +761,16 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
       for (let y = h + 1; y <= SEA; y++) data[idx(x, y, z)] = water;
     }
 
+    // v6 reshapes the carve test so shallow ground keeps a solid roof; saved
+    // v4/v5 worlds keep their original carving function unchanged.
+    const caveAt = version >= 6 ? caveV6 : caveV4;
+
     // Carve caves only after terrain columns are complete; cave air is kept below cover.
     for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) {
       const wx = ox + x, wz = oz + z, h = surfaceHeights[z * S + x];
       for (let y = 3; y <= h - 4; y++) {
         const index = idx(x, y, z);
-        if (!rockIds.has(data[index]) || !caveV4(seed, wx, y, wz, h)) continue;
+        if (!rockIds.has(data[index]) || !caveAt(seed, wx, y, wz, h)) continue;
         const caveBiome = caveBiomeAtV4(seed, wx, y, wz);
         caveKinds[index] = caveBiome === "lush_caves" ? 1
           : caveBiome === "dripstone_caves" ? 2
@@ -708,8 +783,17 @@ export function createWorldgen({ blocks: B, blockIds = {}, chunkSize: S, chunkVo
     // Geodes are a dedicated underground feature step and run only for new v5 chunks.
     if (version >= 5) decorateAmethystGeodesV5(data, ox, oz, seed, rockIds);
 
-    // Generate ores after carving, so cave walls expose ore clusters.
-    generateOreVeinsV4(data, ox, oz, seed, cx, cz, surfaceHeights, caveV4);
+    // Generate ores after carving, so cave walls expose ore clusters. v6 uses the
+    // sparse vanilla-scaled profile table instead of the dense v4 distribution.
+    if (version >= 6) {
+      generateOreVeinsV4(data, ox, oz, seed, cx, cz, surfaceHeights, caveAt, {
+        profiles: ORE_PROFILES_V6,
+        badlandsBonus: false,
+        deepLevelAt: (x, z) => Math.min(deepslateLevelAt(seed, x, z), Math.max(4, heightAt(seed, x, z) - 4)),
+      });
+    } else {
+      generateOreVeinsV4(data, ox, oz, seed, cx, cz, surfaceHeights, caveAt);
+    }
 
     // Detailed cave-biome vegetation, wall attachments, and supported formations.
     if (version >= 5) decorateCaveBiomeBlocksV5(data, caveKinds, ox, oz, seed, rockIds);

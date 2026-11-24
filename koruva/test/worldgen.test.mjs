@@ -116,9 +116,11 @@ test("End main continent has a constant surface Y and the End arrival coordinate
 
 
 test("v5 adds Java 26.3 cave formations, geodes, and attached cave blocks deterministically", () => {
-  assert.equal(WORLDGEN_VERSION, 5);
+  assert.equal(WORLDGEN_VERSION, 6);
   assert.equal(normalizeWorldgenVersion(4), 4, "saved v4 worlds must retain their generator");
-  assert.equal(normalizeWorldgenVersion(5), 5);
+  assert.equal(normalizeWorldgenVersion(5), 5, "saved v5 worlds must retain their generator");
+  assert.equal(normalizeWorldgenVersion(6), 6);
+  assert.equal(normalizeWorldgenVersion(undefined), 6, "unknown versions fall back to the current generator");
   const seed = 20261123;
   const names = ["smooth_basalt", "calcite", "amethyst_block", "budding_amethyst", "amethyst_cluster", "glow_lichen", "pointed_dripstone", "sculk_vein", "hanging_roots", "rooted_dirt", "sulfur_spike"];
   const ids = Object.fromEntries(names.map(name => [name, MINECRAFT_BLOCK_TO_RUNTIME_ID["minecraft:" + name] ?? 0]));
@@ -143,4 +145,118 @@ test("v5 keeps v4 saved-room generation selectable after the default version cha
   const room = readFileSync(new URL("../src/worker/room.ts", import.meta.url), "utf8");
   assert.ok(room.includes("normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION)"));
   assert.ok(!room.includes("this.meta?.worldgenVersion===WORLDGEN_VERSION?WORLDGEN_VERSION:LEGACY_WORLDGEN_VERSION"));
+});
+
+// --- v6: cave terrain shape and ore distribution -------------------------
+
+test("v6 keeps a solid rock roof over every cave so the surface is never pierced", () => {
+  const seed = 20261123;
+  let caveColumns = 0, thinRoof = 0, breached = 0, minRoof = 999;
+  for (let cz = -2; cz <= 2; cz++) for (let cx = -2; cx <= 2; cx++) {
+    const data = genV5.generateChunk(seed, cx, cz, 6);
+    for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) {
+      const h = genV5.heightAt(seed, cx * S + x, cz * S + z);
+      // The top-most cave air in a column is what decides whether the surface
+      // could be breached, so measure the rock band above that cell only.
+      let topCaveY = -1;
+      for (let y = 3; y < h; y++) if (data[idx(x, y, z)] === B.AIR) topCaveY = y;
+      if (topCaveY < 0) continue;
+      caveColumns++;
+      let roof = 0;
+      for (let yy = topCaveY + 1; yy <= h; yy++) {
+        const above = data[idx(x, yy, z)];
+        if (above === B.AIR || above === B.WATER) break;
+        roof++;
+      }
+      if (roof < minRoof) minRoof = roof;
+      if (roof === 0) breached++;
+      else if (roof < 4) thinRoof++;
+    }
+  }
+  assert.ok(caveColumns > 500, `expected cave columns, got ${caveColumns}`);
+  assert.equal(breached, 0, "v6 must never open a cave through the surface");
+  assert.equal(thinRoof, 0, "v6 must not leave paper-thin cave ceilings");
+  assert.ok(minRoof >= 6, `cave roof must be at least 6 blocks, got ${minRoof}`);
+});
+
+test("v6 carves connected cave networks instead of isolated pockets", () => {
+  const seed = 20261123;
+  const data = genV5.generateChunk(seed, -2, 1, 6);
+  let air = 0, adjacent = 0;
+  for (let y = 3; y < H - 3; y++) for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) {
+    if (data[idx(x, y, z)] !== B.AIR) continue;
+    air++;
+    if ((x + 1 < S && data[idx(x + 1, y, z)] === B.AIR)
+      || (y + 1 < H && data[idx(x, y + 1, z)] === B.AIR)
+      || (z + 1 < S && data[idx(x, y, z + 1)] === B.AIR)) adjacent++;
+  }
+  assert.ok(air > 80, `expected cave volume, got ${air}`);
+  assert.ok(adjacent > air * 0.45, `v6 caves should stay connected, got ${adjacent}/${air}`);
+});
+
+test("v6 ore is a sparse fraction of stone and keeps vanilla rarity order", () => {
+  const seed = 20261123;
+  const families = ["coal_ore", "iron_ore", "copper_ore", "gold_ore", "redstone_ore", "diamond_ore", "lapis_ore"];
+  const counts = new Map(families.map(name => [name, 0]));
+  let ore = 0, solids = 0;
+  for (let cz = -2; cz <= 2; cz++) for (let cx = -2; cx <= 2; cx++) {
+    const data = genV5.generateChunk(seed, cx, cz, 6);
+    for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) {
+      const h = genV5.heightAt(seed, cx * S + x, cz * S + z);
+      for (let y = 1; y < h; y++) {
+        const id = data[idx(x, y, z)];
+        if (id === B.AIR || id === B.WATER) continue;
+        const token = MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID[id]?.token;
+        if (token && /_ore$/.test(token)) {
+          ore++;
+          const family = token.replace(/^deepslate_/, "");
+          if (counts.has(family)) counts.set(family, counts.get(family) + 1);
+        } else solids++;
+      }
+    }
+  }
+  const share = ore / (ore + solids);
+  assert.ok(share < 0.08, `v6 ore must stay sparse, got ${(share * 100).toFixed(2)}% of solids`);
+  assert.ok(share > 0.005, `v6 must still generate ore, got ${(share * 100).toFixed(2)}% of solids`);
+  for (const name of families) assert.ok(counts.get(name) > 0, `missing ${name}`);
+  // Vanilla rarity order in Koruva's shrunken world.
+  assert.ok(counts.get("coal_ore") > counts.get("diamond_ore"), "coal must be more common than diamond");
+  assert.ok(counts.get("iron_ore") > counts.get("gold_ore"), "iron must be more common than gold");
+  assert.ok(counts.get("diamond_ore") < counts.get("redstone_ore"), "diamond must be rarer than redstone");
+});
+
+test("v6 keeps stone as the normal underground rock and deepslate in the deep dark", () => {
+  const seed = 20261123;
+  const deepBound = Math.round(H * 0.115);
+  let deepslateAbove = 0, stone = 0, deepslate = 0, maxDeepslateY = 0, upperStone = 0;
+  for (let cz = -2; cz <= 2; cz++) for (let cx = -2; cx <= 2; cx++) {
+    const data = genV5.generateChunk(seed, cx, cz, 6);
+    for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) {
+      const h = genV5.heightAt(seed, cx * S + x, cz * S + z);
+      for (let y = 1; y < h; y++) {
+        const token = MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID[data[idx(x, y, z)]]?.token;
+        if (token === "stone") {
+          stone++;
+          if (y > deepBound && y < h - 4) upperStone++;
+        } else if (token === "deepslate") {
+          deepslate++;
+          if (y > maxDeepslateY) maxDeepslateY = y;
+          if (y > deepBound) deepslateAbove++;
+        }
+      }
+    }
+  }
+  assert.ok(stone > 0 && deepslate > 0, "both stone and deepslate must generate");
+  assert.ok(upperStone > 0, "stone must be the normal rock above the deepslate boundary");
+  assert.equal(deepslateAbove, 0, "deepslate must stay below the deep boundary");
+  assert.ok(maxDeepslateY <= deepBound, `deepslate reached y=${maxDeepslateY} above bound ${deepBound}`);
+});
+
+test("v6 is deterministic and v4/v5 saved worlds stay byte-identical", () => {
+  const seed = 20261123;
+  assert.equal(sha(genV5.generateChunk(seed, -2, 1, 6)), "ab2d8d5c0657ef744ce54d1344748fa17e243066c4a0a18ad78f52ed027a066e");
+  assert.equal(sha(genV5.generateChunk(seed, -2, 1, 6)), sha(genV5.generateChunk(seed, -2, 1, 6)));
+  // Saved v4/v5 rooms must keep generating exactly what they did before v6 landed.
+  assert.equal(sha(genV5.generateChunk(seed, -2, 1, 4)), "f8bde7b17fc466efb762d4cf1b38e23e7a331a0311ec963dedc2aee414c631fa");
+  assert.equal(sha(genV5.generateChunk(seed, -2, 1, 5)), "227c2c36ab54bd344e6b71f8d123b6cc9d3667b3fd37daccde9768629ce3506f");
 });

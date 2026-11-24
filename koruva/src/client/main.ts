@@ -50,6 +50,8 @@ import { blockToken, canBlockStay, canPlaceBlockAt, isFallingBlock, isReplaceabl
 import { heightAt, LEGACY_WORLDGEN_VERSION, normalizeWorldgenVersion, WORLDGEN_VERSION } from "./worldgen";
 import { readMinecraftSkin } from "./skin-upload";
 import { DEFAULT_SKIN_IMAGE } from "./default-skin";
+import { sound } from "./sound";
+import type { MobInfo } from "../../shared/entities";
 
 import { nextRepeaterDelayBlockId } from "../../shared/redstone-world.js";
 import { createSoloRedstoneRuntime } from "../../shared/solo-redstone.js";
@@ -219,6 +221,16 @@ class Game {
   digT = 0;
   digReady = false;
   digToolId = -1;
+  private digSoundT = 0;
+  private footDist = 0;
+  private wasInWater = false;
+  private eatSoundT = 0;
+  private nextMobSayAt = 0;
+  private nextCaveAt = 0;
+  private lastXpLevel = -1;
+  private lastXpTotal = 0;
+  private lastHurtSoundAt = 0;
+  private soundMobs = new Map<string, { type: string; x: number; y: number; z: number; health: number; state: string; hurtSeenAt: number }>();
   lastDeny = 0;
   lockReqAt = 0;
   lockRetries = 0;
@@ -253,6 +265,15 @@ class Game {
   spawn: [number, number, number] = [0.5, 40, 0.5];
 
   constructor() {
+    void sound.init();
+    const unlockAudio = () => sound.unlock();
+    addEventListener("pointerdown", unlockAudio, { capture: true });
+    addEventListener("keydown", unlockAudio, { capture: true });
+    addEventListener("click", event => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("button")) sound.ui();
+    }, { capture: true });
+
     $("game-version").textContent = `Version ${__KORUVA_VERSION__}`;
     this.chat.setNameProvider(() => [this.profile.name, ...this.remotes.names().map(p => p.name)]);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -442,6 +463,15 @@ class Game {
     $("btn-admin-close").addEventListener("click", () => this.closeAdmin());
     $("btn-copycode").addEventListener("click", () => this.copyLink());
     $("copylink").addEventListener("click", () => this.copyLink());
+    const volume = $<HTMLInputElement>("volume");
+    const volumeValue = $("volval");
+    volume.value = String(Math.round(sound.volume * 100));
+    volumeValue.textContent = volume.value;
+    volume.addEventListener("input", () => {
+      sound.setVolume(Number(volume.value) / 100);
+      volumeValue.textContent = volume.value;
+      sound.fx("random/pop", { key: "volume-test", minGap: 0.15 });
+    });
     const rd = $<HTMLInputElement>("rd"), sens = $<HTMLInputElement>("sens");
     const quality = $<HTMLSelectElement>("quality-level"), autoOptimize = $<HTMLInputElement>("auto-optimize");
     const entityDistance = $<HTMLInputElement>("entity-distance");
@@ -556,7 +586,10 @@ class Game {
 
   attackMob(mobId: string, now: number) {
     const heldItemId = this.hotbar[this.sel] ?? 0;
-    this.updateAttackCharge(now);
+    const charge = this.updateAttackCharge(now);
+    const critical = charge > 0.9 && !this.body.onGround && this.body.vy < 0 && !this.fly;
+    const soundType = critical ? "crit" : charge > 0.9 ? "strong" : "weak";
+    sound.fx("entity/player/attack/" + soundType, { key: "player-attack", minGap: 0.05 });
     this.net.send({ t: "attack", mobId, heldItemId, slotKey: `hotbar:${this.sel}` });
     this.lastAttackAt = now;
     this.lastAttackItemId = heldItemId;
@@ -1861,6 +1894,7 @@ class Game {
       return false;
     }
     this.view.clear();
+    this.soundMobs.clear();
     this.body = { x: safe.x, y: safe.y, z: safe.z, vx: 0, vy: 0, vz: 0, onGround: false };
     this.spawn = [safe.x, safe.y, safe.z];
     this.target = null; this.digKey = ""; this.digT = 0; this.digReady = false;
@@ -1868,6 +1902,7 @@ class Game {
     const labels: Record<string, string> = {
       [DIMENSION_IDS.OVERWORLD]: "オーバーワールド", [DIMENSION_IDS.NETHER]: "ネザー", [DIMENSION_IDS.END]: "ジ・エンド",
     };
+    sound.fx("portal/travel", { key: "solo-dimension-travel" });
     this.chat.add(`${labels[target]}へ移動しました`);
     this.autosave(true);
     return true;
@@ -1910,6 +1945,7 @@ class Game {
     this.ready = false;
     this.state = "title";
     this.remotes.clear();
+    this.soundMobs.clear();
     this.view.clear();
     this.world.reset(1);
     $("hud").hidden = true;
@@ -1937,6 +1973,7 @@ class Game {
 
   startSolo(fresh: boolean) {
     this.mode = "solo";
+    this.soundMobs.clear();
     this.gameMode = "creative"; // ソロは常にクリエイティブ
     this.isHost = false;
     this.fly = false;
@@ -2080,7 +2117,9 @@ class Game {
           this.elytraDamage = Math.max(0, Math.min(432, Math.floor(Number(m.elytraDamage) || 0)));
           this.fallFlying = false;
           this.syncInventorySlots();
-          this.mobModels.clear(); for (const mob of m.mobs) this.mobModels.add(mob);
+          this.mobModels.clear();
+          this.soundMobs.clear();
+          for (const mob of m.mobs) { this.trackMobSound(mob); this.mobModels.add(mob); }
           this.projectileEntities.clear(); for (const projectile of m.projectiles ?? []) this.projectileEntities.add(projectile);
         } else if (m.t === "edits" && gotInit) {
           this.world.importEdits(m.list);
@@ -2245,6 +2284,7 @@ class Game {
     switch (m.t) {
       case "dimension": {
         this.pending.clear();
+        this.soundMobs.clear();
         this.world.reset(m.seed, normalizeWorldgenVersion(m.worldgenVersion ?? LEGACY_WORLDGEN_VERSION), m.dimensionId);
         this.view.clear();
         this.remotes.clear(); for (const player of m.players) this.remotes.add(player);
@@ -2262,6 +2302,7 @@ class Game {
         this.keys.clear(); this.mouseL = this.mouseR = false;
         this.net.send({ t: "pos", p: [pos.x, pos.y, pos.z], r: [this.yaw, this.pitch] });
         this.autosave(true);
+        sound.fx("portal/travel", { key: "server-dimension-travel" });
         this.chat.add(`ディメンションを切り替えました: ${m.dimensionId}`);
         break;
       }
@@ -2294,9 +2335,14 @@ class Game {
       case "rocket-boost": this.body.vx += m.vx; this.body.vy += m.vy; this.body.vz += m.vz; break;
       case "impulse": this.body.vx += m.vx; this.body.vy += m.vy; this.body.vz += m.vz; break;
       case "fishing":
-        this.projectileEntities.addBobber(m.id,m.x,m.y,m.z,m.state);
-        if(m.ownerId===this.myId && m.state==="bite") toast("魚が食いついた！右クリックで釣り上げてください");
-        else if(m.ownerId===this.myId) toast("釣り糸を垂らしました");
+        this.projectileEntities.addBobber(m.id, m.x, m.y, m.z, m.state);
+        if (m.ownerId === this.myId && m.state === "bite") {
+          sound.fx("liquid/splash", { at: [m.x, m.y, m.z], key: "server-fishing-bite", minGap: 0.2 });
+          toast("魚が食いついた！右クリックで釣り上げてください");
+        } else if (m.ownerId === this.myId) {
+          sound.play("entity/bobber/castfast.ogg", { key: "server-fishing-cast" });
+          toast("釣り糸を垂らしました");
+        }
         break;
       case "fishing-gone": this.projectileEntities.removeBobber(m.id); break;
       case "bossbar": {
@@ -2343,9 +2389,11 @@ class Game {
         if (this.state === "furnace") this.renderFurnacePanel();
         break;
       }
-      case "mob": this.mobModels.add(m.mob); break;
-      case "mobbatch": for (const mob of m.mobs) this.mobModels.add(mob); break;
-      case "mobgone": this.mobModels.remove(m.id); break;
+      case "mob": this.trackMobSound(m.mob); this.mobModels.add(m.mob); break;
+      case "mobbatch":
+        for (const mob of m.mobs) { this.trackMobSound(mob); this.mobModels.add(mob); }
+        break;
+      case "mobgone": this.mobGoneSound(m.id); this.mobModels.remove(m.id); break;
       case "projectile": this.projectileEntities.add(m.projectile); break;
       case "projectilegone": this.projectileEntities.remove(m.eid); break;
       case "gone": {
@@ -2357,10 +2405,17 @@ class Game {
       }
       case "mode": this.applyGameMode(m.mode); break;
       case "stats": if (m.id === this.myId) this.applyVitals(m.vitals, m.event); break;
-      case "set":
-        this.pending.delete(`${m.x},${m.y},${m.z}`);
+      case "set": {
+        const key = m.x + "," + m.y + "," + m.z;
+        const previous = this.world.get(m.x, m.y, m.z);
+        const ownChange = this.pending.has(key) || (!!m.id && m.id === this.myId);
+        this.pending.delete(key);
         this.world.setBlock(m.x, m.y, m.z, m.b);
+        if (previous !== -1 && previous !== m.b) {
+          this.blockChangeSound(previous, m.b, m.x, m.y, m.z, !ownChange);
+        }
         break;
+      }
       case "chat": if (m.name === "") this.chat.add(m.text); else this.chat.add(m.text, m.name); break;
       case "reject": {
         const k = `${m.x},${m.y},${m.z}`;
@@ -2380,21 +2435,160 @@ class Game {
   }
 
   // ------------------------------------------------------------ block edit
+
+  private trackMobSound(mob: MobInfo) {
+    if (!mob || typeof mob.id !== "string" || !mob.id) return;
+    if (![mob.x, mob.y, mob.z].every(Number.isFinite)) return;
+    const previous = this.soundMobs.get(mob.id);
+    const health = Number.isFinite(mob.health) ? Number(mob.health) : (previous?.health ?? Number(mob.maxHealth ?? 1));
+    const state = mob.state ?? "idle";
+    const at: [number, number, number] = [mob.x, mob.y + 0.6, mob.z];
+    let hurtSeenAt = previous?.hurtSeenAt ?? Number.NEGATIVE_INFINITY;
+    if (previous && health < previous.health) {
+      hurtSeenAt = performance.now();
+      sound.mob(mob.type, "hurt", at);
+    }
+    if (mob.type === "creeper" && state === "fuse" && previous && previous.state !== "fuse") {
+      sound.play("random/fuse.ogg", { at, range: 16, key: "creeper-fuse-" + mob.id });
+    }
+    this.soundMobs.set(mob.id, { type: mob.type, x: mob.x, y: mob.y, z: mob.z, health, state, hurtSeenAt });
+    while (this.soundMobs.size > 400) {
+      const oldest = this.soundMobs.keys().next();
+      if (oldest.done) break;
+      this.soundMobs.delete(oldest.value);
+    }
+  }
+
+  private mobGoneSound(id: string) {
+    const tracked = this.soundMobs.get(id);
+    this.soundMobs.delete(id);
+    if (!tracked || tracked.type === "end_crystal") return;
+    if (tracked.type === "creeper" && tracked.state === "fuse") {
+      sound.fx("random/explode", { at: [tracked.x, tracked.y + 0.6, tracked.z], range: 48, key: "creeper-explosion", minGap: 0.25 });
+      return;
+    }
+    const recentlyHurt = performance.now() - tracked.hurtSeenAt < 2500;
+    if (tracked.health <= 0 || recentlyHurt) {
+      sound.mob(tracked.type, "death", [tracked.x, tracked.y + 0.6, tracked.z]);
+    }
+  }
+
+  private updateAudio(dt: number) {
+    const body = this.body;
+    sound.setListener(body.x, body.y + this.eyeH, body.z, this.yaw);
+
+    if (this.state === "playing" && this.vitals.eatingFoodId) {
+      this.eatSoundT -= dt;
+      if (this.eatSoundT <= 0) {
+        this.eatSoundT = 0.28;
+        sound.fx("random/eat", { volume: 0.75, pitch: 0.92 + Math.random() * 0.16, key: "food-eating" });
+      }
+    } else this.eatSoundT = 0;
+
+    const now = performance.now();
+    if (this.state === "playing" && now >= this.nextMobSayAt) {
+      this.nextMobSayAt = now + 4500 + Math.random() * 8500;
+      const nearby: { type: string; x: number; y: number; z: number }[] = [];
+      for (const mob of this.soundMobs.values()) {
+        if (mob.type !== "end_crystal" && Math.hypot(mob.x - body.x, mob.y - body.y, mob.z - body.z) < 16) {
+          nearby.push(mob);
+        }
+      }
+      if (nearby.length) {
+        const mob = nearby[Math.floor(Math.random() * nearby.length)];
+        sound.mob(mob.type, "say", [mob.x, mob.y + 0.6, mob.z]);
+      }
+    }
+
+    if (this.state === "playing" && now >= this.nextCaveAt) {
+      this.nextCaveAt = now + 25000 + Math.random() * 45000;
+      if (body.y < 40 && this.world.dimensionId === DIMENSION_IDS.OVERWORLD) {
+        sound.fx("ambient/cave/cave", { volume: 0.45, key: "cave-ambience", minGap: 1 });
+      }
+    }
+  }
+
+  private movementSounds(dt: number, wasOnGround: boolean, impactVy: number, feetWater: boolean) {
+    const body = this.body;
+    if (this.state !== "playing" || this.gameMode === "spectator" || this.fly || this.fallFlying) {
+      this.footDist = 0;
+      this.wasInWater = feetWater;
+      return;
+    }
+
+    if (feetWater && !this.wasInWater) {
+      sound.fx("liquid/splash", {
+        volume: Math.min(0.9, 0.3 + Math.abs(impactVy) / 18),
+        key: "water-entry", minGap: 0.25,
+      });
+    }
+    this.wasInWater = feetWater;
+
+    const below = this.world.get(Math.floor(body.x), Math.floor(body.y - 0.06), Math.floor(body.z));
+    const blockKey = BLOCKS[below]?.key ?? "";
+    if (body.onGround && !wasOnGround && !feetWater && impactVy < -6) {
+      if (impactVy < -22) sound.fx("damage/fallbig", { volume: 0.6, key: "landing", minGap: 0.12 });
+      else if (impactVy < -13) sound.fx("damage/fallsmall", { volume: 0.55, key: "landing", minGap: 0.12 });
+      if (blockKey) sound.block("step", blockKey, undefined, {
+        volume: Math.min(0.45, 0.18 + Math.abs(impactVy) / 45),
+        key: "landing-step", minGap: 0.12,
+      });
+      this.footDist = 0;
+      return;
+    }
+
+    const speed = Math.hypot(body.vx, body.vz);
+    if (feetWater) {
+      this.footDist += speed * dt;
+      if (this.footDist > 2.4 && speed > 0.45) {
+        this.footDist = 0;
+        sound.fx("liquid/swim", { volume: 0.28, key: "swimming", minGap: 0.18 });
+      }
+      return;
+    }
+    if (body.onGround && !this.sneaking && speed > 0.6 && blockKey) {
+      this.footDist += speed * dt;
+      if (this.footDist > 1.65) {
+        this.footDist = 0;
+        sound.block("step", blockKey);
+      }
+    } else if (body.onGround) this.footDist = 0;
+    else this.footDist = Math.max(this.footDist, 1);
+  }
+
+  private blockChangeSound(previous: number, next: number, x: number, y: number, z: number, announce: boolean) {
+    const at: [number, number, number] = [x + 0.5, y + 0.5, z + 0.5];
+    if (next === B.AIR) {
+      if (announce && previous > 0) sound.block("break", BLOCKS[previous]?.key ?? "", at);
+      return;
+    }
+    if (previous <= 0 || isReplaceableBlock(previous, BLOCKS)) {
+      if (announce) sound.block("place", BLOCKS[next]?.key ?? "", at);
+      return;
+    }
+    const before = BLOCKS[previous], after = BLOCKS[next];
+    if ((after?.shape === "door" || after?.shape === "trapdoor") &&
+        before?.state?.open !== after.state?.open &&
+        blockToken(previous, BLOCKS) === blockToken(next, BLOCKS)) {
+      sound.door(after.key, after.state?.open === true, at);
+    }
+  }
+
   /** 反映できたら true */
   setLocal(x: number, y: number, z: number, b: number, drop?: number): boolean {
-    const prev = this.world.get(x, y, z);
-    if (prev === -1 || prev === b) return false;
+    const previous = this.world.get(x, y, z);
+    if (previous === -1 || previous === b) return false;
     if (this.mode === "room") {
       if (!this.net.connected) { toast("サーバーに接続されていません"); return false; }
-      const k = `${x},${y},${z}`;
-      if (!this.pending.has(k)) this.pending.set(k, prev);
+      const key = x + "," + y + "," + z;
+      if (!this.pending.has(key)) this.pending.set(key, previous);
       this.net.send(drop ? { t: "set", x, y, z, b, d: drop } : { t: "set", x, y, z, b });
     }
     this.world.setBlock(x, y, z, b);
+    this.blockChangeSound(previous, b, x, y, z, true);
     if (this.mode !== "room") { this.updateSoloBlockBehaviors(x, y, z); this.soloRedstone.onBlockChanged(x, y, z); }
     return true;
   }
-
   private addSoloBlockDrop(x: number, y: number, z: number, blockId: number, toolItemId = 0) {
     const enchantments = this.itemEnchantments[String(toolItemId)] ?? {};
     const loot = getBlockDrops(blockId, B, blockItemId, { blocks: BLOCKS, stateMeta: MINECRAFT_BLOCK_STATE_BY_RUNTIME_ID, toolItemId, enchantments });
@@ -2488,6 +2682,7 @@ class Game {
     this.sendStackData();
     this.hotbarUI.refresh(); if (this.state === "inventory") this.renderInventorySlots();
     this.autosave(true);
+    sound.fx("random/pop", { volume: 0.5, pitch: 0.9 + Math.random() * 0.25, key: "item-pickup", minGap: 0.06 });
     toast(`${BLOCKS[id].name} +${accepted}`, 700);
     return accepted;
   }
@@ -2532,6 +2727,7 @@ class Game {
 
   effectAmp(id: EffectId): number { return this.vitals.activeEffects.find(e => e.effectId === id)?.amplifier ?? -1; }
   applyVitals(v: PlayerVitals, event?: "death" | "respawn") {
+    this.vitalsSound(this.vitals, v, event);
     const wasDead=this.vitals.dead; this.vitals=v; this.health=v.health; this.hunger=v.foodLevel;
     this.gameMode=v.gameMode; renderHearts(v.health,v.maxHealth,v.activeEffects.map(e=>e.effectId),v.absorptionAmount);
     renderHunger(v.foodLevel,v.activeEffects.some(e=>e.effectId==="hunger"));
@@ -2545,6 +2741,31 @@ class Game {
     this.canvas.classList.toggle("nightvision", this.effectAmp("night_vision") >= 0 || this.effectAmp("conduit_power") >= 0);
     if(event==="death"||(!wasDead&&v.dead)){this.body.vx=this.body.vy=this.body.vz=0;toast("死亡しました",2500);}
     if(event==="respawn"||(wasDead&&!v.dead)){this.body.x=this.spawn[0];this.body.y=this.spawn[1]+2;this.body.z=this.spawn[2];this.body.vx=this.body.vy=this.body.vz=0;toast("リスポーンしました",1800);}
+  }
+
+
+  private vitalsSound(previous: PlayerVitals, next: PlayerVitals, event?: "death" | "respawn") {
+    const now = performance.now();
+    if (event === "death" || (!previous.dead && next.dead)) {
+      sound.fx("random/classic_hurt", { key: "player-death", minGap: 0.5 });
+      return;
+    }
+    if (this.ready && !next.dead && next.health < previous.health && now - this.lastHurtSoundAt > 250) {
+      this.lastHurtSoundAt = now;
+      sound.fx("damage/hit", { key: "player-hurt", minGap: 0.2 });
+    }
+    const totalXp = next.experience ?? 0;
+    const level = getExperienceProgress(totalXp).level;
+    if (this.lastXpLevel >= 0 && level > this.lastXpLevel) {
+      sound.fx("random/levelup", { volume: 0.7, key: "xp-level-up", minGap: 0.2 });
+    } else if (this.lastXpLevel >= 0 && totalXp > this.lastXpTotal) {
+      sound.fx("random/orb", { volume: 0.55, pitch: 0.85 + Math.random() * 0.3, key: "xp-orb", minGap: 0.09 });
+    }
+    this.lastXpLevel = level;
+    this.lastXpTotal = totalXp;
+    if (previous.eatingFoodId && !next.eatingFoodId && next.foodLevel > previous.foodLevel) {
+      sound.fx("random/burp", { volume: 0.65, key: "food-finished", minGap: 0.3 });
+    }
   }
 
   renderFoodInventory() {
@@ -2592,6 +2813,11 @@ class Game {
     }
     if (!this.digReady) return;
     this.digT += dt;
+    this.digSoundT -= dt;
+    if (this.digSoundT <= 0) {
+      this.digSoundT = 0.25;
+      sound.block("hit", BLOCKS[id]?.key ?? "", [t.x + 0.5, t.y + 0.5, t.z + 0.5]);
+    }
     const need = miningTimeSeconds(id, B, this.vitals.activeEffects, toolId, BLOCKS, this.itemEnchantments, this.armorSlots, inLiquid(this.world, this.body.x, this.body.y + 0.3, this.body.z));
     const progress = Math.min(1, this.digT / need);
     const bar = $("breakbar");
@@ -2607,12 +2833,14 @@ class Game {
     this.breakOverlay.visible = false;
     if (this.digKey === "" && this.digT === 0) return;
     if (this.mode === "room" && this.digKey !== "") this.net.send({ t: "dig-cancel" });
-    this.digKey = ""; this.digT = 0; this.digReady = false; this.digToolId = -1;
+    this.digKey = ""; this.digT = 0; this.digReady = false; this.digToolId = -1; this.digSoundT = 0;
     $("breakbar").hidden = true;
   }
 
   hurt(n: number) {
     if ((!this.survival && this.gameMode !== "adventure") || n <= 0 || !this.ready) return;
+    this.lastHurtSoundAt = performance.now() + 500;
+    sound.fx(n >= 8 ? "damage/fallbig" : "damage/fallsmall", { key: "fall-damage", minGap: 0.2 });
     if(this.mode==="room"){this.net.send({t:"hurt",cause:"fall",amount:Math.min(20,n)});return;}
     const mitigated = applyArmorReduction(n, [], BLOCKS, this.itemEnchantments, "fall", this.armorSlots);
     this.health = Math.max(0, this.health - mitigated);
@@ -2646,6 +2874,7 @@ class Game {
         if (bottleId) this.giveItem(bottleId);
       }
     }
+    sound.fx("random/drink", { key: "potion-drink", minGap: 0.15 });
     toast(potion.effectId ? `${potion.name}を使用しました` : "水入り瓶を使用しました");
     return true;
   }
@@ -2664,6 +2893,7 @@ class Game {
       this.body.vz += -Math.cos(this.yaw)*cp*12;
       this.autosave(true);
     }
+    sound.fx("fireworks/launch", { key: "firework-boost", minGap: 0.2 });
     toast("ロケット花火で加速");
     return true;
   }
@@ -2827,7 +3057,7 @@ class Game {
     if (this.localFishing) {
       const active=this.localFishing;
       if(active.state==="waiting") {
-        this.projectileEntities.removeBobber(active.id);this.localFishing=null;toast("釣り糸を回収しました");return;
+        this.projectileEntities.removeBobber(active.id);this.localFishing=null;sound.fx("entity/bobber/retrieve",{key:"local-fishing-retrieve"});toast("釣り糸を回収しました");return;
       }
       const ench=withStackEnchantments(this.itemEnchantments,this.stackData,active.slotKey,rodItemId);
       const loot=rollFishingLootEntry(getItemEnchantment(ench,rodItemId,"luck_of_the_sea"),Math.random,{openWater:active.openWater,biome:""});
@@ -2842,7 +3072,7 @@ class Game {
         else this.stackData={...this.stackData,[active.slotKey]:damage.record!};
         this.sendStackData();
       }
-      this.projectileEntities.removeBobber(active.id);this.localFishing=null;this.autosave(true);toast(`${BLOCKS[lootId]?.name??loot.itemKey} を釣り上げました`);return;
+      this.projectileEntities.removeBobber(active.id);this.localFishing=null;this.autosave(true);sound.fx("entity/bobber/retrieve",{key:"local-fishing-catch"});sound.fx("random/pop",{key:"local-fishing-loot",minGap:0.08});toast(`${BLOCKS[lootId]?.name??loot.itemKey} を釣り上げました`);return;
     }
     const yaw=this.yaw,pitch=this.pitch,cp=Math.cos(pitch),dx=-Math.sin(yaw)*cp,dy=-Math.sin(pitch),dz=-Math.cos(yaw)*cp;
     const waterIds=new Set([B.WATER,MINECRAFT_BLOCK_TO_RUNTIME_ID["minecraft:water"]??0].filter(id=>id>0));
@@ -2852,13 +3082,13 @@ class Game {
     const slot=`hotbar:${this.sel}`,ench=withStackEnchantments(this.itemEnchantments,this.stackData,slot,rodItemId),lure=getItemEnchantment(ench,rodItemId,"lure");
     const openWater=isFishingOpenWater((x:number,y:number,z:number)=>this.world.get(x,y,z),found.x,found.y,found.z,[...waterIds]);
     const session={id:`local-bobber-${Math.random().toString(36).slice(2,12)}`,x:found.x+.5,y:found.y+.88,z:found.z+.5,state:"waiting" as const,biteAt:Date.now()+fishingBiteDelay(lure),rodItemId,slotKey:slot,openWater};
-    this.localFishing=session;this.projectileEntities.addBobber(session.id,session.x,session.y,session.z,"waiting");toast("釣り糸を垂らしました。浮きが沈むのを待ってください");
+    this.localFishing=session;this.projectileEntities.addBobber(session.id,session.x,session.y,session.z,"waiting");sound.play("entity/bobber/castfast.ogg",{key:"local-fishing-cast"});toast("釣り糸を垂らしました。浮きが沈むのを待ってください");
   }
 
   private updateLocalFishing(now: number) {
     const active=this.localFishing;if(!active)return;
     if(Math.hypot(this.body.x-active.x,this.body.z-active.z)>32){this.projectileEntities.removeBobber(active.id);this.localFishing=null;return;}
-    if(active.state==="waiting" && now>=active.biteAt){active.state="bite";this.projectileEntities.addBobber(active.id,active.x,active.y,active.z,"bite");toast("魚が食いついた！右クリック！");}
+    if(active.state==="waiting" && now>=active.biteAt){active.state="bite";this.projectileEntities.addBobber(active.id,active.x,active.y,active.z,"bite");sound.fx("liquid/splash",{at:[active.x,active.y,active.z],key:"local-fishing-bite",minGap:0.2});toast("魚が食いついた！右クリック！");}
   }
 
   /** Open/close doors, trapdoors and fence gates using their real block-state variants. */
@@ -2946,6 +3176,7 @@ class Game {
       if (existing !== PORTAL_BLOCK_IDS.obsidian) { this.deny("火打ち石と打ち金は黒曜石の枠に使用します"); return; }
       const edits = tryLightPortal((x, y, z) => this.world.get(x, y, z), { x: t.x, y: t.y, z: t.z, nx: t.nx, ny: t.ny, nz: t.nz });
       if (!edits) { this.deny("黒曜石の枠が正しくないか、内部に空間がありません"); return; }
+      sound.play("fire/ignite.ogg", { key: "portal-ignite", minGap: 0.25 });
       if (this.mode === "room") {
         if (this.net.connected) this.net.send({ t: "use", x: t.x, y: t.y, z: t.z, itemId: selectedItemId, nx: t.nx, ny: t.ny, nz: t.nz, slotKey: `hotbar:${this.sel}` });
       } else {
@@ -2979,6 +3210,7 @@ class Game {
       return;
     }
     if (existing === B.REDSTONE_LEVER_OFF || existing === B.REDSTONE_LEVER_ON) {
+      sound.fx("random/click", { at: [t.x + 0.5, t.y + 0.5, t.z + 0.5], key: "lever-toggle", pitch: existing === B.REDSTONE_LEVER_OFF ? 0.6 : 0.5 });
       if (this.mode === "room") this.net.send({ t: "use", x: t.x, y: t.y, z: t.z });
       else this.setLocal(t.x, t.y, t.z, existing === B.REDSTONE_LEVER_OFF ? B.REDSTONE_LEVER_ON : B.REDSTONE_LEVER_OFF);
       return;
@@ -3150,6 +3382,7 @@ class Game {
       if (this.mode !== "room" && this.state !== "paused") this.soloRedstone.advance(dt);
       if (this.mode === "solo") this.updateLocalFishing(Date.now());
       this.updatePlayer(dt, now);
+      this.updateAudio(dt);
       this.updateTarget(now);
       // ドロップの更新と回収。ルームではサーバー、ソロではローカル所持品へ反映する。
       const picks = this.drops.update(dt, this.world, this.body.x, this.body.y, this.body.z, this.survival || (this.mode === "solo" && this.gameMode === "survival"));
@@ -3288,7 +3521,9 @@ class Game {
         if (jump && b.onGround) { b.vy = 8.6 + Math.max(0,this.effectAmp("jump_boost")+1)*1.2; if(this.mode==="room"&&this.survival)this.net.send({t:"jump"}); }
       }
     }
+    const wasOnGround = b.onGround, impactVy = b.vy;
     if(this.gameMode==="spectator"){b.x+=b.vx*dt;b.y+=b.vy*dt;b.z+=b.vz*dt;b.onGround=false;}else moveBody(this.world, b, dt, this.sneaking);
+    this.movementSounds(dt, wasOnGround, impactVy, feetWater);
     if(b.onGround && this.fallFlying) this.fallFlying=false;
     if (b.y < -30) {
       if (this.survival) this.die();

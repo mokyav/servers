@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   MOB_RENDER_TEXTURES,
   MOB_RENDER_TEXTURE_SIZES,
+  MOB_RENDER_HEIGHTS,
   MOB_RENDER_OVERLAYS,
   PIGLIN_RIG_TYPES,
   atlasBoxFaceRects,
@@ -58,8 +59,8 @@ test("boss texture atlases have the expected 26.3 dimensions", () => {
 
 test("the core MobModels cuboid UV rectangles all fit their texture atlases", () => {
   const modelSection = mobSource.slice(mobSource.indexOf("const MODELS:"), mobSource.indexOf("function applyBoxAtlasUV"));
-  const dimensions = { pig: [64, 64], cow: [64, 64], chicken: [64, 32], creeper: [64, 32], zombie: [64, 64], skeleton: [64, 32], villager: [64, 64], piglin: [64, 64] };
-  const starts = [...modelSection.matchAll(/^\s*(pig|cow|chicken|creeper|zombie|skeleton|villager|piglin):\[/gm)];
+  const dimensions = { pig: [64, 64], cow: [64, 64], chicken: [64, 32], creeper: [64, 32], zombie: [64, 64], skeleton: [64, 32], villager: [64, 64], piglin: [64, 64], enderman: [64, 32], spider: [64, 32], blaze: [64, 32], ghast: [64, 32], slime: [64, 32], magma_cube: [64, 64], silverfish: [64, 32], endermite: [64, 32] };
+  const starts = [...modelSection.matchAll(/^\s*(pig|cow|chicken|creeper|zombie|skeleton|villager|piglin|enderman|spider|blaze|ghast|slime|magma_cube|silverfish|endermite):\[/gm)];
   let count = 0;
   for (let i = 0; i < starts.length; i++) {
     const type = starts[i][1];
@@ -128,6 +129,54 @@ test("vanilla core rigs keep entity feet on the ground and preserve mirrored lim
   assert.match(mobSource, /applyPlaneAtlasUV\(brimGeometry,\[30,47,16,1\],\[64,64\]\)/); // villager hat brim
   assert.match(mobSource, /atlasBoxFaceRects\(p\.size,p\.uv,sourceSize\)/);
   assert.match(mobSource, /const scaleU=textureSize\[0\]\/sourceSize\[0\],scaleV=textureSize\[1\]\/sourceSize\[1\]/);
+});
+
+test("dedicated 26.3 mob families route to the correct rigs and keep family UVs inside their real atlases", () => {
+  assert.match(mobSource, /if\(type==="enderman"\)return "enderman"/);
+  assert.match(mobSource, /if\(type==="spider"\|\|type==="cave_spider"\)return "spider"/);
+  assert.match(mobSource, /if\(type==="blaze"\)return "blaze"/);
+  assert.match(mobSource, /if\(type==="ghast"\)return "ghast"/);
+  assert.match(mobSource, /if\(type==="slime"\)return "slime"/);
+  assert.match(mobSource, /if\(type==="magma_cube"\)return "magma_cube"/);
+  assert.match(mobSource, /if\(type==="silverfish"\)return "silverfish"/);
+  assert.match(mobSource, /if\(type==="endermite"\)return "endermite"/);
+
+  assert.equal(MOB_RENDER_TEXTURES.enderman, "enderman/enderman");
+  assert.equal(MOB_RENDER_TEXTURES.spider, "spider/spider");
+  assert.equal(MOB_RENDER_TEXTURES.cave_spider, "spider/cave_spider");
+  assert.equal(MOB_RENDER_TEXTURES.blaze, "blaze/blaze");
+  assert.equal(MOB_RENDER_TEXTURES.ghast, "ghast/ghast");
+  assert.equal(MOB_RENDER_TEXTURES.slime, "slime/slime");
+  assert.equal(MOB_RENDER_TEXTURES.magma_cube, "slime/magmacube");
+  assert.equal(MOB_RENDER_TEXTURES.silverfish, "silverfish/silverfish");
+  assert.equal(MOB_RENDER_TEXTURES.endermite, "endermite/endermite");
+
+  assert.deepEqual(MOB_RENDER_OVERLAYS.enderman, ["enderman/enderman_eyes"]);
+  assert.deepEqual(MOB_RENDER_OVERLAYS.spider, ["spider/spider_eyes"]);
+  assert.deepEqual(MOB_RENDER_HEIGHTS, {
+    enderman: 2.9, spider: 0.9, cave_spider: 0.5, blaze: 1.8, ghast: 4,
+    slime: 1, magma_cube: 1, silverfish: 0.4, endermite: 0.4,
+  });
+
+  // UV rectangles below are from the Java 26.3 model-layer definitions.
+  for (const [size, uv, dims] of [
+    [[2,30,2],[56,0],[64,32]], // Enderman long arm/leg
+    [[16,2,2],[18,0],[64,32]], // Spider leg
+    [[2,8,2],[0,16],[64,32]], // Blaze rod
+    [[16,16,16],[0,0],[64,32]], // Ghast base model atlas; the PNG is 2x larger
+    [[8,8,8],[0,0],[64,32]], // Slime outer cube
+    [[8,1,8],[32,27],[64,64]], // Magma Cube final slice
+    [[6,4,3],[0,9],[64,32]], // Silverfish mid-body segment
+    [[6,4,5],[0,5],[64,32]], // Endermite mid-body segment
+  ]) assert.equal(atlasBoxFaceRects(size, uv, dims).length, 6);
+
+  assert.match(mobSource, /const BLAZE_RODS:Part\\[\\]=Array\\.from\\(\\{length:12\\}/);
+  assert.match(mobSource, /const GHAST_TENTACLE_LENGTHS=\\[10,12,9,12,8,14,11,9,12\\]/);
+  assert.match(mobSource, /const MAGMA_CUBE_SLICES:Part\\[\\]=Array\\.from\\(\\{length:8\\}/);
+  assert.match(mobSource, /const SILVERFISH_SIZES:\\[number,number,number\\]\\[\\]=\\[\\[3,2,2\\],\\[4,3,2\\],\\[6,4,3\\],\\[3,3,3\\],\\[2,2,3\\],\\[2,1,2\\],\\[1,1,2\\]\\]/);
+  assert.match(mobSource, /const ENDERMITE_SIZES:\\[number,number,number\\]\\[\\]=\\[\\[4,3,2\\],\\[6,4,5\\],\\[3,3,1\\],\\[1,2,1\\]\\]/);
+  assert.ok((mobSource.match(/pivot:\\[/g) ?? []).length >= 25, "articulated model families must have explicit pivots");
+  assert.match(mobSource, /parent\\.rotation\\.set\\(p\\.rotationX\\?\\?0,p\\.rotationY\\?\\?0,p\\.rotationZ\\?\\?0\\)/);
 });
 
 test("dragon wings remain parented to the torso pivot instead of being detached to the root", () => {

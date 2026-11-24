@@ -1,0 +1,1 @@
+Temporary validation-only file for the Koruva CI run of the mob rig changes. This file is not intended to be merged.

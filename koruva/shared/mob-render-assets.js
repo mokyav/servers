@@ -188,6 +188,8 @@ export const MOB_RENDER_TEXTURE_SIZES = Object.freeze({
 });
 
 export const MOB_RENDER_OVERLAYS = Object.freeze({
+  enderman: ["enderman/enderman_eyes"],
+  spider: ["spider/spider_eyes"],
   stray: ["skeleton/stray_overlay"],
   bogged: ["skeleton/bogged_overlay"],
   // Villager skins are layered by biome, profession and profession level in vanilla.
@@ -228,6 +230,29 @@ export const MOB_MODEL_BASE_HEIGHTS = Object.freeze({
   skeleton: 2,
   villager: 2,
   piglin: 2,
+  enderman: 46 / 16,
+  spider: 14 / 16,
+  blaze: 30 / 16,
+  ghast: 29 / 16,
+  slime: 8 / 16,
+  magma_cube: 8 / 16,
+  silverfish: 4 / 16,
+  endermite: 4 / 16,
+});
+
+/** Render size is separate from AI collision height. Java model layers sometimes
+ * carry their own scaling, so visual height must not silently alter server physics.
+ */
+export const MOB_RENDER_HEIGHTS = Object.freeze({
+  enderman: 2.9,
+  spider: 0.9,
+  cave_spider: 0.5,
+  blaze: 1.8,
+  ghast: 4,
+  slime: 1,
+  magma_cube: 1,
+  silverfish: 0.4,
+  endermite: 0.4,
 });
 
 /** Vanilla cuboid UV net in +X, -X, +Y, -Y, +Z, -Z face order. */

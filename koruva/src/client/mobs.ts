@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { MOB_PROFILES } from "../../shared/mob-ai.js";
-import { MOB_RENDER_TEXTURES, MOB_RENDER_OVERLAYS, SKELETON_RIG_TYPES, HUMANOID_RIG_TYPES, VILLAGER_RIG_TYPES, PIGLIN_RIG_TYPES, MOB_MODEL_BASE_HEIGHTS, atlasBoxFaceRects, mapAtlasFaceUV, mapAtlasPlaneUV } from "../../shared/mob-render-assets.js";
+import { MOB_RENDER_TEXTURES, MOB_RENDER_TEXTURE_SIZES, MOB_RENDER_OVERLAYS, SKELETON_RIG_TYPES, HUMANOID_RIG_TYPES, VILLAGER_RIG_TYPES, PIGLIN_RIG_TYPES, MOB_MODEL_BASE_HEIGHTS, atlasBoxFaceRects, mapAtlasFaceUV, mapAtlasPlaneUV } from "../../shared/mob-render-assets.js";
 import type { MobInfo, MobType } from "../../shared/entities";
 interface Part{size:[number,number,number];pos:[number,number,number];uv:[number,number];leg?:boolean;rotationX?:number;rotationY?:number;rotationZ?:number;mirrorX?:boolean;inflate?:number}
 type CoreMobType = "pig" | "cow" | "chicken" | "creeper" | "zombie" | "skeleton" | "villager" | "piglin";
@@ -106,7 +106,23 @@ function applyBoxAtlasUV(g:THREE.BufferGeometry,size:[number,number,number],offs
  }
  uv.needsUpdate=true;
 }
-function applyUV(g:THREE.BufferGeometry,t:CoreMobType,p:Part){applyBoxAtlasUV(g,p.size,p.uv,DIMS[t],!!p.mirrorX);}
+function applyUV(g:THREE.BufferGeometry,t:CoreMobType,p:Part,type:MobType){
+ const sourceSize=DIMS[t];
+ const textureSize=(MOB_RENDER_TEXTURE_SIZES as Record<string,[number,number]>)[type]??sourceSize;
+ const sourceRects=atlasBoxFaceRects(p.size,p.uv,sourceSize),uv=g.getAttribute("uv") as THREE.BufferAttribute;
+ const scaleU=textureSize[0]/sourceSize[0],scaleV=textureSize[1]/sourceSize[1];
+ // Preserve vanilla pixel-space UV rectangles while adapting to the exact resolution
+ // of each entity atlas (including 16x16 and 32x32 textures).
+ for(let face=0;face<6;face++){
+  const [x,y,w,h]=sourceRects[face],rect:[number,number,number,number]=[x*scaleU,y*scaleV,w*scaleU,h*scaleV];
+  for(let vertex=face*4;vertex<face*4+4;vertex++){
+   const baseU=uv.getX(vertex);
+   const mapped=mapAtlasFaceUV(p.mirrorX?1-baseU:baseU,uv.getY(vertex),rect,textureSize);
+   uv.setXY(vertex,mapped[0],mapped[1]);
+  }
+ }
+ uv.needsUpdate=true;
+}
 function modelType(type:MobType):CoreMobType {
  if(SKELETON_RIG_TYPES.includes(type as string))return "skeleton";
  if(VILLAGER_RIG_TYPES.includes(type as string))return "villager";
@@ -165,7 +181,8 @@ export class MobModels {
  }
  private materialFor(type:MobType,key:CoreMobType):THREE.MeshBasicMaterial {
   const resource=(MOB_RENDER_TEXTURES as Record<string,string>)[type];
-  const path=resource?`/assets/minecraft/textures/entity/${resource}.png`:`/assets/mobs/${key}.png`;
+  if(!resource)throw new Error(`Missing Java 26.3 mob texture mapping for "${type}"`);
+  const path=`/assets/minecraft/textures/entity/${resource}.png`;
   let material=this.entityMaterials.get(path);
   if(!material){
    let texture=this.entityTextures.get(path);
@@ -327,7 +344,7 @@ export class MobModels {
    const overlayMaterials=overlayResources.map(path=>this.materialForResource(path));
    for(const p of MODELS[key]){
     const inflate=p.inflate??0;
-    const g=new THREE.BoxGeometry((p.size[0]+inflate*2)/16,(p.size[1]+inflate*2)/16,(p.size[2]+inflate*2)/16);applyUV(g,key,p);
+    const g=new THREE.BoxGeometry((p.size[0]+inflate*2)/16,(p.size[1]+inflate*2)/16,(p.size[2]+inflate*2)/16);applyUV(g,key,p,info.type);
     const m=new THREE.Mesh(g,mat);m.position.set(p.pos[0]/16,p.pos[1]/16,p.pos[2]/16);m.rotation.set(p.rotationX??0,p.rotationY??0,p.rotationZ??0);root.add(m);if(p.leg)legs.push(m);
     for(const overlayMaterial of overlayMaterials){const overlay=new THREE.Mesh(g.clone(),overlayMaterial);overlay.position.copy(m.position);overlay.rotation.copy(m.rotation);overlay.scale.copy(m.scale);root.add(overlay);}
    }

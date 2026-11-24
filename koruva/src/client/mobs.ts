@@ -477,6 +477,7 @@ export class MobModels {
    root.scale.setScalar(scale);
    if(info.type==="wither")root.userData.yOffset=22.7/16*scale;
    else if(info.type==="warden")root.userData.yOffset=0;
+   else if(info.type==="ghast")root.userData.yOffset=-(4.4/16)*scale;
   }
   root.position.x=info.x;root.position.z=info.z;root.position.y=info.y+(Number(root.userData.yOffset)||0);
   root.userData.mobId=info.id;this.group.add(root);this.entries.set(info.id,{root,info:{...info},legs,crystal,beam,dragon,wither,warden,wings:dragon?.wings});

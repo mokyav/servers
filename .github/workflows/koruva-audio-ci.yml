@@ -1,0 +1,31 @@
+name: Koruva checks
+on:
+  pull_request:
+    paths:
+      - "koruva/**"
+      - ".github/workflows/koruva-audio-ci.yml"
+  push:
+    branches: ["feat/koruva-audio-engine"]
+    paths:
+      - "koruva/**"
+      - ".github/workflows/koruva-audio-ci.yml"
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: koruva
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: koruva/package-lock.json
+      - run: npm ci
+      - run: node --check scripts/copy-sounds.mjs
+      - run: npm run typecheck
+      - run: npm run build:client
+      - run: npm test

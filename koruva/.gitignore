@@ -8,3 +8,6 @@ dist
 ._*
 __MACOSX/
 ^core
+
+# Locally extracted Minecraft audio; copy into the public folder before local builds/deploys.
+/koruva/src/client/public/assets/sounds/

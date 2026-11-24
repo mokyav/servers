@@ -7,6 +7,7 @@ import {
   MOB_RENDER_TEXTURES,
   MOB_RENDER_TEXTURE_SIZES,
   MOB_RENDER_HEIGHTS,
+  MOB_MODEL_BASE_HEIGHTS,
   MOB_RENDER_OVERLAYS,
   PIGLIN_RIG_TYPES,
   atlasBoxFaceRects,
@@ -153,8 +154,10 @@ test("dedicated 26.3 mob families route to the correct rigs and keep family UVs 
 
   assert.deepEqual(MOB_RENDER_OVERLAYS.enderman, ["enderman/enderman_eyes"]);
   assert.deepEqual(MOB_RENDER_OVERLAYS.spider, ["spider/spider_eyes"]);
+  assert.equal(MOB_MODEL_BASE_HEIGHTS.ghast, 28 / 16, "ghast model extent before vanilla layer scaling");
+  assert.equal(MOB_RENDER_HEIGHTS.ghast, (28 / 16) * 4.5, "GhastModel applies a 4.5x MeshTransformer");
   assert.deepEqual(MOB_RENDER_HEIGHTS, {
-    enderman: 2.9, spider: 0.9, cave_spider: 0.5, blaze: 1.8, ghast: 4,
+    enderman: 2.9, spider: 0.9, cave_spider: 0.5, blaze: 1.8, ghast: 7.875,
     slime: 1, magma_cube: 1, silverfish: 0.4, endermite: 0.4,
   });
 
@@ -171,12 +174,17 @@ test("dedicated 26.3 mob families route to the correct rigs and keep family UVs 
   ]) assert.equal(atlasBoxFaceRects(size, uv, dims).length, 6);
 
   assert.ok(mobSource.includes("const BLAZE_RODS:Part[]=Array.from({length:12}"));
-  assert.ok(mobSource.includes("const GHAST_TENTACLE_LENGTHS=[10,12,9,12,8,14,11,9,12]"));
+  assert.ok(mobSource.includes("const GHAST_TENTACLE_LENGTHS=[8,13,9,11,11,10,12,9,12]"));
   assert.ok(mobSource.includes("const MAGMA_CUBE_SLICES:Part[]=Array.from({length:8}"));
   assert.ok(mobSource.includes("const SILVERFISH_SIZES:[number,number,number][]=[[3,2,2],[4,3,2],[6,4,3],[3,3,3],[2,2,3],[2,1,2],[1,1,2]]"));
   assert.ok(mobSource.includes("const ENDERMITE_SIZES:[number,number,number][]=[[4,3,2],[6,4,5],[3,3,1],[1,2,1]]"));
   assert.ok(mobSource.split("pivot:[").length - 1 >= 25, "articulated model families must have explicit pivots");
   assert.ok(mobSource.includes("parent.rotation.set(p.rotationX??0,p.rotationY??0,p.rotationZ??0)"));
+  assert.ok(mobSource.includes("const yaw=-Math.cos(phase*2+phaseOffsets[pair])*.4*speed"));
+  assert.ok(mobSource.includes("const roll=Math.abs(Math.sin(phase+phaseOffsets[pair])*.4)*speed"));
+  assert.ok(mobSource.includes("m.rotation.x=.2*Math.sin(ageInTicks*.3+i)+.4"));
+  assert.ok(mobSource.includes("const angularVelocity=ring===0?-.1*Math.PI:ring===1?.03*Math.PI:-.05*Math.PI"));
+  assert.ok(mobSource.includes("m.position.set(Math.cos(angle)*radius/16,(24-modelY)/16,Math.sin(angle)*radius/16)"));
 });
 
 test("dragon wings remain parented to the torso pivot instead of being detached to the root", () => {

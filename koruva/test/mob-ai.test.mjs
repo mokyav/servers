@@ -1,4 +1,9 @@
 import test from "node:test";import assert from "node:assert/strict";import{createMob,MOB_PROFILES,stepMobAI}from"../shared/mob-ai.js";
+import { readFileSync } from "node:fs";
+const registrySource = readFileSync(new URL("../shared/entities.ts", import.meta.url), "utf8");
+const registryMatch = registrySource.match(/export const MOB_TYPES = \[([\s\S]*?)\] as const/);
+assert.ok(registryMatch, "MOB_TYPES declaration not found");
+const registeredMobTypes = [...registryMatch[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
 const ground=(x,y,z)=>y<10;const player=(id,x,y=10,z=0,gameMode="survival")=>({id,p:[x,y,z],gameMode});
 test("data-driven defaults and unknown type rejection",()=>{assert.equal(createMob("pig","p",1,10,2).health,MOB_PROFILES.pig.maxHealth);assert.throws(()=>createMob("dragon","x",0,1,0),/unknown mob/);});
 test("zombie targets nearest survival player, moves, then attacks with cooldown",()=>{const m=createMob("zombie","z",0,10,0),ps=[player("far",9),player("near",4)];const chase=stepMobAI(m,ps,.2,1000,ground);assert.equal(chase.mob.targetId,"near");assert.equal(chase.mob.state,"chase");assert.ok(chase.mob.x>0);const hit=stepMobAI({...chase.mob,x:0,z:0},[player("near",1)],.2,2000,ground);assert.equal(hit.attacks[0]?.targetId,"near");assert.equal(stepMobAI(hit.mob,[player("near",1)],.2,2500,ground).attacks.length,0);});
@@ -44,4 +49,19 @@ test("Ender Dragon swoop emits melee damage only when it reaches the player",()=
   const result=stepMobAI(dragon,[player("target",2,10,0)],.2,2000,()=>false);
   assert.ok(result.attacks.some(a=>a.targetId==="target"&&a.kind==="melee"));
   assert.equal(result.mob.dragonPhase,"circle");
+});
+
+test("all 88 registered mobs have profiles and complete a finite authoritative AI tick", () => {
+  assert.equal(registeredMobTypes.length, 88);
+  assert.deepEqual(Object.keys(MOB_PROFILES).sort(), [...registeredMobTypes].sort());
+  for (const type of registeredMobTypes) {
+    const mob = createMob(type, `smoke-${type}`, 0, 10, 0);
+    const result = stepMobAI(mob, [player("target", 8)], 0.05, 2000, ground);
+    assert.equal(result.mob.type, type, `${type} changed type during AI tick`);
+    for (const field of ["x", "y", "z", "yaw"]) {
+      assert.ok(Number.isFinite(result.mob[field]), `${type} produced a non-finite ${field}`);
+    }
+    assert.ok(Array.isArray(result.attacks), `${type} did not return an attacks array`);
+    assert.ok(Array.isArray(result.projectiles), `${type} did not return a projectiles array`);
+  }
 });

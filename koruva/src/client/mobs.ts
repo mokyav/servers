@@ -8,7 +8,7 @@ const DIMS:Record<CoreMobType,[number,number]>={pig:[64,64],cow:[64,64],chicken:
 // Core rigs below use the supplied 26.3 client model cuboids and UV offsets.
 // pos is the world-space cuboid centre in sixteenths above the entity feet;
 // rotations are applied after UV generation so each atlas face stays aligned.
-const MODELS:Record<CoreMobType,Part[]>={
+const MODELS:Partial<Record<CoreMobType,Part[]>>={
  pig:[
   {size:[8,8,8],pos:[0,12,10],uv:[0,0]},
   {size:[4,3,1],pos:[0,10.5,14.5],uv:[16,16]},

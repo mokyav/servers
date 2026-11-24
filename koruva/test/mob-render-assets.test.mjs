@@ -178,7 +178,10 @@ test("dedicated 26.3 mob families route to the correct rigs and keep family UVs 
   assert.ok(mobSource.includes("const MAGMA_CUBE_SLICES:Part[]=Array.from({length:8}"));
   assert.ok(mobSource.includes("const SILVERFISH_SIZES:[number,number,number][]=[[3,2,2],[4,3,2],[6,4,3],[3,3,3],[2,2,3],[2,1,2],[1,1,2]]"));
   assert.ok(mobSource.includes("const ENDERMITE_SIZES:[number,number,number][]=[[4,3,2],[6,4,5],[3,3,1],[1,2,1]]"));
-  assert.ok(mobSource.split("pivot:[").length - 1 >= 25, "articulated model families must have explicit pivots");
+  const spiderSection = mobSource.slice(mobSource.indexOf(" spider:["), mobSource.indexOf(" blaze:["));
+  assert.equal((spiderSection.match(/pivot:\[/g) ?? []).length, 8, "Spider rig must contain eight explicitly pivoted legs");
+  assert.ok(mobSource.includes("pivot:[x,y,z],local:[0,-4,0],leg:true"), "Blaze rods must be attached to individual pivots");
+  assert.ok(mobSource.includes("pivot:[x,pivotY,z],local:[0,-length/2,0],leg:true"), "Ghast tentacles must pivot at the body");
   assert.ok(mobSource.includes("parent.rotation.set(p.rotationX??0,p.rotationY??0,p.rotationZ??0)"));
   assert.ok(mobSource.includes("const yaw=-Math.cos(phase*2+phaseOffsets[pair])*.4*speed"));
   assert.ok(mobSource.includes("const roll=Math.abs(Math.sin(phase+phaseOffsets[pair])*.4)*speed"));

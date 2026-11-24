@@ -4,7 +4,7 @@
 // Supports a directory containing sounds/, minecraft/sounds/, or assets/minecraft/sounds/.
 // Music is excluded. Generated audio files remain local and are not committed to Git.
 import {
-  cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync,
+  cpSync, existsSync, lstatSync, mkdirSync, readdirSync,
   renameSync, rmSync, statSync, writeFileSync,
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -23,16 +23,16 @@ if (!existsSync(requestedSource) || !lstatSync(requestedSource).isDirectory()) {
 
 const MOB_ENTITY_DIRS = new Set([
   "allay", "armadillo", "axolotl", "bat", "bee", "blaze", "bogged", "breeze", "camel",
-  "cat", "cave_spider", "chicken", "cod", "copper_golem", "cow", "creaking", "creeper",
+  "camel_husk", "cat", "cave_spider", "chicken", "cod", "copper_golem", "cow", "creaking", "creeper",
   "dolphin", "donkey", "drowned", "elder_guardian", "ender_dragon", "enderman", "endermite",
   "evoker", "fox", "frog", "ghast", "glow_squid", "goat", "guardian", "hoglin", "horse",
   "husk", "iron_golem", "llama", "magma_cube", "mooshroom", "mule", "ocelot", "panda",
   "parrot", "phantom", "pig", "piglin", "piglin_brute", "pillager", "polar_bear", "pufferfish",
-  "rabbit", "ravager", "salmon", "sheep", "shulker", "silverfish", "skeleton", "slime",
-  "sniffer", "snow_golem", "spider", "squid", "stray", "strider", "tadpole", "trader_llama",
+  "rabbit", "ravager", "salmon", "sheep", "shulker", "silverfish", "skeleton", "slime", "sulfur_cube",
+  "happy_ghast", "nautilus", "parched", "sniffer", "snow_golem", "spider", "squid", "stray", "strider", "tadpole", "trader_llama",
   "tropical_fish", "turtle", "vex", "villager", "vindicator", "wandering_trader", "warden",
   "witch", "wither", "wither_skeleton", "wolf", "zoglin", "zombie", "zombie_horse",
-  "zombie_villager", "zombified_piglin",
+  "zombie_nautilus", "zombie_villager", "zombified_piglin",
 ]);
 const mobNames = /^(say|idle|ambient|breathe|moan|growl|moody|meow|bark|cackle|hurt|hit|hitt|damage|death|elder_)/i;
 const specs = [
@@ -45,7 +45,7 @@ const specs = [
   { dir: "entity/bobber" }, { dir: "entity/fish" },
   { dir: "entity/shulker" }, { dir: "entity/witch" }, { dir: "entity/snowman" },
   { dir: "entity/experience_orb" },
-  { dir: "entity", test: rel => MOB_ENTITY_DIRS.has(rel.split("/")[0]) },
+  { dir: "entity", test: rel => MOB_ENTITY_DIRS.has(rel.split("/")[0]) && mobNames.test(rel.slice(rel.lastIndexOf("/") + 1)) },
   { dir: "item/bucket" }, { dir: "item/bottle" }, { dir: "item/totem" },
   { dir: "item/armor", test: (_rel, name) => /^equip_/i.test(name) },
   { dir: "block/wooden_door" }, { dir: "block/iron_door" }, { dir: "block/fence_gate" },
@@ -107,6 +107,7 @@ if (!files.length) {
 }
 
 mkdirSync(publicAssets, { recursive: true });
+if (!existsSync(outputDir) && existsSync(backupDir)) renameSync(backupDir, outputDir);
 rmSync(stagingDir, { recursive: true, force: true });
 rmSync(backupDir, { recursive: true, force: true });
 mkdirSync(stagingDir, { recursive: true });

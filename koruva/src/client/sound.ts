@@ -288,7 +288,7 @@ class SoundEngine {
       : key.includes("trapdoor") ? "block/wooden_trapdoor"
       : "block/wooden_door";
     const expression = directory.includes("copper") ? /^toggle/ : open ? /^open/ : /^close/;
-    this.playPool(directory, expression, { at, volume: 0.85, pitch: randomBetween(0.95, 1.05), key: "door" });
+    this.playPool(directory, expression, { at, volume: 0.85, pitch: randomBetween(0.95, 1.05), key: "door-" + directory, minGap: 0.25 });
   }
 
   mob(type: string, kind: MobSoundKind, at?: Vec) {

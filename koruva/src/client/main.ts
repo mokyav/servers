@@ -1894,6 +1894,7 @@ class Game {
       return false;
     }
     this.view.clear();
+    this.soundMobs.clear();
     this.body = { x: safe.x, y: safe.y, z: safe.z, vx: 0, vy: 0, vz: 0, onGround: false };
     this.spawn = [safe.x, safe.y, safe.z];
     this.target = null; this.digKey = ""; this.digT = 0; this.digReady = false;
@@ -2116,7 +2117,9 @@ class Game {
           this.elytraDamage = Math.max(0, Math.min(432, Math.floor(Number(m.elytraDamage) || 0)));
           this.fallFlying = false;
           this.syncInventorySlots();
-          this.mobModels.clear(); for (const mob of m.mobs) this.mobModels.add(mob);
+          this.mobModels.clear();
+          this.soundMobs.clear();
+          for (const mob of m.mobs) { this.trackMobSound(mob); this.mobModels.add(mob); }
           this.projectileEntities.clear(); for (const projectile of m.projectiles ?? []) this.projectileEntities.add(projectile);
         } else if (m.t === "edits" && gotInit) {
           this.world.importEdits(m.list);
@@ -2460,6 +2463,10 @@ class Game {
     const tracked = this.soundMobs.get(id);
     this.soundMobs.delete(id);
     if (!tracked || tracked.type === "end_crystal") return;
+    if (tracked.type === "creeper" && tracked.state === "fuse") {
+      sound.fx("random/explode", { at: [tracked.x, tracked.y + 0.6, tracked.z], range: 48, key: "creeper-explosion", minGap: 0.25 });
+      return;
+    }
     const recentlyHurt = performance.now() - tracked.hurtSeenAt < 2500;
     if (tracked.health <= 0 || recentlyHurt) {
       sound.mob(tracked.type, "death", [tracked.x, tracked.y + 0.6, tracked.z]);

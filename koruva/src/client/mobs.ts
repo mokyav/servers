@@ -96,7 +96,7 @@ const MODELS:Partial<Record<CoreMobType,Part[]>>={
 
 // Dedicated 26.3 models added from the corresponding Java model-layer bytecode.
 // Pivoted parts keep their vanilla hinge points; local is the mesh-center offset from that pivot.
-const BLAZE_RODS:Part[]=Array.from({length:12},(_,i)=>{
+const BLAZE_RODS:Part[]=Array.from({length:12},(_,i):Part=>{
  const ring=i<4?0:i<8?1:2,slot=i%4;
  const angle=ring===0?slot*Math.PI/2:ring===1?Math.PI/4+slot*Math.PI/2:.47123894+slot*Math.PI/2;
  const radius=ring===0?9:ring===1?7:5;
@@ -105,12 +105,12 @@ const BLAZE_RODS:Part[]=Array.from({length:12},(_,i)=>{
  return {size:[2,8,2],pos:[x+1,y-4,z+1],uv:[0,16],pivot:[x,y,z],local:[1,-4,1],leg:true};
 });
 const GHAST_TENTACLE_LENGTHS=[10,12,9,12,8,14,11,9,12];
-const GHAST_TENTACLE_POSITIONS=[[-3.75,-5],[1.25,-5],[6.25,-5],[-6.25,0],[-1.25,0],[3.75,0],[-3.75,5],[1.25,5],[6.25,5]];
-const GHAST_TENTACLES:Part[]=GHAST_TENTACLE_LENGTHS.map((length,i)=>{
+const GHAST_TENTACLE_POSITIONS:[number,number][]=[[-3.75,-5],[1.25,-5],[6.25,-5],[-6.25,0],[-1.25,0],[3.75,0],[-3.75,5],[1.25,5],[6.25,5]];
+const GHAST_TENTACLES:Part[]=GHAST_TENTACLE_LENGTHS.map((length,i):Part=>{
  const [x,z]=GHAST_TENTACLE_POSITIONS[i],pivotY=17.4;
  return {size:[2,length,2],pos:[x,pivotY-length/2,z],uv:[0,0],pivot:[x,pivotY,z],local:[0,-length/2,0],leg:true};
 });
-const MAGMA_CUBE_SLICES:Part[]=Array.from({length:8},(_,i)=>{
+const MAGMA_CUBE_SLICES:Part[]=Array.from({length:8},(_,i):Part=>{
  const uvX=i<4?0:32,uvY=(i%4)*9;
  return {size:[8,1,8],pos:[0,7.5-i,0],uv:[uvX,uvY]};
 });
@@ -281,7 +281,7 @@ export class MobModels {
   this.wardenMaterial=new THREE.MeshBasicMaterial({map:loadTexture("/assets/minecraft/textures/entity/warden/warden.png"),transparent:true,alphaTest:.04,side:THREE.DoubleSide});
   this.wardenGlowMaterial=new THREE.MeshBasicMaterial({map:loadTexture("/assets/minecraft/textures/entity/warden/warden_bioluminescent_layer.png"),transparent:true,alphaTest:.02,side:THREE.DoubleSide,depthWrite:false});
  }
- private materialFor(type:MobType,key:CoreMobType):THREE.MeshBasicMaterial {
+ private materialFor(type:MobType):THREE.MeshBasicMaterial {
   const resource=(MOB_RENDER_TEXTURES as Record<string,string>)[type];
   if(!resource)throw new Error(`Missing Java 26.3 mob texture mapping for "${type}"`);
   const path=`/assets/minecraft/textures/entity/${resource}.png`;
@@ -442,7 +442,7 @@ export class MobModels {
    }
    dragon={head,jaw,wings,wingTips,neck,tail,legs,legBaseX};
   }else{
-   const mat=this.materialFor(info.type,key),overlayResources=(MOB_RENDER_OVERLAYS as Record<string,string[]>)[info.type]??[];
+   const mat=this.materialFor(info.type),overlayResources=(MOB_RENDER_OVERLAYS as Record<string,string[]>)[info.type]??[];
    const overlayMaterials=overlayResources.map(path=>this.materialForResource(path));
    for(const p of (MODELS[key]??SPECIAL_MODELS[key]??[])){
     const inflate=p.inflate??0;

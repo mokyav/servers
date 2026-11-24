@@ -126,7 +126,8 @@ test("vanilla core rigs keep entity feet on the ground and preserve mirrored lim
   assert.match(mobSource, /pos:\[-6,19,1\],uv:\[44,22\]/); // folded villager arm
   assert.match(mobSource, /inflate:\.5/); // robe and hat layer separation
   assert.match(mobSource, /applyPlaneAtlasUV\(brimGeometry,\[30,47,16,1\],\[64,64\]\)/); // villager hat brim
-  assert.match(mobSource, /applyBoxAtlasUV\(g,p\.size,p\.uv,DIMS\[t\],!!p\.mirrorX\)/);
+  assert.match(mobSource, /atlasBoxFaceRects\(p\.size,p\.uv,sourceSize\)/);
+  assert.match(mobSource, /const scaleU=textureSize\[0\]\/sourceSize\[0\],scaleV=textureSize\[1\]\/sourceSize\[1\]/);
 });
 
 test("dragon wings remain parented to the torso pivot instead of being detached to the root", () => {
@@ -158,4 +159,12 @@ test("villager and wandering trader use their matching 26.3 entity atlases", () 
   assert.match(mobSource, /VILLAGER_RIG_TYPES/);
   assert.ok(existsSync(path.join(root, "src/client/public/assets/minecraft/textures/entity/villager/villager.png")));
   assert.ok(existsSync(path.join(root, "src/client/public/assets/minecraft/textures/entity/wandering_trader/wandering_trader.png")));
+});
+
+test("removing or clearing mobs disposes per-instance GPU resources without disposing shared materials", () => {
+  assert.match(mobSource, /private disposeEntry\(entry:MobEntry\)/);
+  assert.match(mobSource, /mesh\.geometry\.dispose\(\)/);
+  assert.match(mobSource, /!sharedMaterials\.has\(material\)\)material\.dispose\(\)/);
+  assert.match(mobSource, /this\.disposeEntry\(e\)/);
+  assert.match(mobSource, /clear\(\)\{for\(const id of \[\.\.\.this\.entries\.keys\(\)\]\)this\.remove\(id\);\}/);
 });

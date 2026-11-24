@@ -102,12 +102,12 @@ const BLAZE_RODS:Part[]=Array.from({length:12},(_,i):Part=>{
  const radius=ring===0?9:ring===1?7:5;
  const javaY=ring===0?-2+Math.cos(i*.5):ring===1?2+Math.cos(i*.5):11+Math.cos(i*.75);
  const x=Math.cos(angle)*radius,z=Math.sin(angle)*radius,y=24-javaY;
- return {size:[2,8,2],pos:[x+1,y-4,z+1],uv:[0,16],pivot:[x,y,z],local:[1,-4,1],leg:true};
+ return {size:[2,8,2],pos:[x,y-4,z],uv:[0,16],pivot:[x,y,z],local:[0,-4,0],leg:true};
 });
-const GHAST_TENTACLE_LENGTHS=[10,12,9,12,8,14,11,9,12];
+const GHAST_TENTACLE_LENGTHS=[8,13,9,11,11,10,12,9,12];
 const GHAST_TENTACLE_POSITIONS:[number,number][]=[[-3.75,-5],[1.25,-5],[6.25,-5],[-6.25,0],[-1.25,0],[3.75,0],[-3.75,5],[1.25,5],[6.25,5]];
 const GHAST_TENTACLES:Part[]=GHAST_TENTACLE_LENGTHS.map((length,i):Part=>{
- const [x,z]=GHAST_TENTACLE_POSITIONS[i],pivotY=17.4;
+ const [x,z]=GHAST_TENTACLE_POSITIONS[i]!,pivotY=17.4;
  return {size:[2,length,2],pos:[x,pivotY-length/2,z],uv:[0,0],pivot:[x,pivotY,z],local:[0,-length/2,0],leg:true};
 });
 const MAGMA_CUBE_SLICES:Part[]=Array.from({length:8},(_,i):Part=>{
@@ -141,7 +141,7 @@ const SPECIAL_MODELS:Partial<Record<CoreMobType,Part[]>>={
  ],
  spider:[
   // SpiderModel.createSpiderBodyLayer: base 64x32 UV map and eight hinged legs.
-  {size:[8,8,8],pos:[0,8,-3],uv:[32,4]},
+  {size:[8,8,8],pos:[0,8,-7],uv:[32,4]},
   {size:[6,6,6],pos:[0,8,0],uv:[0,0]},
   {size:[10,8,12],pos:[0,8,9],uv:[0,12]},
   {size:[16,2,2],pos:[-11,8,2],uv:[18,0],pivot:[-4,8,2],local:[-7,0,0],rotationY:Math.PI/4,rotationZ:-Math.PI/4,leg:true},
@@ -448,7 +448,13 @@ export class MobModels {
     const inflate=p.inflate??0;
     const g=new THREE.BoxGeometry((p.size[0]+inflate*2)/16,(p.size[1]+inflate*2)/16,(p.size[2]+inflate*2)/16);applyUV(g,key,p,info.type);
     const parent:THREE.Object3D=p.pivot?new THREE.Group():root;
-    if(p.pivot){parent.position.set(p.pivot[0]/16,p.pivot[1]/16,p.pivot[2]/16);parent.rotation.set(p.rotationX??0,p.rotationY??0,p.rotationZ??0);root.add(parent);}
+    if(p.pivot){
+     parent.position.set(p.pivot[0]/16,p.pivot[1]/16,p.pivot[2]/16);
+     parent.rotation.set(p.rotationX??0,p.rotationY??0,p.rotationZ??0);
+     parent.userData.baseRotationY=p.rotationY??0;
+     parent.userData.baseRotationZ=p.rotationZ??0;
+     root.add(parent);
+    }
     const m=new THREE.Mesh(g,mat);
     if(p.pivot){const local=p.local??[0,0,0];m.position.set(local[0]/16,local[1]/16,local[2]/16);}
     else{m.position.set(p.pos[0]/16,p.pos[1]/16,p.pos[2]/16);m.rotation.set(p.rotationX??0,p.rotationY??0,p.rotationZ??0);}
@@ -500,7 +506,42 @@ export class MobModels {
  update(t:number){
   for(const e of this.entries.values()){
    e.root.position.x+=(e.info.x-e.root.position.x)*.32;e.root.position.y+=(e.info.y+(Number(e.root.userData.yOffset)||0)-e.root.position.y)*.32;e.root.position.z+=(e.info.z-e.root.position.z)*.32;e.root.rotation.y=e.info.yaw;
-   e.legs.forEach((m,i)=>m.rotation.x=Math.sin(t*2.2+(i%2)*Math.PI)*.08);
+   const isWalking=e.info.state==="wander"||e.info.state==="chase"||e.info.state==="flee";
+   if(e.info.type==="spider"||e.info.type==="cave_spider"){
+    // SpiderModel.setupAnim: four paired gait phases, yaw swing and outward roll.
+    const walkPos=t*20,phase=walkPos*.6662,speed=isWalking?1:0;
+    const phaseOffsets=[0,Math.PI,Math.PI/2,Math.PI*1.5];
+    for(let pair=0;pair<4;pair++){
+     const right=e.legs[pair*2],left=e.legs[pair*2+1];
+     if(!right||!left)continue;
+     const yaw=-Math.cos(phase*2+phaseOffsets[pair])*.4*speed;
+     const roll=Math.abs(Math.sin(phase+phaseOffsets[pair])*.4)*speed;
+     right.rotation.y=Number(right.userData.baseRotationY||0)+yaw;
+     left.rotation.y=Number(left.userData.baseRotationY||0)-yaw;
+     right.rotation.z=Number(right.userData.baseRotationZ||0)+roll;
+     left.rotation.z=Number(left.userData.baseRotationZ||0)-roll;
+    }
+   }else if(e.info.type==="ghast"){
+    // GhastModel.animateTentacles: xRot = 0.2*sin(ageInTicks*0.3 + index) + 0.4.
+    const ageInTicks=t*20;
+    e.legs.forEach((m,i)=>{m.rotation.x=.2*Math.sin(ageInTicks*.3+i)+.4;});
+   }else if(e.info.type==="blaze"){
+    // BlazeModel.setupAnim moves three rings of rods around the head with distinct angular speeds.
+    const ageInTicks=t*20;
+    e.legs.forEach((m,i)=>{
+     const ring=i<4?0:i<8?1:2,slot=i%4;
+     const initial=ring===2?.47123894:Math.PI/4;
+     const angularVelocity=ring===0?-.1*Math.PI:ring===1?.03*Math.PI:-.05*Math.PI;
+     const angle=initial+angularVelocity*ageInTicks+slot*Math.PI/2;
+     const radius=ring===0?9:ring===1?7:5;
+     const modelY=ring===0?-2+Math.cos((i*2+ageInTicks)*.25)
+       :ring===1?2+Math.cos((i*2+ageInTicks)*.25)
+       :11+Math.cos((i*1.5+ageInTicks)*.5);
+     m.position.set(Math.cos(angle)*radius/16,(24-modelY)/16,Math.sin(angle)*radius/16);
+    });
+   }else{
+    e.legs.forEach((m,i)=>m.rotation.x=Math.sin(t*2.2+(i%2)*Math.PI)*.08);
+   }
    if(e.dragon){e.dragon.wings.forEach((wing,i)=>{const flap=Math.sin(t*2.7+(i*Math.PI))*.48;wing.rotation.z=flap*(i===0?1:-1);wing.rotation.y=Math.sin(t*1.1)*.06*(i===0?1:-1);});e.dragon.wingTips.forEach((tip,i)=>{tip.rotation.z=Math.sin(t*2.7+i*Math.PI)*.32*(i===0?1:-1);});e.dragon.jaw.rotation.x=.04+Math.max(0,Math.sin(t*2.1))*.2;e.dragon.head.rotation.y=Math.sin(t*.7)*.12;e.dragon.neck.forEach((m,i)=>{m.rotation.x=Math.sin(t*.8-i*.18)*.035;});e.dragon.tail.forEach((m,i)=>{m.rotation.y=Math.sin(t*.9-i*.12)*.06;});e.dragon.legs.forEach((m,i)=>{m.rotation.x=e.dragon!.legBaseX[i]+Math.sin(t*1.8+(i%3)*Math.PI)*.035;});}
    if(e.wither){e.wither.heads[0].rotation.y=Math.sin(t*.55)*.06;e.wither.heads[1].rotation.y=Math.sin(t*.8+1.4)*.16;e.wither.heads[2].rotation.y=Math.sin(t*.8-1.4)*.16;e.wither.ribcage.rotation.z=Math.sin(t*.35)*.025;e.wither.tail.rotation.y=Math.sin(t*.45)*.04;}
    if(e.warden){e.warden.head.rotation.y=Math.sin(t*.38)*.045;e.warden.tendrils.forEach((g,i)=>{g.rotation.z=Math.sin(t*.6+i*Math.PI)*.05;});e.warden.arms.forEach((m,i)=>{m.rotation.x=Math.sin(t*.75+i*Math.PI)*.035;});e.warden.ribs.forEach((g,i)=>{g.rotation.z=Math.sin(t*.5+i*Math.PI)*.025;});}

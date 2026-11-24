@@ -108,7 +108,8 @@ function applyBoxAtlasUV(g:THREE.BufferGeometry,size:[number,number,number],offs
 }
 function applyUV(g:THREE.BufferGeometry,t:CoreMobType,p:Part,type:MobType){
  const sourceSize=DIMS[t];
- const textureSize=(MOB_RENDER_TEXTURE_SIZES as Record<string,[number,number]>)[type]??sourceSize;
+ const registeredSize=(MOB_RENDER_TEXTURE_SIZES as Record<string,number[]>)[type];
+ const textureSize:[number,number]=registeredSize&&registeredSize.length===2?[registeredSize[0],registeredSize[1]]:sourceSize;
  const sourceRects=atlasBoxFaceRects(p.size,p.uv,sourceSize),uv=g.getAttribute("uv") as THREE.BufferAttribute;
  const scaleU=textureSize[0]/sourceSize[0],scaleV=textureSize[1]/sourceSize[1];
  // Preserve vanilla pixel-space UV rectangles while adapting to the exact resolution

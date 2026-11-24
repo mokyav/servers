@@ -16,7 +16,7 @@ export const MOB_TYPES = [
   "zombie_horse", "zombie_nautilus", "zombie_villager", "zombified_piglin",
 ] as const;
 export type MobType = typeof MOB_TYPES[number] | "end_crystal";
-export type MobState = "idle" | "wander" | "chase" | "attack" | "retreat" | "fuse" | "circle" | "strafe" | "swoop";
+export type MobState = "idle" | "wander" | "flee" | "chase" | "attack" | "retreat" | "fuse" | "circle" | "strafe" | "swoop";
 /** Optional AI fields preserve compatibility with older saved MobInfo records. */
 export interface MobInfo {
   id:string; type:MobType; x:number; y:number; z:number; yaw:number; dimensionId?:string; spawnReason?:"natural"|"summoned";

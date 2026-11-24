@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   MOB_RENDER_TEXTURES,
+  MOB_RENDER_TEXTURE_SIZES,
   MOB_RENDER_OVERLAYS,
   PIGLIN_RIG_TYPES,
   atlasBoxFaceRects,
@@ -14,25 +15,34 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const mobSource = readFileSync(path.join(root, "src/client/mobs.ts"), "utf8");
+const entitiesSource = readFileSync(path.join(root, "shared/entities.ts"), "utf8");
+const mobTypesDeclaration = entitiesSource.match(/export const MOB_TYPES = \[([\s\S]*?)\] as const/);
+assert.ok(mobTypesDeclaration, "MOB_TYPES declaration not found");
+const registeredMobTypes = [...mobTypesDeclaration[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
 const pngSize = (file) => {
   const data = readFileSync(file);
   assert.equal(data.toString("hex", 0, 8), "89504e470d0a1a0a", `${file} is not a PNG`);
   return [data.readUInt32BE(16), data.readUInt32BE(20)];
 };
 
-test("all explicit mob texture and overlay resources exist", () => {
-  for (const [mob, resource] of Object.entries(MOB_RENDER_TEXTURES)) {
+test("all 88 registered mobs have an explicit existing Java 26.3 texture and exact atlas dimensions", () => {
+  assert.equal(registeredMobTypes.length, 88, "source mob registry should contain 88 spawn-egg mobs");
+  assert.deepEqual(Object.keys(MOB_RENDER_TEXTURES).sort(), [...registeredMobTypes].sort(), "texture map must cover exactly every registered mob");
+  assert.deepEqual(Object.keys(MOB_RENDER_TEXTURE_SIZES).sort(), [...registeredMobTypes].sort(), "size map must cover exactly every registered mob");
+  for (const mob of registeredMobTypes) {
+    const resource = MOB_RENDER_TEXTURES[mob];
+    const expectedSize = MOB_RENDER_TEXTURE_SIZES[mob];
+    assert.ok(resource, `${mob} texture mapping missing`);
+    assert.ok(Array.isArray(expectedSize) && expectedSize.length === 2 && expectedSize.every((v) => Number.isInteger(v) && v > 0), `${mob} texture size metadata invalid`);
     const file = path.join(root, "src/client/public/assets/minecraft/textures/entity", `${resource}.png`);
     assert.ok(existsSync(file), `${mob} texture missing: ${resource}`);
-    const [w, h] = pngSize(file);
-    assert.ok(w >= 64 && h >= 32, `${mob} texture has unexpected size ${w}x${h}`);
+    assert.deepEqual(pngSize(file), expectedSize, `${mob} texture dimensions differ from source-client manifest`);
   }
   for (const [mob, overlays] of Object.entries(MOB_RENDER_OVERLAYS)) {
     for (const resource of overlays) {
       const file = path.join(root, "src/client/public/assets/minecraft/textures/entity", `${resource}.png`);
       assert.ok(existsSync(file), `${mob} overlay missing: ${resource}`);
-      const expectedSize = mob.includes("villager") ? [64, 64] : [64, 32];
-      assert.deepEqual(pngSize(file), expectedSize, `${mob} overlay atlas dimensions`);
+      assert.deepEqual(pngSize(file), MOB_RENDER_TEXTURE_SIZES[mob], `${mob} overlay atlas dimensions`);
     }
   }
 });
@@ -93,7 +103,10 @@ test("plane UV mirroring reverses the horizontal span without leaving the atlas"
 });
 
 test("renderer uses per-face UV remapping and dedicated boss rigs without hue tint fallback", () => {
-  assert.match(mobSource, /mapAtlasFaceUV\(mirrorX\?1-baseU:baseU/);
+  assert.match(mobSource, /mapAtlasFaceUV\(p\.mirrorX\?1-baseU:baseU/);
+  assert.match(mobSource, /MOB_RENDER_TEXTURE_SIZES/);
+  assert.match(mobSource, /applyUV\(g,key,p,info\.type\)/);
+  assert.doesNotMatch(mobSource, /`\/assets\/mobs\/\$\{key\}\.png`/, "renderer must not request missing generic texture files");
   assert.match(mobSource, /addWitherModel\(root\)/);
   assert.match(mobSource, /addWardenModel\(root\)/);
   assert.match(mobSource, /applyPlaneAtlasUV\(membrane,\[56,88,56,56\],\[256,256\],true\)/);

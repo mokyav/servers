@@ -146,3 +146,34 @@ test("villager and wandering trader use their matching 26.3 entity atlases", () 
   assert.ok(existsSync(path.join(root, "src/client/public/assets/minecraft/textures/entity/villager/villager.png")));
   assert.ok(existsSync(path.join(root, "src/client/public/assets/minecraft/textures/entity/wandering_trader/wandering_trader.png")));
 });
+
+import { MOB_RIG_KEYS } from "../shared/mob-render-assets.js";
+import { MOB_RIG_PARTS, EXTRA_RIG_TEXTURE_SIZES, EXTRA_RIG_BASE_HEIGHTS } from "../shared/mob-rigs.js";
+
+test("dedicated rigs: every cuboid UV fits its atlas and each rig type has a texture", () => {
+  const base = path.join(root, "src/client/public/assets/minecraft/textures/entity");
+  for (const [mob, rig] of Object.entries(MOB_RIG_KEYS)) {
+    assert.ok(MOB_RENDER_TEXTURES[mob], `${mob} needs an explicit texture`);
+    assert.ok(MOB_RIG_PARTS[rig]?.length, `${mob} rig missing`);
+    assert.ok(EXTRA_RIG_BASE_HEIGHTS[rig] > 0, `${mob} base height`);
+    assert.deepEqual(pngSize(path.join(base, `${MOB_RENDER_TEXTURES[mob]}.png`)), EXTRA_RIG_TEXTURE_SIZES[rig], `${mob} atlas size`);
+  }
+  for (const [rig, parts] of Object.entries(MOB_RIG_PARTS)) {
+    for (const p of parts) {
+      assert.equal(atlasBoxFaceRects(p.size, p.uv, EXTRA_RIG_TEXTURE_SIZES[rig]).length, 6, `${rig} part uv`);
+      assert.ok(p.pos.every(Number.isFinite), `${rig} part position`);
+      if (p.layer) assert.ok(existsSync(path.join(base, `${p.layer}.png`)), `${rig} layer ${p.layer}`);
+    }
+  }
+});
+
+test("dedicated rigs keep vanilla feet-on-ground placement and sheep wool is a separate layer", () => {
+  for (const [rig, parts] of Object.entries(MOB_RIG_PARTS)) {
+    const lowest = Math.min(...parts.filter((p) => !p.layer).map((p) => p.pos[1] - p.size[1] / 2));
+    if (rig !== "slime" && rig !== "spider" && rig !== "blaze") // spider legs are rotated; slime floats in its outer cube, blaze hovers
+      assert.ok(Math.abs(lowest) < 3, `${rig} lowest point ${lowest}`);
+  }
+  assert.ok(MOB_RIG_PARTS.sheep.some((p) => p.layer === "sheep/sheep_wool"));
+  assert.match(mobSource, /MOB_RIG_PARTS/);
+  assert.match(mobSource, /const scale=exKey\?rigScale/);
+});

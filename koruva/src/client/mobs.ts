@@ -1,8 +1,9 @@
 import * as THREE from "three";
 import { MOB_PROFILES } from "../../shared/mob-ai.js";
-import { MOB_RENDER_TEXTURES, MOB_RENDER_OVERLAYS, SKELETON_RIG_TYPES, HUMANOID_RIG_TYPES, VILLAGER_RIG_TYPES, PIGLIN_RIG_TYPES, MOB_MODEL_BASE_HEIGHTS, atlasBoxFaceRects, mapAtlasFaceUV, mapAtlasPlaneUV } from "../../shared/mob-render-assets.js";
+import { MOB_RENDER_TEXTURES, MOB_RENDER_OVERLAYS, SKELETON_RIG_TYPES, HUMANOID_RIG_TYPES, VILLAGER_RIG_TYPES, PIGLIN_RIG_TYPES, MOB_MODEL_BASE_HEIGHTS, MOB_RIG_KEYS, MOB_RIG_SCALE, atlasBoxFaceRects, mapAtlasFaceUV, mapAtlasPlaneUV } from "../../shared/mob-render-assets.js";
+import { MOB_RIG_PARTS, EXTRA_RIG_TEXTURE_SIZES, EXTRA_RIG_BASE_HEIGHTS } from "../../shared/mob-rigs.js";
 import type { MobInfo, MobType } from "../../shared/entities";
-interface Part{size:[number,number,number];pos:[number,number,number];uv:[number,number];leg?:boolean;rotationX?:number;rotationY?:number;rotationZ?:number;mirrorX?:boolean;inflate?:number}
+interface Part{layer?:string;size:[number,number,number];pos:[number,number,number];uv:[number,number];leg?:boolean;rotationX?:number;rotationY?:number;rotationZ?:number;mirrorX?:boolean;inflate?:number}
 type CoreMobType = "pig" | "cow" | "chicken" | "creeper" | "zombie" | "skeleton" | "villager" | "piglin";
 const DIMS:Record<CoreMobType,[number,number]>={pig:[64,64],cow:[64,64],chicken:[64,32],creeper:[64,32],zombie:[64,64],skeleton:[64,32],villager:[64,64],piglin:[64,64]};
 // Core rigs below use the supplied 26.3 client model cuboids and UV offsets.
@@ -107,6 +108,7 @@ function applyBoxAtlasUV(g:THREE.BufferGeometry,size:[number,number,number],offs
  uv.needsUpdate=true;
 }
 function applyUV(g:THREE.BufferGeometry,t:CoreMobType,p:Part){applyBoxAtlasUV(g,p.size,p.uv,DIMS[t],!!p.mirrorX);}
+const rigKey=(type:string):string|undefined=>(MOB_RIG_KEYS as Record<string,string>)[type];
 function modelType(type:MobType):CoreMobType {
  if(SKELETON_RIG_TYPES.includes(type as string))return "skeleton";
  if(VILLAGER_RIG_TYPES.includes(type as string))return "villager";
@@ -325,10 +327,14 @@ export class MobModels {
   }else{
    const mat=this.materialFor(info.type,key),overlayResources=(MOB_RENDER_OVERLAYS as Record<string,string[]>)[info.type]??[];
    const overlayMaterials=overlayResources.map(path=>this.materialForResource(path));
-   for(const p of MODELS[key]){
+   const extraKey=rigKey(info.type as string),extraParts=extraKey?(MOB_RIG_PARTS as unknown as Record<string,Part[]>)[extraKey]:undefined;
+   const extraSize=extraKey?(EXTRA_RIG_TEXTURE_SIZES as unknown as Record<string,[number,number]>)[extraKey]:undefined;
+   for(const p of (extraParts??MODELS[key])){
     const inflate=p.inflate??0;
-    const g=new THREE.BoxGeometry((p.size[0]+inflate*2)/16,(p.size[1]+inflate*2)/16,(p.size[2]+inflate*2)/16);applyUV(g,key,p);
-    const m=new THREE.Mesh(g,mat);m.position.set(p.pos[0]/16,p.pos[1]/16,p.pos[2]/16);m.rotation.set(p.rotationX??0,p.rotationY??0,p.rotationZ??0);root.add(m);if(p.leg)legs.push(m);
+    const g=new THREE.BoxGeometry((p.size[0]+inflate*2)/16,(p.size[1]+inflate*2)/16,(p.size[2]+inflate*2)/16);
+    if(extraSize)applyBoxAtlasUV(g,p.size,p.uv,extraSize,!!p.mirrorX);else applyUV(g,key,p);
+    const partMat=p.layer?this.materialForResource(p.layer):mat;
+    const m=new THREE.Mesh(g,partMat);m.position.set(p.pos[0]/16,p.pos[1]/16,p.pos[2]/16);m.rotation.set(p.rotationX??0,p.rotationY??0,p.rotationZ??0);root.add(m);if(p.leg)legs.push(m);
     for(const overlayMaterial of overlayMaterials){const overlay=new THREE.Mesh(g.clone(),overlayMaterial);overlay.position.copy(m.position);overlay.rotation.copy(m.rotation);overlay.scale.copy(m.scale);root.add(overlay);}
    }
    if(VILLAGER_RIG_TYPES.includes(info.type as string)){
@@ -341,9 +347,11 @@ export class MobModels {
   }
   const profile=MOB_PROFILES[info.type];
   if(info.type!=="ender_dragon"&&info.type!=="end_crystal"){
-   const baseHeight=info.type==="wither"?26.7/16:info.type==="warden"?3.7:(MOB_MODEL_BASE_HEIGHTS as Record<string,number>)[key]??28/16;
-   const desiredHeight=profile?.height??baseHeight;
-   const scale=Math.max(.35,Math.min(2.8,desiredHeight/baseHeight));
+   const exKey=rigKey(info.type as string);
+   const baseHeight=info.type==="wither"?26.7/16:info.type==="warden"?3.7:exKey?(EXTRA_RIG_BASE_HEIGHTS as Record<string,number>)[exKey]:(MOB_MODEL_BASE_HEIGHTS as Record<string,number>)[key]??28/16;
+   const rigScale=(MOB_RIG_SCALE as Record<string,number>)[info.type as string]??1;
+   // Dedicated rigs keep their vanilla proportions; only generic fallbacks stretch to the hitbox.
+   const scale=exKey?rigScale:Math.max(.35,Math.min(2.8,(profile?.height??baseHeight)/baseHeight));
    root.scale.setScalar(scale);
    if(info.type==="wither")root.userData.yOffset=22.7/16*scale;
    else if(info.type==="warden")root.userData.yOffset=0;

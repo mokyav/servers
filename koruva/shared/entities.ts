@@ -21,7 +21,7 @@ export type MobState = "idle" | "wander" | "chase" | "attack" | "retreat" | "fus
 export interface MobInfo {
   id:string; type:MobType; x:number; y:number; z:number; yaw:number; dimensionId?:string; spawnReason?:"natural"|"summoned";
   health?:number; maxHealth?:number; respawnCrystal?:boolean; respawnInvulnerable?:boolean; beamTarget?:[number,number,number]; lastHurtAt?:number; lastDamage?:number; burningUntil?:number; lastFireDamageAt?:number;
-  state?:MobState; targetId?:string; attackAt?:number; wanderYaw?:number; nextThinkAt?:number; fuse?:number; fleeYaw?:number; fleeUntil?:number; dragonPhase?:"circle"|"strafe"|"swoop"|"landing"; dragonOrbit?:number; armorPoints?:number; nextHealAt?:number;
+  state?:MobState; targetId?:string; attackAt?:number; wanderYaw?:number; nextThinkAt?:number; fuse?:number; fleeYaw?:number; fleeUntil?:number; dragonPhase?:"circle"|"strafe"|"swoop"|"landing"; dragonOrbit?:number; armorPoints?:number; nextHealAt?:number; angryUntil?:number; angryTargetId?:string;
 }
 
 /** Server-authoritative projectile synchronized to players in the same dimension. */

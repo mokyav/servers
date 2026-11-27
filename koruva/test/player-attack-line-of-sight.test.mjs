@@ -31,6 +31,7 @@ test("Worker mob attacks consult server world blocks before applying damage", ()
 
 test("Worker gives damaged passive mobs a bounded flee impulse", () => {
   const room = readFileSync(new URL("../src/worker/room.ts", import.meta.url), "utf8");
-  assert.ok(room.includes('MOB_PROFILES[target.type]?.kind === "passive"'));
+  assert.ok(room.includes('hitProfile?.kind === "passive"'));
+  assert.ok(room.includes("angryUntil: now + 20000"), "neutral mobs retaliate instead of fleeing");
   assert.ok(room.includes("fleeUntil: now + 4000"));
 });

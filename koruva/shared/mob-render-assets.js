@@ -21,9 +21,28 @@ export const MOB_RENDER_TEXTURES = Object.freeze({
   villager: "villager/villager",
   wandering_trader: "wandering_trader/wandering_trader",
   mooshroom: "cow/mooshroom_red",
+  sheep: "sheep/sheep",
+  wolf: "wolf/wolf",
+  cat: "cat/cat_tabby",
+  ocelot: "cat/ocelot",
+  spider: "spider/spider",
+  cave_spider: "spider/cave_spider",
+  enderman: "enderman/enderman",
+  slime: "slime/slime",
+  blaze: "blaze/blaze",
+  iron_golem: "iron_golem/iron_golem",
+  snow_golem: "snow_golem/snow_golem",
+  vindicator: "illager/vindicator",
+  pillager: "illager/pillager",
+  evoker: "illager/evoker",
+  illusioner: "illager/illusioner",
+  witch: "witch/witch",
 });
 
 export const MOB_RENDER_OVERLAYS = Object.freeze({
+  spider: ["spider/spider_eyes"],
+  cave_spider: ["spider/spider_eyes"],
+  enderman: ["enderman/enderman_eyes"],
   stray: ["skeleton/stray_overlay"],
   bogged: ["skeleton/bogged_overlay"],
   // Villager skins are layered by biome, profession and profession level in vanilla.
@@ -40,12 +59,19 @@ export const MOB_RENDER_OVERLAYS = Object.freeze({
   ],
 });
 
+/** Mob types that use a dedicated rig from shared/mob-rigs.js instead of a generic fallback. */
+export const MOB_RIG_KEYS = Object.freeze({
+  sheep: "sheep", wolf: "wolf", cat: "cat", ocelot: "cat", spider: "spider", cave_spider: "spider",
+  enderman: "enderman", slime: "slime", blaze: "blaze", iron_golem: "iron_golem", snow_golem: "snow_golem",
+  vindicator: "illager", pillager: "illager", evoker: "illager", illusioner: "illager", witch: "witch",
+});
+
 export const SKELETON_RIG_TYPES = Object.freeze([
   "skeleton", "stray", "bogged", "parched", "wither_skeleton",
 ]);
 
 export const HUMANOID_RIG_TYPES = Object.freeze([
-  "zombie", "husk", "drowned", "zombie_villager", "evoker", "pillager", "vindicator", "illusioner",
+  "zombie", "husk", "drowned", "zombie_villager",
 ]);
 
 // Java 26.3 PiglinModel / ZombifiedPiglinModel use their own 64x64 head, snout and ear UV layout.
@@ -104,3 +130,6 @@ export function mapAtlasPlaneUV(localU, localV, rect, textureSize, mirrorX = fal
   const u = mirrorX ? x + (1 - localU) * w : x + localU * w;
   return [u / tw, 1 - (y + (1 - localV) * h) / th];
 }
+
+/** Per-type scale applied on top of the shared rig (cave spiders are smaller spiders). */
+export const MOB_RIG_SCALE = Object.freeze({ cave_spider: 0.7, ocelot: 0.85 });

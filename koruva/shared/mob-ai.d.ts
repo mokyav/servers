@@ -1,7 +1,7 @@
 import type { MobInfo, MobType } from "./entities";
 export type MobVisual = "pig" | "cow" | "chicken" | "creeper" | "zombie" | "skeleton";
 export type MobBehavior = "passive" | "melee" | "ranged" | "fuse";
-export interface MobProfile { maxHealth:number; speed:number; kind:MobBehavior; height:number; damage?:number; attackRange?:number; visual:MobVisual }
+export interface MobProfile { maxHealth:number; speed:number; kind:MobBehavior; height:number; damage?:number; attackRange?:number; visual:MobVisual; neutral?:boolean }
 export interface MobActor { id:string; p:[number,number,number]; dead?:boolean; gameMode?:"survival"|"creative"|"adventure"|"spectator" }
 export interface MobAttack { targetId:string; damage:number; kind:"melee"|"ranged"|"explosion" }
 

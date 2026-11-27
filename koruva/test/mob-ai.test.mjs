@@ -45,3 +45,32 @@ test("Ender Dragon swoop emits melee damage only when it reaches the player",()=
   assert.ok(result.attacks.some(a=>a.targetId==="target"&&a.kind==="melee"));
   assert.equal(result.mob.dragonPhase,"circle");
 });
+
+test("neutral mobs ignore players until angered, then chase and bite only the attacker", () => {
+  const wolf = createMob("wolf", "wolf-1", 0, 10, 0);
+  const calm = stepMobAI(wolf, [player("p", 3)], .2, 1000, ground);
+  assert.notEqual(calm.mob.state, "chase");
+  assert.equal(calm.mob.targetId, undefined);
+  const angry = { ...wolf, angryUntil: 20000, angryTargetId: "p" };
+  const chase = stepMobAI(angry, [player("p", 6), player("other", 2)], .2, 1000, ground);
+  assert.equal(chase.mob.targetId, "p");
+  assert.equal(chase.mob.state, "chase");
+  const bite = stepMobAI({ ...angry, x: 0 }, [player("p", 1)], .2, 1000, ground);
+  assert.equal(bite.attacks[0]?.targetId, "p");
+  const expired = stepMobAI({ ...angry, angryUntil: 500 }, [player("p", 3)], .2, 1000, ground);
+  assert.equal(expired.mob.targetId, undefined);
+});
+
+test("chasing mobs move faster than wandering ones", () => {
+  const chase = stepMobAI(createMob("zombie", "z", 0, 10, 0), [player("p", 12)], .2, 1000, ground);
+  const wander = stepMobAI({ ...createMob("pig", "p", 0, 10, 0), state: "wander", wanderYaw: Math.PI / 2, nextThinkAt: 99999 }, [], .2, 1000, ground);
+  assert.ok(chase.mob.x > wander.mob.x * 1.8);
+});
+
+test("wandering mobs turn away from a wall instead of pushing into it", () => {
+  const wall = (x, y, z) => y < 10 || x >= 1;
+  const pig = { ...createMob("pig", "wall-pig", .95, 10, 0), state: "wander", wanderYaw: Math.PI / 2, nextThinkAt: 99999 };
+  const r = stepMobAI(pig, [], .2, 1000, wall);
+  assert.notEqual(r.mob.wanderYaw, pig.wanderYaw);
+  assert.ok(r.mob.nextThinkAt <= 1400);
+});

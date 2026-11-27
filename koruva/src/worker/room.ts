@@ -768,9 +768,13 @@ export class Room extends DurableObject<Env> {
           }
           if (me.vitals.gameMode === "survival" || me.vitals.gameMode === "adventure") await this.spawnMobMaterialDrops(target, me.dimensionId);
         } else {
-          const fleeState = MOB_PROFILES[target.type]?.kind === "passive"
-            ? { fleeYaw: Math.atan2(target.x - me.p[0], target.z - me.p[2]), fleeUntil: now + 4000 }
-            : {};
+          const hitProfile = MOB_PROFILES[target.type] as { kind: string; neutral?: boolean } | undefined;
+          // Neutral mobs (wolf, iron golem, zombified piglin...) retaliate instead of fleeing.
+          const fleeState = hitProfile?.neutral
+            ? { angryUntil: now + 20000, angryTargetId: me.id }
+            : hitProfile?.kind === "passive"
+              ? { fleeYaw: Math.atan2(target.x - me.p[0], target.z - me.p[2]), fleeUntil: now + 4000 }
+              : {};
           const knockback = getItemEnchantment(meleeEnchants, heldItemId, "knockback");
           const distance = Math.hypot(dx, dz) || 1;
           const push = knockback * 0.38;

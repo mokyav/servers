@@ -7,7 +7,7 @@ dist
 .DS_Store
 ._*
 __MACOSX/
-^core
+core
 
 # Locally extracted Minecraft audio; copy into the public folder before local builds/deploys.
 /src/client/public/assets/sounds/

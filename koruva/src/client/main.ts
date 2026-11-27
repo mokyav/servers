@@ -3448,7 +3448,11 @@ class Game {
     const ix = active ? (k.has("KeyD") ? 1 : 0) - (k.has("KeyA") ? 1 : 0) : 0;
     const iz = active ? (k.has("KeyW") ? 1 : 0) - (k.has("KeyS") ? 1 : 0) : 0;
     this.sneaking = active && k.has("KeyC") && !this.fly && this.gameMode !== "spectator";
-    let sprint = active && (k.has("ShiftLeft") || k.has("ShiftRight"));
+    // Java版 LocalPlayer#canStartSprinting は ClientInput#hasForwardImpulse()
+    // (前進入力、= zza > 0 相当)を必須条件にしている。Shiftキーだけでは
+    // ダッシュは始まらない(その場でShiftを押してもダッシュしない)。
+    const hasForwardImpulse = iz > 0;
+    let sprint = active && (k.has("ShiftLeft") || k.has("ShiftRight")) && hasForwardImpulse;
     if (this.survival && !canSprint(this.vitals)) sprint = false;
     if (this.sneaking) sprint = false;
     this.eyeH += ((this.sneaking ? 1.27 : EYE_H) - this.eyeH) * Math.min(1, dt * 14);
@@ -3460,13 +3464,17 @@ class Game {
 
     const feetWater = inLiquid(this.world, b.x, b.y + 0.3, b.z);
     const headWater = inLiquid(this.world, b.x, b.y + 1.4, b.z);
-    let speed = 4.4;
+    // Java版の歩行速度(movement_speedベース0.1=4.317 m/s相当)を基準に、
+    // ダッシュはSPEED_MODIFIER_SPRINTING(ADD_MULTIPLIED_TOTAL +0.3)を掛けた値にする。
+    // 旧実装は歩行4.4→ダッシュ6.4(+45%)で、本家の+30%からズレていた。
+    const WALK_SPEED = 4.317;
+    let speed = WALK_SPEED;
     if (this.fly) speed = sprint ? 20 : 11;
     else if (feetWater) {
       const depthStrider = getItemEnchantment(this.itemEnchantments, this.armorSlots[3] ?? 0, "depth_strider");
       speed = 2.6 * (1 + 0.33 * depthStrider);
     }
-    else if (sprint) speed = 6.4;
+    else if (sprint) speed = WALK_SPEED * 1.3;
     const speedAmp=this.effectAmp("speed"), slowAmp=this.effectAmp("slowness");
     if(speedAmp>=0)speed*=1+0.2*(speedAmp+1);
     if(slowAmp>=0)speed*=Math.max(0.05,1-0.15*(slowAmp+1));
@@ -3606,7 +3614,10 @@ class Game {
     this.lastSent = { x: b.x, y: b.y, z: b.z, yaw: this.yaw, pitch: this.pitch };
     this.lastSentSneak = this.sneaking; this.lastSentFallFlying = this.fallFlying;
     const r2 = (n: number) => Math.round(n * 100) / 100;
-    this.net.send({ t: "pos", p: [r2(b.x), r2(b.y), r2(b.z)], r: [r2(this.yaw), r2(this.pitch)], sprint: !this.sneaking && (this.keys.has("ShiftLeft")||this.keys.has("ShiftRight")), sneak: this.sneaking || undefined, swimming: inLiquid(this.world,b.x,b.y+0.3,b.z), fallFlying: this.fallFlying || undefined, flightStrafe: this.fallFlying ? ((this.keys.has("KeyD")?1:0)-(this.keys.has("KeyA")?1:0)) : 0 });
+    // ダッシュのサーバー通知も updatePlayer と同じ「前進入力あり」条件に合わせる
+    // (Shiftだけで静止していても、サーバー側がダッシュ扱いで満腹度を消費しないように)。
+    const sprintFlag = !this.sneaking && (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight")) && this.keys.has("KeyW");
+    this.net.send({ t: "pos", p: [r2(b.x), r2(b.y), r2(b.z)], r: [r2(this.yaw), r2(this.pitch)], sprint: sprintFlag, sneak: this.sneaking || undefined, swimming: inLiquid(this.world,b.x,b.y+0.3,b.z), fallFlying: this.fallFlying || undefined, flightStrafe: this.fallFlying ? ((this.keys.has("KeyD")?1:0)-(this.keys.has("KeyA")?1:0)) : 0 });
   }
 
   updateInfo() {

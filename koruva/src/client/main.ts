@@ -3518,7 +3518,17 @@ class Game {
         if (levitation >= 0) b.vy += ((0.9 + 0.25 * levitation) - b.vy) * Math.min(1, dt * 4);
         else if (slowFall >= 0) b.vy = Math.max(-2, b.vy - 2 * dt);
         else b.vy = Math.max(-50, b.vy - 28 * dt);
-        if (jump && b.onGround) { b.vy = 8.6 + Math.max(0,this.effectAmp("jump_boost")+1)*1.2; if(this.mode==="room"&&this.survival)this.net.send({t:"jump"}); }
+        if (jump && b.onGround) {
+          b.vy = 8.6 + Math.max(0,this.effectAmp("jump_boost")+1)*1.2;
+          // ダッシュジャンプ: Java版 LivingEntity#jumpFromGround は踏切時の水平速度に
+          // 進行方向(yaw基準)への追加インパルスを加える(スプリント中のみ)。
+          // これが無いと「ダッシュジャンプ」の飛距離・加速感が本家とズレる。
+          if (sprint) {
+            b.vx += -Math.sin(this.yaw) * 0.2;
+            b.vz += Math.cos(this.yaw) * 0.2;
+          }
+          if(this.mode==="room"&&this.survival)this.net.send({t:"jump"});
+        }
       }
     }
     const wasOnGround = b.onGround, impactVy = b.vy;

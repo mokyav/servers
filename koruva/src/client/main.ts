@@ -1918,6 +1918,8 @@ class Game {
     }
     this.view.clear();
     this.soundMobs.clear();
+    this.remoteFoot.clear();
+    this.wasUnder = false;
     this.body = { x: safe.x, y: safe.y, z: safe.z, vx: 0, vy: 0, vz: 0, onGround: false };
     this.spawn = [safe.x, safe.y, safe.z];
     this.target = null; this.digKey = ""; this.digT = 0; this.digReady = false;
@@ -2142,6 +2144,7 @@ class Game {
           this.syncInventorySlots();
           this.mobModels.clear();
           this.soundMobs.clear();
+          this.remoteFoot.clear();
           for (const mob of m.mobs) { this.trackMobSound(mob); this.mobModels.add(mob); }
           this.projectileEntities.clear(); for (const projectile of m.projectiles ?? []) this.projectileEntities.add(projectile);
         } else if (m.t === "edits" && gotInit) {

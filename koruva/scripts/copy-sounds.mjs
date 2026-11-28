@@ -81,7 +81,7 @@ try {
     const listing = spawnSync("unzip", ["-Z1", requestedSource], { encoding: "utf8", maxBuffer: 100 * 1024 * 1024 });
     if (listing.error || listing.status !== 0) throw new Error("Could not list ZIP entries. Make sure 'unzip' is installed.");
     const entries = String(listing.stdout ?? "").split(/\r?\n/).filter(Boolean);
-    const unsafe = entries.find(entry => entry.startsWith("/") || entry.includes("\\\\") || entry.split("/").some(part => part === ".."));
+    const unsafe = entries.find(entry => entry.startsWith("/") || entry.includes("\\") || entry.split("/").some(part => part === ".."));
     if (unsafe) throw new Error("ZIP contains an unsafe path: " + unsafe);
     const extracted = spawnSync("unzip", ["-q", "-o", requestedSource, "-d", extractionDir], { stdio: "inherit" });
     if (extracted.error || extracted.status !== 0) throw new Error("Could not extract ZIP. Check that it is a valid archive.");
@@ -122,7 +122,7 @@ try {
       cpSync(from, to);
       copied.push(file);
     }
-    writeFileSync(join(stagingDir, "manifest.json"), JSON.stringify(copied, null, 2) + "\\n", "utf8");
+    writeFileSync(join(stagingDir, "manifest.json"), JSON.stringify(copied, null, 2) + "\n", "utf8");
     if (existsSync(outputDir)) renameSync(outputDir, backupDir);
     try {
       renameSync(stagingDir, outputDir);

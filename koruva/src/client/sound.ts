@@ -129,6 +129,8 @@ class SoundEngine {
       }
       this.files = files;
       this.pools.clear();
+      this.blockDirs = null;
+      this.blockDirCache.clear();
     } catch { /* absent sound assets leave the game playable and silent */ }
   }
 
@@ -299,7 +301,7 @@ class SoundEngine {
     this.bgmWait -= Math.max(0, dt);
     if (this.bgmWait > 0) return;
     let list: string[] = [];
-    for (const directory of MUSIC_DIR[scene]) { list = this.pool(directory, /\\.ogg$/i); if (list.length) break; }
+    for (const directory of MUSIC_DIR[scene]) { list = this.pool(directory, /\.ogg$/i); if (list.length) break; }
     if (!list.length) { this.bgmWait = 30; return; }
     let selected = list[Math.floor(Math.random() * list.length)];
     if (list.length > 1 && selected === this.bgmLast) selected = list[(list.indexOf(selected) + 1) % list.length];
@@ -326,8 +328,8 @@ class SoundEngine {
 
   ui() {
     const options = { volume: 0.55, key: "ui-click", minGap: 0.05 };
-    if (this.pool("random", /^click\\d*\\.ogg$/).length) this.fx("random/click", options);
-    else this.playPool("ui/button", /^click\\d*\\.ogg$/, options);
+    if (this.pool("random", /^click\d*\.ogg$/).length) this.fx("random/click", options);
+    else this.playPool("ui/button", /^click\d*\.ogg$/, options);
   }
 
   private blockDirectory(blockKey: string): string {
@@ -336,7 +338,7 @@ class SoundEngine {
     if (cached !== undefined) return cached;
     if (!this.blockDirs) {
       const names = new Set<string>();
-      for (const file of this.files) { const match = /^block\\/([^/]+)\\//.exec(file); if (match) names.add(match[1]); }
+      for (const file of this.files) { const match = /^block\/([^/]+)\//.exec(file); if (match) names.add(match[1]); }
       this.blockDirs = [];
       for (const name of names) {
         const sequences = BLOCK_DIR_ALIAS[name] ?? [name.split("_")];
@@ -360,10 +362,10 @@ class SoundEngine {
     if (key.endsWith("_ore") && !key.includes("nether")) return false;
     const directory = this.blockDirectory(blockKey);
     if (!directory) return false;
-    const expressions: RegExp[] = kind === "break" ? [/^break\\d*\\.ogg$/i]
-      : kind === "place" ? [/^place\\d*\\.ogg$/i]
-      : kind === "hit" ? [/^hit\\d*\\.ogg$/i, /^step\\d*\\.ogg$/i]
-      : [/^step\\d*\\.ogg$/i];
+    const expressions: RegExp[] = kind === "break" ? [/^break\d*\.ogg$/i]
+      : kind === "place" ? [/^place\d*\.ogg$/i]
+      : kind === "hit" ? [/^hit\d*\.ogg$/i, /^step\d*\.ogg$/i]
+      : [/^step\d*\.ogg$/i];
     for (const expression of expressions) {
       if (!this.pool(directory, expression).length) continue;
       this.playPool(directory, expression, options);
@@ -385,7 +387,7 @@ class SoundEngine {
       this.fx("random/pop", { ...options, volume: Math.min(0.55, options.volume ?? 1), pitch: 0.9 + Math.random() * 0.2 });
       return;
     }
-    const directory = kind === "step" ? "step" : "dig";
+    const directory = kind === "step" || kind === "hit" ? "step" : "dig";
     const soundMaterial = material === "glass" || material === "metal" ? "stone"
       : material === "ladder" ? (kind === "step" ? "ladder" : "wood") : material;
     this.playPool(directory, new RegExp("^" + soundMaterial + "\\d*\\.ogg$"), options);

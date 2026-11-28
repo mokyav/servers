@@ -218,7 +218,8 @@ export class Room extends DurableObject<Env> {
   private mobTickAccumulator = 0;
   private lastNaturalMobSpawnAt = Date.now();
   private lastMobPersistAt = Date.now();
-  private mobChunkCache = new Map<string,Uint16Array>();
+  /** Procedurally generated base chunks shared by block lookups and mob collision. */
+  private generatedChunkCache = new Map<string, Uint16Array>();
   private difficulty: Difficulty = "normal";
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -436,7 +437,7 @@ export class Room extends DurableObject<Env> {
           mobs: this.mobs.size,
           projectiles: this.projectiles.size,
           drops: this.drops.size,
-          cachedMobChunks: this.mobChunkCache.size,
+          cachedGeneratedChunks: this.generatedChunkCache.size,
         });
       }
     }
@@ -1691,16 +1692,7 @@ export class Room extends DurableObject<Env> {
         let block: number;
         if (edited && edited[index] !== NO_EDIT) block = edited[index];
         else {
-          const cacheKey = `${dimensionId}|${chunkKey}`;
-          let chunk = this.mobChunkCache.get(cacheKey);
-          if (!chunk) {
-            if (this.mobChunkCache.size >= 24) this.mobChunkCache.delete(this.mobChunkCache.keys().next().value!);
-            const seed = this.meta?.seed ?? 1;
-            const version = normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
-            chunk = dimensionId === DIMENSION_IDS.OVERWORLD ? generateChunk(seed, cx, cz, version) : generateDimensionChunk(seed, cx, cz, dimensionId);
-            this.mobChunkCache.set(cacheKey, chunk);
-          }
-          block = chunk[index] ?? 0;
+          block = this.generatedChunkAt(cx, cz, dimensionId)[index] ?? B.AIR;
         }
         return !!BLOCKS[block]?.solid;
       };
@@ -2099,22 +2091,42 @@ export class Room extends DurableObject<Env> {
     }
   }
 
+  /**
+   * Return one generated base chunk from a bounded LRU cache.
+   * Player edits are deliberately not written into this cache; blockAt overlays
+   * the durable edit record so world generation remains immutable and reusable.
+   */
+  private generatedChunkAt(cx: number, cz: number, dimensionId: string): Uint16Array {
+    const id = normalizeDimensionId(dimensionId);
+    const cacheKey = `${id}|${cx},${cz}`;
+    const cached = this.generatedChunkCache.get(cacheKey);
+    if (cached) {
+      // Refresh recency so the chunks currently used by active players stay resident.
+      this.generatedChunkCache.delete(cacheKey);
+      this.generatedChunkCache.set(cacheKey, cached);
+      return cached;
+    }
+    // 64 chunks × 32,768 Uint16 cells ≈ 4 MiB maximum per room.
+    if (this.generatedChunkCache.size >= 64) {
+      const oldest = this.generatedChunkCache.keys().next().value;
+      if (oldest !== undefined) this.generatedChunkCache.delete(oldest);
+    }
+    const seed = this.meta?.seed ?? 1;
+    const version = normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
+    const generated = id === DIMENSION_IDS.OVERWORLD
+      ? generateChunk(seed, cx, cz, version)
+      : generateDimensionChunk(seed, cx, cz, id);
+    this.generatedChunkCache.set(cacheKey, generated);
+    return generated;
+  }
+
   private mobBlockAt(x: number, y: number, z: number, dimensionId: string): number {
     if (y < 0) return B.BEDROCK;
     if (y >= WORLD_HEIGHT) return B.AIR;
     const cx = chunkCoord(x), cz = chunkCoord(z), chunkKey = `${cx},${cz}`, index = localIndex(x, y, z);
-    const edited = this.chunksForDimension(dimensionId).get(chunkKey);
+    const edited = this.chunksForDimension(normalizeDimensionId(dimensionId)).get(chunkKey);
     if (edited && edited[index] !== NO_EDIT) return edited[index];
-    const cacheKey = `${dimensionId}|${chunkKey}`;
-    let chunk = this.mobChunkCache.get(cacheKey);
-    if (!chunk) {
-      if (this.mobChunkCache.size >= 24) this.mobChunkCache.delete(this.mobChunkCache.keys().next().value!);
-      const seed = this.meta?.seed ?? 1;
-      const version = normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
-      chunk = dimensionId === DIMENSION_IDS.OVERWORLD ? generateChunk(seed, cx, cz, version) : generateDimensionChunk(seed, cx, cz, dimensionId);
-      this.mobChunkCache.set(cacheKey, chunk);
-    }
-    return chunk[index] ?? B.AIR;
+    return this.generatedChunkAt(cx, cz, dimensionId)[index] ?? B.AIR;
   }
 
   private async trySpawnNaturalMob(now: number, online: { ws: WebSocket; st: PlayerState }[]): Promise<boolean> {
@@ -3014,10 +3026,7 @@ export class Room extends DurableObject<Env> {
     const index = localIndex(x, y, z);
     const edits = this.chunksForDimension(id).get(key);
     if (edits && edits[index] !== NO_EDIT) return edits[index];
-    const seed = this.meta?.seed ?? 1;
-    const version = normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
-    const chunk = id === DIMENSION_IDS.OVERWORLD ? generateChunk(seed, cx, cz, version) : generateDimensionChunk(seed, cx, cz, id);
-    return chunk[index] ?? 0;
+    return this.generatedChunkAt(cx, cz, id)[index] ?? B.AIR;
   }
 
   private repeaterDelayForDimension(dimensionId: string) {
@@ -3079,6 +3088,17 @@ export class Room extends DurableObject<Env> {
 
   private async updateRedstoneAt(x: number, y: number, z: number, dimensionId: string = DIMENSION_IDS.OVERWORLD): Promise<void> {
     const id = normalizeDimensionId(dimensionId);
+    const isSignalBlock = (block: number) =>
+      block === B.REDSTONE_BLOCK || block === B.REDSTONE_DUST ||
+      block === B.REDSTONE_LAMP_OFF || block === B.REDSTONE_LAMP_ON ||
+      block === B.REDSTONE_LEVER_ON ||
+      (block >= B.REDSTONE_REPEATER && block < B.REDSTONE_REPEATER + 16);
+    const hasNearbySignal = isSignalBlock(this.blockAt(x, y, z, id)) ||
+      isSignalBlock(this.blockAt(x + 1, y, z, id)) || isSignalBlock(this.blockAt(x - 1, y, z, id)) ||
+      isSignalBlock(this.blockAt(x, y + 1, z, id)) || isSignalBlock(this.blockAt(x, y - 1, z, id)) ||
+      isSignalBlock(this.blockAt(x, y, z + 1, id)) || isSignalBlock(this.blockAt(x, y, z - 1, id));
+    if (!hasNearbySignal) return;
+
     const delay = this.repeaterDelayForDimension(id);
     const result = evaluateRedstoneWorld({
       x, y, z, blockAt: (bx, by, bz) => this.blockAt(bx, by, bz, id),

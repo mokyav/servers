@@ -53,7 +53,7 @@ const MOB_RE = {
   say: /^(say|idle|ambient|breathe|moan|growl|moody|meow|bark|cackle|elder_idle|warning|aggressive_ambient|worried_ambient)/i,
   hurt: /^(elder_)?(hurt|hit|damage)/i,
   death: /^(elder_)?death/i,
-  step: /^step\d*$/i,
+  step: /^step\d*\.ogg$/i,
   attack: /^(attack|bite|spit|charge|roar|scream|prepare_attack|angry|aggro|aggressive)/i,
 } as const;
 export type MobSoundKind = keyof typeof MOB_RE;

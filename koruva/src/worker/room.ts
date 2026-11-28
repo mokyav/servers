@@ -219,7 +219,7 @@ export class Room extends DurableObject<Env> {
   private lastNaturalMobSpawnAt = Date.now();
   private lastMobPersistAt = Date.now();
   /** Procedurally generated base chunks shared by block lookups and mob collision. */
-  private generatedChunkCache = new Map<string, Uint16Array>();
+  private mobChunkCache = new Map<string, Uint16Array>();
   private difficulty: Difficulty = "normal";
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -437,7 +437,7 @@ export class Room extends DurableObject<Env> {
           mobs: this.mobs.size,
           projectiles: this.projectiles.size,
           drops: this.drops.size,
-          cachedGeneratedChunks: this.generatedChunkCache.size,
+          cachedMobChunks: this.mobChunkCache.size,
         });
       }
     }
@@ -1648,7 +1648,7 @@ export class Room extends DurableObject<Env> {
         mobs: this.mobs.size,
         projectiles: this.projectiles.size,
         drops: this.drops.size,
-        cachedGeneratedChunks: this.generatedChunkCache.size,
+        cachedMobChunks: this.mobChunkCache.size,
       });
     }
   }
@@ -2099,24 +2099,24 @@ export class Room extends DurableObject<Env> {
   private generatedChunkAt(cx: number, cz: number, dimensionId: string): Uint16Array {
     const id = normalizeDimensionId(dimensionId);
     const cacheKey = `${id}|${cx},${cz}`;
-    const cached = this.generatedChunkCache.get(cacheKey);
+    const cached = this.mobChunkCache.get(cacheKey);
     if (cached) {
       // Refresh recency so the chunks currently used by active players stay resident.
-      this.generatedChunkCache.delete(cacheKey);
-      this.generatedChunkCache.set(cacheKey, cached);
+      this.mobChunkCache.delete(cacheKey);
+      this.mobChunkCache.set(cacheKey, cached);
       return cached;
     }
     // 64 chunks × 32,768 Uint16 cells ≈ 4 MiB maximum per room.
-    if (this.generatedChunkCache.size >= 64) {
-      const oldest = this.generatedChunkCache.keys().next().value;
-      if (oldest !== undefined) this.generatedChunkCache.delete(oldest);
+    if (this.mobChunkCache.size >= 64) {
+      const oldest = this.mobChunkCache.keys().next().value;
+      if (oldest !== undefined) this.mobChunkCache.delete(oldest);
     }
     const seed = this.meta?.seed ?? 1;
     const version = normalizeWorldgenVersion(this.meta?.worldgenVersion ?? LEGACY_WORLDGEN_VERSION);
     const generated = id === DIMENSION_IDS.OVERWORLD
       ? generateChunk(seed, cx, cz, version)
       : generateDimensionChunk(seed, cx, cz, id);
-    this.generatedChunkCache.set(cacheKey, generated);
+    this.mobChunkCache.set(cacheKey, generated);
     return generated;
   }
 

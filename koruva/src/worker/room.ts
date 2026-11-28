@@ -91,6 +91,8 @@ interface PlayerState {
   joined: boolean;
   dimensionId: string;
   host: boolean;
+  /** Latest client-measured WebSocket round-trip latency in milliseconds. */
+  ms?: number;
   cid: string;
   ip: string;
   setB: Bucket;
@@ -560,6 +562,15 @@ export class Room extends DurableObject<Env> {
     if (!me.joined) return;
 
     switch (msg.t) {
+      case "ms": {
+        if (!Number.isFinite(msg.ms)) break;
+        const ms = Math.max(0, Math.min(60_000, Math.round(msg.ms)));
+        if (me.ms === ms) break;
+        me.ms = ms;
+        this.serializePlayer(ws, me);
+        this.broadcastDimension({ t: "ms", id: me.id, ms }, me.dimensionId, ws);
+        break;
+      }
       case "pos": {
         const now = Date.now(); const next = sanitizeVec3(msg.p, me.p);
         const dt = Math.max(0.05, Math.min(1, (now - me.lastPosAt) / 1000));
@@ -2960,7 +2971,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private info2(p: PlayerState): PlayerInfo {
-    return { id: p.id, name: p.name, skin: p.skin, p: p.p, r: p.r, host: p.host || undefined, sneak: p.sneak || undefined, fallFlying: p.fallFlying || undefined, armorSlots: [...p.armorSlots] };
+    return { id: p.id, name: p.name, skin: p.skin, p: p.p, r: p.r, host: p.host || undefined, sneak: p.sneak || undefined, fallFlying: p.fallFlying || undefined, armorSlots: [...p.armorSlots], ms: p.ms };
   }
 
   private send(ws: WebSocket, msg: ServerMsg) {

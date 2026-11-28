@@ -73,7 +73,9 @@ test("online mobs are loaded, simulated, and delivered within their dimension", 
   assert.match(room, /mobs: mobsForDimension\(this\.mobs\.values\(\), target\)/);
   assert.match(room, /mobDimensionId\(target\) !== me\.dimensionId/);
   assert.match(room, /dimensionOnline = online\.filter\(\(\{ st \}\) => st\.dimensionId === dimensionId\)/);
-  assert.match(room, /generateDimensionChunk\(seed, cx, cz, dimensionId\)/);
+  assert.match(room, /private generatedChunkAt\(cx: number, cz: number, dimensionId: string\): Uint16Array/);
+  assert.match(room, /const generated = id === DIMENSION_IDS\.OVERWORLD\s*\? generateChunk\(seed, cx, cz, version\)\s*:\s*generateDimensionChunk\(seed, cx, cz, id\)/);
+  assert.match(room, /return this\.generatedChunkAt\(cx, cz, dimensionId\)\[index\] \?\? B\.AIR;/);
   assert.match(room, /broadcastDimension\(\{t:\"mob\",mob\}, me\.dimensionId\)/);
   assert.match(room, /mobDimensionId\(mob\) === me\.dimensionId/);
 });

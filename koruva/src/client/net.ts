@@ -10,6 +10,8 @@ export interface NetCloseInfo {
 }
 
 const CONNECT_TIMEOUT_MS = 30_000;
+const PING_INTERVAL_MS = 2_000;
+const PENDING_PING_TIMEOUT_MS = 10_000;
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const HEARTBEAT_TIMEOUT_MS = 45_000;
 
@@ -37,7 +39,9 @@ export class Net {
   private pingTimer = 0;
   private heartbeatTimer = 0;
   onMessage: NetHandler = () => {};
+  onPing: (ms: number) => void = () => {};
   onClose: (reason: string, info?: NetCloseInfo) => void = () => {};
+  pingMs: number | null = null;
 
   private clearTimers(connect: number, ping: number, heartbeat: number) {
     if (connect) window.clearTimeout(connect);
@@ -51,6 +55,7 @@ export class Net {
   connect(code: string, hello: Extract<ClientMsg, { t: "hello" }>): Promise<void> {
     // A previous socket must never share timers or callbacks with a new connection.
     this.close();
+    this.pingMs = null;
     return new Promise((resolve, reject) => {
       const proto = location.protocol === "https:" ? "wss" : "ws";
       const ws = new WebSocket(`${proto}://${location.host}/ws/${code}`);
@@ -59,6 +64,7 @@ export class Net {
       let settled = false;
       let openedAt = 0;
       let lastPongAt = 0;
+      let pendingPingAt = 0;
       let connectTimer = 0, pingTimer = 0, heartbeatTimer = 0;
 
       const clear = () => this.clearTimers(connectTimer, pingTimer, heartbeatTimer);
@@ -99,11 +105,15 @@ export class Net {
         }
         pingTimer = window.setInterval(() => {
           if (ws.readyState !== WebSocket.OPEN) return;
+          const now = performance.now();
+          if (pendingPingAt > 0 && now - pendingPingAt < PENDING_PING_TIMEOUT_MS) return;
+          pendingPingAt = now;
           try { ws.send("ping"); }
           catch {
+            pendingPingAt = 0;
             this.failHeartbeat(ws, openedAt, lastPongAt, clear);
           }
-        }, HEARTBEAT_INTERVAL_MS);
+        }, PING_INTERVAL_MS);
         heartbeatTimer = window.setInterval(() => {
           if (ws.readyState !== WebSocket.OPEN) return;
           if (Date.now() - lastPongAt > HEARTBEAT_TIMEOUT_MS) {
@@ -119,6 +129,14 @@ export class Net {
         if (typeof event.data !== "string") return;
         if (event.data === "pong") {
           lastPongAt = Date.now();
+          if (pendingPingAt > 0) {
+            const ms = Math.max(0, Math.min(60_000, Math.round(performance.now() - pendingPingAt)));
+            pendingPingAt = 0;
+            this.pingMs = ms;
+            this.onPing(ms);
+            try { ws.send(JSON.stringify({ t: "ms", ms } satisfies ClientMsg)); }
+            catch { this.failHeartbeat(ws, openedAt, lastPongAt, clear); }
+          }
           return;
         }
         try { this.onMessage(JSON.parse(event.data) as ServerMsg); }
@@ -146,6 +164,7 @@ export class Net {
           reject(new Error(`サーバーに接続できませんでした (close ${event.code})`));
         } else if (opened && this.ws === ws) {
           this.ws = null;
+          this.pingMs = null;
           this.onClose("サーバーとの接続が切れました", info);
         }
       };
@@ -168,6 +187,7 @@ export class Net {
       lastPongAgeMs: Math.max(0, now - lastPongAt),
     };
     this.ws = null;
+    this.pingMs = null;
     clear();
     try { ws.close(4005, "heartbeat-timeout"); } catch { /* already closed */ }
     console.error("[Koruva WS] heartbeat lost; scheduling room recovery", info);
@@ -200,6 +220,7 @@ export class Net {
   close() {
     const ws = this.ws;
     this.ws = null;
+    this.pingMs = null;
     this.clearTimers(this.connectTimer, this.pingTimer, this.heartbeatTimer);
     try { ws?.close(1000, "client-close"); } catch { /* already closed */ }
   }

@@ -50,11 +50,40 @@ const MOB_DIR: Record<string, string> = {
   zombified_piglin: "mob/pigzombie", wither_skeleton: "mob/skeleton",
 };
 const MOB_RE = {
-  say: /^(say|idle|ambient|breathe|moan|growl|moody|meow|bark|cackle|elder_idle)/,
-  hurt: /^(elder_)?(hurt|hit|damage)/,
-  death: /^(elder_)?death/,
+  say: /^(say|idle|ambient|breathe|moan|growl|moody|meow|bark|cackle|elder_idle|warning|aggressive_ambient|worried_ambient)/i,
+  hurt: /^(elder_)?(hurt|hit|damage)/i,
+  death: /^(elder_)?death/i,
+  step: /^step\d*$/i,
+  attack: /^(attack|bite|spit|charge|roar|scream|prepare_attack|angry|aggro|aggressive)/i,
 } as const;
 export type MobSoundKind = keyof typeof MOB_RE;
+
+export type MusicScene = "menu" | "overworld" | "creative" | "nether" | "end" | "water";
+const MUSIC_DIR: Record<MusicScene, string[]> = {
+  menu: ["music/menu"], overworld: ["music/game"], creative: ["music/game/creative", "music/game"],
+  nether: ["music/game/nether", "music/game"], end: ["music/game/end", "music/game"],
+  water: ["music/game/water", "music/game"],
+};
+const MUSIC_GAIN = 0.4;
+const BLOCK_DIR_ALIAS: Record<string, string[][]> = {
+  honeyblock: [["honey","block"]], blastfurnace: [["blast","furnace"]], enderchest: [["ender","chest"]],
+  deadbush: [["dead","bush"]], waterlily: [["lily","pad"]], scaffold: [["scaffolding"]],
+  straw_bed: [["hay","block"]], nether_ore: [["nether","gold","ore"],["nether","quartz","ore"]],
+  nether_wood: [["crimson"],["warped"]], bamboo_wood: [["bamboo"]], cherry_wood: [["cherry"]],
+  nether_wood_button: [["crimson","button"],["warped","button"]],
+  nether_wood_door: [["crimson","door"],["warped","door"]],
+  nether_wood_fence: [["crimson","fence"],["warped","fence"]],
+  nether_wood_trapdoor: [["crimson","trapdoor"],["warped","trapdoor"]],
+  nether_wood_hanging_sign: [["crimson","hanging","sign"],["warped","hanging","sign"]],
+  bamboo_wood_button: [["bamboo","button"]], bamboo_wood_door: [["bamboo","door"]],
+  bamboo_wood_fence: [["bamboo","fence"]], bamboo_wood_trapdoor: [["bamboo","trapdoor"]],
+  bamboo_wood_hanging_sign: [["bamboo","hanging","sign"]],
+  cherrywood_button: [["cherry","button"]], cherrywood_door: [["cherry","door"]],
+  cherrywood_fence_gate: [["cherry","fence","gate"]], cherrywood_trapdoor: [["cherry","trapdoor"]],
+  cherry_wood_hanging_sign: [["cherry","hanging","sign"]],
+  wooden_door: [], wooden_trapdoor: [], iron_door: [], iron_trapdoor: [], fence_gate: [],
+  sand: [["sand"],["red","sand"]],
+};
 
 const randomBetween = (min: number, max: number) => min + Math.random() * (max - min);
 const escapeRegExp = (value: string) => value.replace(/[.*+?^$|()[\]\\]/g, "\\$&");
@@ -71,6 +100,12 @@ class SoundEngine {
   private voices = 0;
   private pendingVoices = 0;
   private listener = { x: 0, y: 0, z: 0, yaw: 0 };
+  private bgm: HTMLAudioElement | null = null;
+  private bgmWait = 2;
+  private bgmLast = "";
+  private bgmScene: MusicScene = "menu";
+  private blockDirs: { dir: string; seq: string[] }[] | null = null;
+  private blockDirCache = new Map<string, string>();
 
   async init() {
     try {
@@ -116,7 +151,8 @@ class SoundEngine {
     if (!Number.isFinite(value)) return;
     this.volume = Math.max(0, Math.min(1, value));
     if (this.master) this.master.gain.value = this.volume;
-    try { localStorage.setItem(VOLUME_KEY, String(this.volume)); } catch { /* storage can be unavailable */ }
+    if (this.bgm) this.bgm.volume = this.volume * MUSIC_GAIN;
+    try { localStorage.setItem(VOLUME_KEY, String(this.volume)); } catch { /* localStorage can be unavailable */ }
   }
 
   setListener(x: number, y: number, z: number, yaw: number) {
@@ -251,10 +287,89 @@ class SoundEngine {
     this.playPool(directory, new RegExp("^" + escapeRegExp(name) + "\\d*\\.ogg$"), options);
   }
 
+  updateMusic(dt: number, scene: MusicScene) {
+    if (!this.context) return;
+    if (scene !== this.bgmScene) {
+      this.bgmScene = scene; this.bgm?.pause(); this.bgm = null; this.bgmWait = scene === "menu" ? 1 : 4;
+    }
+    if (this.bgm) {
+      if (this.bgm.paused && !this.bgm.ended) void this.bgm.play().catch(() => undefined);
+      return;
+    }
+    this.bgmWait -= Math.max(0, dt);
+    if (this.bgmWait > 0) return;
+    let list: string[] = [];
+    for (const directory of MUSIC_DIR[scene]) { list = this.pool(directory, /\\.ogg$/i); if (list.length) break; }
+    if (!list.length) { this.bgmWait = 30; return; }
+    let selected = list[Math.floor(Math.random() * list.length)];
+    if (list.length > 1 && selected === this.bgmLast) selected = list[(list.indexOf(selected) + 1) % list.length];
+    this.bgmLast = selected;
+    const player = new Audio(BASE + selected);
+    player.preload = "none"; player.volume = this.volume * MUSIC_GAIN;
+    player.onended = () => { if (this.bgm === player) this.bgm = null; this.bgmWait = 60 + Math.random() * 120; };
+    player.onerror = () => { if (this.bgm === player) this.bgm = null; this.bgmWait = 45; };
+    this.bgm = player;
+    void player.play().catch(() => { if (this.bgm === player) this.bgm = null; this.bgmWait = 12; });
+  }
+
+  armorEquip(itemKey: string) {
+    const key = itemKey.replace(/^minecraft:/, "");
+    const material = ["chainmail", "copper", "diamond", "golden", "iron", "leather", "netherite"].find(candidate => key.startsWith(candidate));
+    const name = material === "chainmail" ? "chain" : material === "golden" ? "gold" : material ?? "generic";
+    this.fx("item/armor/equip_" + name, { key: "armor-equip", volume: 0.8, minGap: 0.08 });
+  }
+
+  click(blockKey: string, at?: Vec) {
+    const wood = /oak|spruce|birch|jungle|acacia|dark_oak|mangrove|cherry|pale_oak|bamboo|crimson|warped|wooden|lectern/.test(blockKey);
+    this.fx(wood ? "random/wood_click" : "random/click", { at, key: "block-click", volume: 0.8, pitch: randomBetween(0.9, 1.1) });
+  }
+
   ui() {
     const options = { volume: 0.55, key: "ui-click", minGap: 0.05 };
-    if (this.pool("random", /^click\d*\.ogg$/).length) this.fx("random/click", options);
-    else this.playPool("ui/button", /^click\d*\.ogg$/, options);
+    if (this.pool("random", /^click\\d*\\.ogg$/).length) this.fx("random/click", options);
+    else this.playPool("ui/button", /^click\\d*\\.ogg$/, options);
+  }
+
+  private blockDirectory(blockKey: string): string {
+    const key = String(blockKey ?? "").replace(/^minecraft:/, "").toLowerCase();
+    const cached = this.blockDirCache.get(key);
+    if (cached !== undefined) return cached;
+    if (!this.blockDirs) {
+      const names = new Set<string>();
+      for (const file of this.files) { const match = /^block\\/([^/]+)\\//.exec(file); if (match) names.add(match[1]); }
+      this.blockDirs = [];
+      for (const name of names) {
+        const sequences = BLOCK_DIR_ALIAS[name] ?? [name.split("_")];
+        for (const seq of sequences) if (seq.length) this.blockDirs.push({ dir: "block/" + name, seq });
+      }
+    }
+    const tokens = key.split("_");
+    let best = "", bestLength = 0, bestStart = Number.POSITIVE_INFINITY;
+    for (const entry of this.blockDirs) for (let i = 0; i + entry.seq.length <= tokens.length; i++) {
+      if (!entry.seq.every((token, j) => tokens[i + j] === token)) continue;
+      if (entry.seq.length > bestLength || (entry.seq.length === bestLength && i < bestStart)) {
+        best = entry.dir; bestLength = entry.seq.length; bestStart = i;
+      }
+    }
+    this.blockDirCache.set(key, best);
+    return best;
+  }
+
+  private playBlockDirectory(kind: BlockSoundKind, blockKey: string, options: PlayOpts): boolean {
+    const key = blockKey.replace(/^minecraft:/, "");
+    if (key.endsWith("_ore") && !key.includes("nether")) return false;
+    const directory = this.blockDirectory(blockKey);
+    if (!directory) return false;
+    const expressions: RegExp[] = kind === "break" ? [/^break\\d*\\.ogg$/i]
+      : kind === "place" ? [/^place\\d*\\.ogg$/i]
+      : kind === "hit" ? [/^hit\\d*\\.ogg$/i, /^step\\d*\\.ogg$/i]
+      : [/^step\\d*\\.ogg$/i];
+    for (const expression of expressions) {
+      if (!this.pool(directory, expression).length) continue;
+      this.playPool(directory, expression, options);
+      return true;
+    }
+    return false;
   }
 
   block(kind: BlockSoundKind, blockKey: string, at?: Vec, extra: PlayOpts = {}) {
@@ -263,18 +378,16 @@ class SoundEngine {
     const volume = kind === "step" ? 0.15 : kind === "hit" ? 0.25 : 1;
     const pitch = (kind === "step" ? 1 : kind === "hit" ? 0.5 : 0.8) *
       randomBetween(0.94, 1.06) * (material === "metal" ? 1.25 : 1);
-    const options: PlayOpts = {
-      volume, pitch, at, key: "block-" + kind,
-      minGap: kind === "step" ? 0.08 : 0.04, ...extra,
-    };
-    if (material === "glass" && kind === "break") {
-      this.fx("random/glass", { ...options, pitch: randomBetween(0.9, 1.1) });
+    const options: PlayOpts = { volume, pitch, at, key: "block-" + kind, minGap: kind === "step" ? 0.08 : 0.04, ...extra };
+    if (this.playBlockDirectory(kind, blockKey, options)) return;
+    if (material === "glass" && kind === "break") { this.fx("random/glass", { ...options, pitch: randomBetween(0.9, 1.1) }); return; }
+    if (kind === "place") {
+      this.fx("random/pop", { ...options, volume: Math.min(0.55, options.volume ?? 1), pitch: 0.9 + Math.random() * 0.2 });
       return;
     }
     const directory = kind === "step" ? "step" : "dig";
     const soundMaterial = material === "glass" || material === "metal" ? "stone"
-      : material === "ladder" ? (kind === "step" ? "ladder" : "wood")
-      : material;
+      : material === "ladder" ? (kind === "step" ? "ladder" : "wood") : material;
     this.playPool(directory, new RegExp("^" + soundMaterial + "\\d*\\.ogg$"), options);
   }
 

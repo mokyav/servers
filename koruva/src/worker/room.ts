@@ -1648,7 +1648,7 @@ export class Room extends DurableObject<Env> {
         mobs: this.mobs.size,
         projectiles: this.projectiles.size,
         drops: this.drops.size,
-        cachedMobChunks: this.mobChunkCache.size,
+        cachedGeneratedChunks: this.generatedChunkCache.size,
       });
     }
   }

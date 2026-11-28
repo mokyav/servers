@@ -276,6 +276,7 @@ class Game {
 
     $("game-version").textContent = `Version ${__KORUVA_VERSION__}`;
     this.chat.setNameProvider(() => [this.profile.name, ...this.remotes.names().map(p => p.name)]);
+    this.net.onPing = () => { if (!$("playerlist").hidden) this.showPlayers(true); };
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.scene.add(this.view.group, this.sky.group, this.remotes.group, this.drops.group, this.mobModels.group, this.projectileEntities.group);
@@ -1000,9 +1001,18 @@ class Game {
     el.hidden = !show;
     if (!show) return;
     el.innerHTML = "<h3>プレイヤー</h3>";
-    const add = (n: string) => { const d = document.createElement("div"); d.textContent = n; el.appendChild(d); };
-    add(this.profile.name + "（あなた）");
-    for (const p of this.remotes.names()) add(p.name);
+    const add = (n: string, ms?: number) => {
+      const d = document.createElement("div");
+      const name = document.createElement("span");
+      name.textContent = n;
+      const ping = document.createElement("span");
+      ping.className = "player-ping";
+      ping.textContent = typeof ms === "number" && Number.isFinite(ms) ? `${Math.max(0, Math.round(ms))} ms` : "— ms";
+      d.append(name, ping);
+      el.appendChild(d);
+    };
+    add(this.profile.name + "（あなた）", this.net.pingMs ?? undefined);
+    for (const p of this.remotes.names()) add(p.name, p.ms);
   }
 
   openPause(title: string) {
@@ -2328,6 +2338,7 @@ class Game {
         break;
       }
       case "pos": this.remotes.move(m.id, m.p, m.r, !!m.fallFlying); this.remotes.setSneak(m.id, !!m.sneak); break;
+      case "ms": this.remotes.setMs(m.id, m.ms); if (!$("playerlist").hidden) this.showPlayers(true); break;
       case "player-equipment": this.remotes.setArmorSlots(m.id, m.armorSlots); break;
       case "item-enchantments": this.itemEnchantments = normalizeItemEnchantments(m.itemEnchantments, BLOCKS); this.autosave(true); break;
       case "stack-data": this.stackData = normalizeStackComponents(m.stackData, {}, BLOCKS); this.autosave(true); break;

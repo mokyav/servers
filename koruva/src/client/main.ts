@@ -50,7 +50,7 @@ import { blockToken, canBlockStay, canPlaceBlockAt, isFallingBlock, isReplaceabl
 import { heightAt, LEGACY_WORLDGEN_VERSION, normalizeWorldgenVersion, WORLDGEN_VERSION } from "./worldgen";
 import { readMinecraftSkin } from "./skin-upload";
 import { DEFAULT_SKIN_IMAGE } from "./default-skin";
-import { sound } from "./sound";
+import { sound, type MusicScene } from "./sound";
 import type { MobInfo } from "../../shared/entities";
 
 import { nextRepeaterDelayBlockId } from "../../shared/redstone-world.js";
@@ -230,7 +230,13 @@ class Game {
   private lastXpLevel = -1;
   private lastXpTotal = 0;
   private lastHurtSoundAt = 0;
-  private soundMobs = new Map<string, { type: string; x: number; y: number; z: number; health: number; state: string; hurtSeenAt: number }>();
+  private soundMobs = new Map<string, { type: string; x: number; y: number; z: number; health: number; state: string; hurtSeenAt: number; d: number }>();
+  private remoteFoot = new Map<string, { x: number; z: number; d: number }>();
+  private lastArmorSig = "";
+  private wasUnder = false;
+  private nextUnderAt = 0;
+  private nextNetherAt = 0;
+  private furnaceSoundT = 0;
   lastDeny = 0;
   lockReqAt = 0;
   lockRetries = 0;
@@ -1233,6 +1239,13 @@ class Game {
   }
 
   private sendEquipment() {
+    const signature = this.armorSlots.join(",");
+    if (this.lastArmorSig && signature !== this.lastArmorSig) {
+      const previous = this.lastArmorSig.split(",").map(Number);
+      const equipped = this.armorSlots.findIndex((id, index) => id > 0 && id !== previous[index]);
+      if (equipped >= 0) sound.armorEquip(BLOCKS[this.armorSlots[equipped]]?.key ?? "");
+    }
+    this.lastArmorSig = signature;
     if (this.mode === "room" && this.net.connected) this.net.send({ t: "equipment", armorSlots: [...this.armorSlots] });
   }
 
@@ -2295,11 +2308,14 @@ class Game {
       case "dimension": {
         this.pending.clear();
         this.soundMobs.clear();
+        this.remoteFoot.clear();
+        this.wasUnder = false;
         this.world.reset(m.seed, normalizeWorldgenVersion(m.worldgenVersion ?? LEGACY_WORLDGEN_VERSION), m.dimensionId);
         this.view.clear();
         this.remotes.clear(); for (const player of m.players) this.remotes.add(player);
         this.drops.clear(); for (const drop of m.drops ?? []) { if (drop.xp !== undefined) this.drops.addExperience(drop.eid, drop.x, drop.y, drop.z, drop.xp); else this.drops.add(drop.eid, drop.x, drop.y, drop.z, drop.itemId ?? drop.b ?? 0, drop.count ?? 1); }
-        this.mobModels.clear(); for (const mob of m.mobs ?? []) this.mobModels.add(mob);
+        this.mobModels.clear();
+        for (const mob of m.mobs ?? []) { this.trackMobSound(mob); this.mobModels.add(mob); }
         this.projectileEntities.clear(); for (const projectile of m.projectiles ?? []) this.projectileEntities.add(projectile);
         this.localFishing=null; this.fishingRightHeld=false; $("bossbar").hidden=true;
         const safe = this.safeDimensionSpawn(m.p[0], m.p[2]);
@@ -2323,6 +2339,7 @@ class Game {
         if (!$("admin").hidden) this.renderAdmin();
         break;
       case "leave":
+        this.remoteFoot.delete(m.id);
         this.remotes.remove(m.id);
         this.chat.add(`${m.name} が退室しました`);
         if (!$("admin").hidden) this.renderAdmin();
@@ -2337,7 +2354,11 @@ class Game {
         this.autosave(true);
         break;
       }
-      case "pos": this.remotes.move(m.id, m.p, m.r, !!m.fallFlying); this.remotes.setSneak(m.id, !!m.sneak); break;
+      case "pos":
+        this.remotes.move(m.id, m.p, m.r, !!m.fallFlying);
+        this.remotes.setSneak(m.id, !!m.sneak);
+        this.remoteStepSound(m.id, m.p, !!m.sneak, !!m.fallFlying);
+        break;
       case "ms": this.remotes.setMs(m.id, m.ms); if (!$("playerlist").hidden) this.showPlayers(true); break;
       case "player-equipment": this.remotes.setArmorSlots(m.id, m.armorSlots); break;
       case "item-enchantments": this.itemEnchantments = normalizeItemEnchantments(m.itemEnchantments, BLOCKS); this.autosave(true); break;
@@ -2405,7 +2426,15 @@ class Game {
         for (const mob of m.mobs) { this.trackMobSound(mob); this.mobModels.add(mob); }
         break;
       case "mobgone": this.mobGoneSound(m.id); this.mobModels.remove(m.id); break;
-      case "projectile": this.projectileEntities.add(m.projectile); break;
+      case "projectile": {
+        const projectile = m.projectile;
+        const at: [number, number, number] = [projectile.x, projectile.y, projectile.z];
+        if (projectile.type === "arrow") sound.fx("random/bow", { at, range: 32, key: "remote-bow", pitch: 0.9 + Math.random() * 0.2 });
+        else if (projectile.type === "trident") sound.fx("item/trident/throw", { at, range: 32, key: "remote-trident" });
+        else if (projectile.type === "firework_rocket") sound.fx("fireworks/launch", { at, range: 48, key: "remote-firework" });
+        this.projectileEntities.add(projectile);
+        break;
+      }
       case "projectilegone": this.projectileEntities.remove(m.eid); break;
       case "gone": {
         const b = this.drops.blockOf(m.eid);
@@ -2459,10 +2488,22 @@ class Game {
       hurtSeenAt = performance.now();
       sound.mob(mob.type, "hurt", at);
     }
+    let distance = previous?.d ?? 0;
+    if (previous) {
+      const moved = Math.hypot(mob.x - previous.x, mob.z - previous.z);
+      if (moved < 2) distance += moved;
+    }
+    if (distance > 1.3) {
+      distance = 0;
+      if (Math.hypot(mob.x - this.body.x, mob.z - this.body.z) < 14 && Math.abs(mob.y - this.body.y) < 8) {
+        sound.mob(mob.type, "step", [mob.x, mob.y, mob.z]);
+      }
+    }
+    if (previous && state === "attack" && previous.state !== "attack") sound.mob(mob.type, "attack", at);
     if (mob.type === "creeper" && state === "fuse" && previous && previous.state !== "fuse") {
       sound.play("random/fuse.ogg", { at, range: 16, key: "creeper-fuse-" + mob.id });
     }
-    this.soundMobs.set(mob.id, { type: mob.type, x: mob.x, y: mob.y, z: mob.z, health, state, hurtSeenAt });
+    this.soundMobs.set(mob.id, { type: mob.type, x: mob.x, y: mob.y, z: mob.z, health, state, hurtSeenAt, d: distance });
     while (this.soundMobs.size > 400) {
       const oldest = this.soundMobs.keys().next();
       if (oldest.done) break;
@@ -2484,10 +2525,17 @@ class Game {
     }
   }
 
+  private musicScene(): MusicScene {
+    if (this.state === "title" || !this.ready) return "menu";
+    if (this.world.dimensionId === DIMENSION_IDS.NETHER) return "nether";
+    if (this.world.dimensionId === DIMENSION_IDS.END) return "end";
+    if (this.wasUnder) return "water";
+    return this.gameMode === "creative" ? "creative" : "overworld";
+  }
+
   private updateAudio(dt: number) {
     const body = this.body;
     sound.setListener(body.x, body.y + this.eyeH, body.z, this.yaw);
-
     if (this.state === "playing" && this.vitals.eatingFoodId) {
       this.eatSoundT -= dt;
       if (this.eatSoundT <= 0) {
@@ -2501,9 +2549,7 @@ class Game {
       this.nextMobSayAt = now + 4500 + Math.random() * 8500;
       const nearby: { type: string; x: number; y: number; z: number }[] = [];
       for (const mob of this.soundMobs.values()) {
-        if (mob.type !== "end_crystal" && Math.hypot(mob.x - body.x, mob.y - body.y, mob.z - body.z) < 16) {
-          nearby.push(mob);
-        }
+        if (mob.type !== "end_crystal" && Math.hypot(mob.x - body.x, mob.y - body.y, mob.z - body.z) < 16) nearby.push(mob);
       }
       if (nearby.length) {
         const mob = nearby[Math.floor(Math.random() * nearby.length)];
@@ -2511,11 +2557,56 @@ class Game {
       }
     }
 
+    const under = this.ready && !!inLiquid(this.world, body.x, body.y + this.eyeH, body.z);
+    if (under !== this.wasUnder) {
+      this.wasUnder = under;
+      sound.fx(under ? "ambient/underwater/enter" : "ambient/underwater/exit", { key: "underwater-edge" });
+      this.nextUnderAt = now + 8000;
+    }
+    if (this.state === "playing" && under && now >= this.nextUnderAt) {
+      this.nextUnderAt = now + 12000 + Math.random() * 25000;
+      sound.playPool("ambient/underwater/additions", /\.ogg$/i, { volume: 0.5, key: "underwater-ambience" });
+    }
+    if (this.state === "playing" && this.world.dimensionId === DIMENSION_IDS.NETHER && now >= this.nextNetherAt) {
+      this.nextNetherAt = now + 20000 + Math.random() * 30000;
+      sound.fx("ambient/nether/nether_wastes/addition", { volume: 0.5, key: "nether-ambience" });
+    }
     if (this.state === "playing" && now >= this.nextCaveAt) {
       this.nextCaveAt = now + 25000 + Math.random() * 45000;
       if (body.y < 40 && this.world.dimensionId === DIMENSION_IDS.OVERWORLD) {
         sound.fx("ambient/cave/cave", { volume: 0.45, key: "cave-ambience", minGap: 1 });
       }
+    }
+    if (this.state === "furnace" && this.furnaceView?.active) {
+      this.furnaceSoundT -= dt;
+      if (this.furnaceSoundT <= 0) {
+        this.furnaceSoundT = 2.5 + Math.random() * 2;
+        sound.fx("block/furnace/fire_crackle", { volume: 0.6, key: "furnace-fire", minGap: 1 });
+      }
+    } else this.furnaceSoundT = 0;
+  }
+
+  private remoteStepSound(id: string, position: [number, number, number], sneaking: boolean, flying: boolean) {
+    if (!id || !position.every(Number.isFinite)) return;
+    const previous = this.remoteFoot.get(id) ?? { x: position[0], z: position[2], d: 0 };
+    const moved = Math.hypot(position[0] - previous.x, position[2] - previous.z);
+    previous.x = position[0];
+    previous.z = position[2];
+    const block = this.world.get(Math.floor(position[0]), Math.floor(position[1] - 0.06), Math.floor(position[2]));
+    const key = BLOCKS[block]?.key ?? "";
+    if (sneaking || flying || !key || moved > 3) previous.d = 0;
+    else {
+      previous.d += moved;
+      if (previous.d > 1.65) {
+        previous.d = 0;
+        sound.block("step", key, position, { key: "remote-step-" + id, range: 12 });
+      }
+    }
+    this.remoteFoot.set(id, previous);
+    while (this.remoteFoot.size > 64) {
+      const oldest = this.remoteFoot.keys().next();
+      if (oldest.done) break;
+      this.remoteFoot.delete(oldest.value);
     }
   }
 
@@ -2763,7 +2854,13 @@ class Game {
     }
     if (this.ready && !next.dead && next.health < previous.health && now - this.lastHurtSoundAt > 250) {
       this.lastHurtSoundAt = now;
-      sound.fx("damage/hit", { key: "player-hurt", minGap: 0.2 });
+      const feetKey = BLOCKS[this.world.get(Math.floor(this.body.x), Math.floor(this.body.y + 0.3), Math.floor(this.body.z))]?.key ?? "";
+      const headUnder = inLiquid(this.world, this.body.x, this.body.y + this.eyeH, this.body.z);
+      if (feetKey.includes("fire") || feetKey.includes("lava")) sound.fx("entity/player/hurt/fire_hurt", { key: "player-hurt" });
+      else if (feetKey.includes("powder_snow")) sound.fx("entity/player/hurt/freeze_hurt", { key: "player-hurt" });
+      else if (feetKey.includes("sweet_berry")) sound.fx("entity/player/hurt/berrybush_hurt", { key: "player-hurt" });
+      else if (headUnder && this.wasUnder) sound.fx("entity/player/hurt/drown", { key: "player-hurt" });
+      else sound.fx("damage/hit", { key: "player-hurt", minGap: 0.2 });
     }
     const totalXp = next.experience ?? 0;
     const level = getExperienceProgress(totalXp).level;
@@ -3355,6 +3452,7 @@ class Game {
     requestAnimationFrame((t) => this.frame(t));
     const dt = Math.min(0.05, (now - this.lastT) / 1000);
     this.lastT = now;
+    sound.updateMusic(dt, this.musicScene());
     if (this.state === "title") {
       this.renderer.setClearColor(new THREE.Color(0.06, 0.08, 0.13));
       this.renderer.clear();
